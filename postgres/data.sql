@@ -1,10 +1,3 @@
-CREATE TABLE albums (
-	id SERIAL PRIMARY KEY,
-    title VARCHAR(255),
-    artist VARCHAR(255),
-    price DECIMAL(10, 2)
-);
-
 CREATE TABLE locations (
     id SERIAL PRIMARY KEY,
     name VARCHAR(128)
@@ -19,5 +12,14 @@ CREATE TABLE items (
     FOREIGN KEY (location_id) REFERENCES locations (id)
 );
 
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,          -- Auto-incrementing ID
+    username VARCHAR(255) UNIQUE,   -- Unique username
+    fullname VARCHAR(255),
+    password_hash TEXT NOT NULL,    -- Password hash
+    role VARCHAR(50) NOT NULL       -- Role (e.g., "admin", "user")
+);
+
 -- Default data
 INSERT INTO locations (name) VALUES ('Magazyn Techniczny');
+INSERT INTO items (item_type, item_serial, status, location_id) VALUES ('LAPTOP', 'XXKSA03', 'IN_STOCK', 1)

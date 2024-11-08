@@ -8,6 +8,8 @@ import (
 	"warehouse/internal/database"
 	"warehouse/internal/items"
 	"warehouse/internal/locations"
+	"warehouse/internal/security"
+	"warehouse/internal/users"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -17,8 +19,6 @@ func main() {
 	// Load environment variables
 	var err error
 
-	// envPath, _ := filepath.Abs("../../.env")
-	// err = godotenv.Load(envPath)
 	err = godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file: " + err.Error())
@@ -39,6 +39,8 @@ func main() {
 	albums.RegisterRoutes(router, db)
 	items.RegisterRoutes(router, db)
 	locations.RegisterRoutes(router, db)
+	security.RegisterRoutes(router)
+	users.RegisterRoutes(router, db)
 
 	// Start the HTTP server
 	router.Run("localhost:8080")
