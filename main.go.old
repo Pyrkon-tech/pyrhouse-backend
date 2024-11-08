@@ -1,0 +1,68 @@
+package main
+
+import (
+	"database/sql"
+	"log"
+	"net/http"
+	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+)
+
+type album struct {
+	ID     string  `json:"id"`
+	Title  string  `json:"title"`
+	Artist string  `json:"artist"`
+	Price  float64 `json:"price"`
+}
+
+var db *sql.DB
+
+func main() {
+	var err error
+
+	err = godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	db, err = sql.Open("postgres", os.Getenv("DATABASE_URL"))
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	router := gin.Default()
+	router.GET("/albums", getAlbums)
+	// router.POST("/albums", createAlbum)
+
+	router.Run("localhost:8080")
+}
+
+func getAlbums(c *gin.Context) {
+	c.Header("Content-Type", "application/json")
+
+	rows, err := db.Query("SELECT id, title, artist, price FROM albums")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	var albums []album
+	for rows.Next() {
+		var a album
+		err := rows.Scan(&a.ID, &a.Title, &a.Artist, &a.Price)
+		if err != nil {
+			log.Fatal(err)
+		}
+		albums = append(albums, a)
+	}
+	err = rows.Err()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	c.IndentedJSON(http.StatusOK, albums)
+}
