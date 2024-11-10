@@ -50,3 +50,7 @@ func (h *UsersHandler) RegisterUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
 }
+
+func (h *UsersHandler) GetUser(c *gin.Context) {
+
+}
