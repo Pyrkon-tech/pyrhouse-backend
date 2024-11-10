@@ -1,22 +1,22 @@
 # Build stage
 FROM golang:1.22.4 AS builder
 
-# Set the working directory inside the container
+# Set the working directory for the build
 WORKDIR /app
 
-# Copy go.mod and go.sum files
+# Copy go.mod and go.sum files to download dependencies first
 COPY go.mod go.sum ./
 
 # Download dependencies
 RUN go mod download
 
-# Copy the entire source code
+# Copy the entire project into the container
 COPY . .
 
-# Set the working directory to the location of your main.go
+# Set the working directory to where your main.go is located
 WORKDIR /app/cmd/server
 
-# Build the binary
+# Build the Go app binary
 RUN go build -o /main .
 
 # Final stage
@@ -31,5 +31,5 @@ COPY --from=builder /main .
 # Expose port 8080
 EXPOSE 8080
 
-# Command to run the application
+# Run the binary
 CMD ["./main"]
