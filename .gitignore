@@ -1,1 +1,4 @@
 .air.toml
+/tmp/*
+cmd/server/*
+!cmd/server/main.go

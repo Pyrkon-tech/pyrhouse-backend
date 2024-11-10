@@ -8,8 +8,8 @@ import (
 	"warehouse/internal/database"
 	"warehouse/internal/items"
 	"warehouse/internal/locations"
-	"warehouse/internal/security"
 	"warehouse/internal/users"
+	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -39,7 +39,7 @@ func main() {
 	albums.RegisterRoutes(router, db)
 	items.RegisterRoutes(router, db)
 	locations.RegisterRoutes(router, db)
-	security.RegisterRoutes(router)
+	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db)
 
 	// Start the HTTP server
