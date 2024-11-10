@@ -1,22 +1,23 @@
 # Base off official golang image
 FROM golang:1.22.4
 
-# Create app directory
-RUN mkdir -p /go/src/app
-WORKDIR /go/src/app
+# Set the Current Working Directory inside the container
+WORKDIR /app
 
-# Bundle app source
-COPY . /go/src/app
+# Copy go mod and sum files
+COPY go.mod go.sum ./
 
-# Download and install any required third party dependencies into the container.
-RUN go get -d -v ./...
-RUN go install -v ./...
+# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
+RUN go mod download
 
-# Set the PORT environment variable inside the container
-ENV PORT 8080
+# Copy the source code into the container
+COPY . .
 
-# Expose port 8080 to the host so we can access our application
+# Build the Go app
+RUN go build -o main .
+
+# Expose port 8080
 EXPOSE 8080
 
-# Now tell Docker what command to run when the container starts
-CMD ["go-wrapper", "run"]
+# Command to run the executable
+CMD ["./main"]
