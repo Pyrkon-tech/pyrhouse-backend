@@ -15,16 +15,22 @@ import (
 	"github.com/joho/godotenv"
 )
 
+func init() {
+	// Load .env file, but don't overwrite system environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: No .env file found, falling back to system environment variables.")
+	}
+}
+
 func main() {
 	// Load environment variables
 	var err error
 
-	err = godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file: " + err.Error())
-	}
-
 	dbURL := os.Getenv("DATABASE_URL")
+
+	if dbURL == "" {
+		log.Fatalf("Starting server on port %s", dbURL)
+	}
 
 	// Connect to the database
 	db, err := database.NewPostgresConnection(dbURL)
