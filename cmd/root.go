@@ -38,7 +38,7 @@ func Execute(ctx context.Context) {
 		Use:   "pyrhouse",
 		Short: "Pyrhouse management service",
 	}
-	MigrateCmd.Flags().String("dir", "postgres", "Directory containing the migration files")
+	MigrateCmd.Flags().String("dir", "../../migrations", "Directory containing the migration files")
 	rootCmd.AddCommand(MigrateCmd)
 
 	if err := rootCmd.Execute(); err != nil {
