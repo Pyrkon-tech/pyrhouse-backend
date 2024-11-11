@@ -12,7 +12,6 @@ RUN go mod download
 
 # Copy the entire project into the container
 COPY . .
-COPY .env ./.env
 
 # Set working directory to where main.go is located
 WORKDIR /app/cmd/server
