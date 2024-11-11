@@ -16,6 +16,9 @@ type AlbumHandler struct {
 func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	handler := AlbumHandler{DB: db}
 	router.GET("/albums", handler.GetAlbums)
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 	// Add more routes here (e.g., POST /albums)
 }
 
