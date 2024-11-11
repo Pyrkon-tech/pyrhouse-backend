@@ -24,6 +24,7 @@ func (h *UsersHandler) RegisterUser(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
+		Fullname string `json:"fullname"`
 		Role     string `json:"role" binding:"required"`
 	}
 	if err := c.BindJSON(&req); err != nil {
@@ -41,8 +42,9 @@ func (h *UsersHandler) RegisterUser(c *gin.Context) {
 	}
 
 	// Insert user into the database
-	_, err = h.DB.Exec("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)",
-		req.Username, string(hashedPassword), req.Role)
+	// Add handling for optional paramenter
+	_, err = h.DB.Exec("INSERT INTO users (username, password_hash, fullname, role) VALUES ($1, $2, $3, $4)",
+		req.Username, string(hashedPassword), req.Fullname, req.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
