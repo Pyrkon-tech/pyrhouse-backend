@@ -18,16 +18,19 @@ import (
 )
 
 func init() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Load .env file, but don't overwrite system environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: No .env file found, falling back to system environment variables.")
 	}
+
+	// Execute migration CMD
+	cmd.Execute(ctx)
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// Load environment variables
 	var err error
 
@@ -39,11 +42,11 @@ func main() {
 	// Connect to the database
 	db, err := database.NewPostgresConnection(dbURL)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error: %v", err)
 	}
+	defer db.Close()
 
-	// Execute migration CMD
-	cmd.Execute(ctx)
+	log.Println("Connected to the database successfully!")
 
 	// Initialize the Gin router
 	router := gin.Default()
