@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
+	"warehouse/cmd"
 	"warehouse/internal/albums"
 	"warehouse/internal/database"
 	"warehouse/internal/items"
@@ -23,11 +25,13 @@ func init() {
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Load environment variables
 	var err error
 
 	dbURL := os.Getenv("DATABASE_URL")
-
 	if dbURL == "" {
 		log.Fatalf("Starting server on port %s", dbURL)
 	}
@@ -37,6 +41,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Execute migration CMD
+	cmd.Execute(ctx)
 
 	// Initialize the Gin router
 	router := gin.Default()
