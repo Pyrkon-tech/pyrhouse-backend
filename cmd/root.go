@@ -43,7 +43,7 @@ func Execute(ctx context.Context) {
 	MigrateCmd.Flags().String("dir", "../../migrations", "Directory containing the migration files")
 	rootCmd.AddCommand(MigrateCmd)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

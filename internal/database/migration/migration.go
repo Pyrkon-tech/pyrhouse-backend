@@ -17,7 +17,7 @@ func Migrate(dbURL string, migrationsPath string, verbose bool, log *zap.Logger)
 	if err != nil {
 		return err
 	}
-
+	log.Info("Run registered migrations under: " + dbURL)
 	err = dbMigrate.Up()
 	if err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
