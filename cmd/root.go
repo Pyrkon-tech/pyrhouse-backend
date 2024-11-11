@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 
 	"warehouse/internal/database/migration"
@@ -26,6 +27,7 @@ var MigrateCmd = &cobra.Command{
 			logger.NewLogger(),
 		)
 		if err != nil {
+			log.Println(err.Error())
 			return fmt.Errorf("migrate database: %w", err)
 		}
 
