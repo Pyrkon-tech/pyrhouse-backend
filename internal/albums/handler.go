@@ -21,7 +21,6 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		log.Println("Called healthcheck")
 	})
-	// Add more routes here (e.g., POST /albums)
 }
 
 func (h *AlbumHandler) GetAlbums(c *gin.Context) {

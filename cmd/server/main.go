@@ -49,5 +49,7 @@ func main() {
 	users.RegisterRoutes(router, db)
 
 	// Start the HTTP server
-	router.Run("localhost:8080")
+	if err := router.Run("localhost:8080"); err != nil {
+		panic(err)
+	}
 }
