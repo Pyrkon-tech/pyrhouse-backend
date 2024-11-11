@@ -2,6 +2,7 @@ package albums
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 
 	"warehouse/pkg/models"
@@ -18,6 +19,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	router.GET("/albums", handler.GetAlbums)
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		log.Println("Called healthcheck")
 	})
 	// Add more routes here (e.g., POST /albums)
 }
