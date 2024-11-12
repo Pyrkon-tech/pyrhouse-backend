@@ -23,4 +23,4 @@ RUN go build -o cmd/server/main .
 EXPOSE 8080
 
 # Run the application
-CMD ["./main"]
+CMD ["./cmd/server/main"]
