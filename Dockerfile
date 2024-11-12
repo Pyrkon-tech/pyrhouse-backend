@@ -14,10 +14,10 @@ RUN go mod download
 COPY . .
 
 # Set working directory to where main.go is located
-WORKDIR /app/cmd/server
+# WORKDIR /app/cmd/server
 
 # Build the application
-RUN go build -o main .
+RUN go build -o cmd/server/main .
 
 # Expose port 8080 for the application
 EXPOSE 8080

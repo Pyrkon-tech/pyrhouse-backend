@@ -57,6 +57,9 @@ func main() {
 	locations.RegisterRoutes(router, db)
 	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db)
+	router.GET("/openapi.yaml", func(c *gin.Context) {
+		c.File("./docs/openapi.yaml") // Path to your OpenAPI file
+	})
 
 	// Start the HTTP server
 	if err := router.Run(os.Getenv("APP_HOST")); err != nil {
