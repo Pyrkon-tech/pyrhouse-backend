@@ -2,7 +2,6 @@ package items
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"net/http"
 	"warehouse/pkg/models"
@@ -14,6 +13,14 @@ type ItemHandler struct {
 	DB *sql.DB
 }
 
+type ItemRequest struct {
+	ID         int    `json:"id"`
+	Serial     string `json:"serial"`
+	LocationId int    `json:"location_id" default:"1"`
+	Status     string `json:"status"`
+	CategoryId int    `json:"category_id"`
+}
+
 func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	handler := ItemHandler{DB: db}
 
@@ -23,39 +30,46 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 }
 
 func (h *ItemHandler) GetItems(c *gin.Context) {
-	// var itemList []models.Item
 
 	c.JSON(http.StatusOK, "Hello World")
 }
 
 func (h *ItemHandler) CreateItem(c *gin.Context) {
 
-	var item models.Item
-	if err := c.BindJSON(&item); err != nil {
+	itemRequest := ItemRequest{
+		LocationId: 1,
+	}
+	if err := c.BindJSON(&itemRequest); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		log.Fatal(err)
 		return
 	}
-	fmt.Println("1. " + item.Serial + " 2. " + item.Type)
-	// default locations should be always 1
-	item.LocationId = 1
 
-	//should be in repo
-	stmtString := "INSERT INTO items (item_type, item_serial, location_id) VALUES ($1, $2, $3)"
+	item, err := h.PersistItem(itemRequest)
+
+	if err != nil {
+		log.Fatal("Error executing SQL statement: ", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create item"})
+		return
+	}
+	c.JSON(http.StatusCreated, item)
+}
+
+func (h *ItemHandler) PersistItem(itemRequest ItemRequest) (*models.Item, error) {
+	stmtString := "INSERT INTO items (item_serial, location_id, item_category_id) VALUES ($1, $2, $3)"
 	stmt, err := h.DB.Prepare(stmtString)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer stmt.Close()
 
-	var insertedID int
-	err = h.DB.QueryRow(stmtString+" RETURNING id", item.Type, item.Serial, item.LocationId).Scan(&insertedID)
+	var item models.Item
+	err = h.DB.QueryRow(
+		stmtString+" RETURNING id, item_serial, location_id, item_category_id",
+		itemRequest.Serial,
+		itemRequest.LocationId,
+		itemRequest.CategoryId,
+	).Scan(&item.ID, &item.Serial, &item.Location.ID, &item.Category.ID)
 
-	if err != nil {
-		log.Fatal("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert item"})
-		return
-	}
-	item.ID = insertedID
-	c.JSON(http.StatusCreated, item)
+	return &item, err
 }
