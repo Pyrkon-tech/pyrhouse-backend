@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -17,7 +18,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	handler := UsersHandler{DB: db}
 
 	router.POST("/users", handler.RegisterUser)
-	// router.GET("/locations", handler.GetLocations)
+	router.GET("/users", handler.GetUserList)
 }
 
 func (h *UsersHandler) RegisterUser(c *gin.Context) {
@@ -55,4 +56,30 @@ func (h *UsersHandler) RegisterUser(c *gin.Context) {
 
 func (h *UsersHandler) GetUser(c *gin.Context) {
 
+}
+
+func (h *UsersHandler) GetUserList(c *gin.Context) {
+	rows, err := h.DB.Query("SELECT id, username, fullname, role FROM users")
+	if err != nil {
+		log.Fatal("Error executing SQL statement: ", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		if err := rows.Scan(&user.ID, &user.Username, &user.Fullname, &user.Role); err != nil {
+			log.Fatal("Error executing SQL statement: ", err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
+		}
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatal("Error executing SQL statement: ", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
+	}
+
+	c.JSON(http.StatusOK, users)
 }
