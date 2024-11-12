@@ -11,17 +11,10 @@ info:
 security:
   - bearerAuth: [] # use the same name as above    
 tags:
-  - name: pet
-    description: Everything about your Pets
-    externalDocs:
-      description: Find out more
-      url: http://swagger.io
-  - name: store
-    description: Access to Petstore orders
   - name: user
     description: Operations about user
     externalDocs:
-      description: Find out more about our store
+      description: Find out more about...
       url: http://swagger.io
 paths:
   /auth:
@@ -59,15 +52,19 @@ paths:
       description: ""
       operationId: addItem
       requestBody:
-        $ref: "#/components/requestBodies/Item"
+        $ref: "#/components/requestBodies/ItemRequest"
       responses:
         "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
           description: created
     get:
       tags:
         - item
-      summary: Finds Pets by status
-      description: Multiple status values can be provided with comma separated strings
+      summary: NOT IMPLEMENTED YET
+      description: ...
       operationId: findPetsByStatus
       parameters:
         - name: status
@@ -100,80 +97,38 @@ paths:
                   $ref: "#/components/schemas/Item"
         "400":
           description: Invalid status value
-  "/store/order/{orderId}":
-    get:
-      tags:
-        - store
-      summary: Find purchase order by ID
-      description: For valid response try integer IDs with value >= 1 and <= 10. Other
-        values will generated exceptions
-      operationId: getOrderById
-      parameters:
-        - name: orderId
-          in: path
-          description: ID of pet that needs to be fetched
-          required: true
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            maximum: 10
-      responses:
-        "200":
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: "#/components/schemas/Order"
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Order"
-        "400":
-          description: Invalid ID supplied
-        "404":
-          description: Order not found
-    delete:
-      tags:
-        - store
-      summary: Delete purchase order by ID
-      description: For valid response try integer IDs with positive integer value. Negative
-        or non-integer values will generate API errors
-      operationId: deleteOrder
-      parameters:
-        - name: orderId
-          in: path
-          description: ID of the order that needs to be deleted
-          required: true
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-      responses:
-        "400":
-          description: Invalid ID supplied
-        "404":
-          description: Order not found
-  /user:
+  /users:
     post:
       tags:
-        - user
+        - users
       summary: Register user
       description: This can only be done by the logged in user.
       operationId: createUser
       requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UserRequest"
+        $ref: "#/components/requestBodies/UserCreateRequest"
         description: Created user object
         required: true
       responses:
         "201":
-          description: successful operation
+          description: PROPER RESPONSE NOT IMPLEMENTED YET
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+    get:
+      tags:
+        - users
+      summary: Returns collection of users
+      description: ...
+      responses:
+        "200":
+          description: List all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
 servers:
   - url: pyrhouse-backend-f26ml.ondigitalocean.app
 components:
@@ -183,6 +138,22 @@ components:
       scheme: bearer
       bearerFormat: JWT # optional, arbitrary value for 
   requestBodies:
+    ItemRequest:
+      content:
+        application/json:
+          schema:
+            properties:
+              serial:
+                type: string
+              category_id:
+                type: string
+    UserCreateRequest:
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/UserRequest"
     UserArray:
       content:
         application/json:
@@ -197,9 +168,11 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Item"
-        application/xml:
+    ItemCategory:
+      content:
+        application/json:
           schema:
-            $ref: "#/components/schemas/Item"
+            $ref: "#/components/schemas/ItemCategory"
   schemas:
     Order:
       type: object
@@ -235,9 +208,19 @@ components:
           type: integer
         serial:
           type: string
+        category:
+          type: string
+    ItemCategory:
+      type: object
+      properties:
+        id:
+          type: integer
         type:
           type: string
-        
+          description: "example: laptop"       
+        label:
+          type: string
+          description: "example: Laptop"
     User:
       type: object
       properties:
