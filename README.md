@@ -17,3 +17,7 @@ Structure based on GoLang official docs meh
 2. `air`
 
 yop, that's all
+
+## Utils
+`brew install golang-migrate`
+`migrate create -ext sql -dir ./migrations -seq name-init_table`

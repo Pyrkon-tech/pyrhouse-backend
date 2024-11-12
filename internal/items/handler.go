@@ -19,7 +19,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 
 	router.POST("/items", handler.CreateItem)
 	router.GET("/items", handler.GetItems)
-	fmt.Println("register POST")
+	router.GET("/items/categories", handler.GetItemCategories)
 }
 
 func (h *ItemHandler) GetItems(c *gin.Context) {
