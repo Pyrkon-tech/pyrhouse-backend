@@ -3,3 +3,4 @@
 /tmp/*
 cmd/server/*
 !cmd/server/main.go
+__debug_bin*

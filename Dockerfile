@@ -17,10 +17,10 @@ COPY . .
 # WORKDIR /app/cmd/server
 
 # Build the application
-RUN go build -o cmd/server/main .
+RUN go build -o main .
 
 # Expose port 8080 for the application
 EXPOSE 8080
 
 # Run the application
-CMD ["./cmd/server/main"]
+CMD ["./main"]

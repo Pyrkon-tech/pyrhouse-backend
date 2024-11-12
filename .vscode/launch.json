@@ -9,7 +9,7 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${workspaceFolder}/cmd/server",  // Adjust this to point to your 'main.go' location
+            "program": "${workspaceFolder}",  // Adjust this to point to your 'main.go' location
             "env": {},
             "args": [],
             "cwd": "${workspaceFolder}",  // Set current working directory to the root of your project
