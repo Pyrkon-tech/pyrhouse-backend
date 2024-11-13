@@ -10,6 +10,7 @@ import (
 	"warehouse/internal/database"
 	"warehouse/internal/items"
 	"warehouse/internal/locations"
+	"warehouse/internal/repository"
 	"warehouse/internal/users"
 	"warehouse/pkg/security"
 
@@ -48,12 +49,15 @@ func main() {
 
 	log.Println("Connected to the database successfully!")
 
+	repository := &repository.Repository{DB: db}
+
 	// Initialize the Gin router
 	router := gin.Default()
 
 	// Album routes
+	// To refactor
 	albums.RegisterRoutes(router, db)
-	items.RegisterRoutes(router, db)
+	items.RegisterRoutes(router, repository)
 	locations.RegisterRoutes(router, db)
 	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db)

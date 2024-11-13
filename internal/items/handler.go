@@ -1,33 +1,26 @@
 package items
 
 import (
-	"database/sql"
 	"log"
 	"net/http"
+	"warehouse/internal/repository"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
 )
 
 type ItemHandler struct {
-	DB *sql.DB
+	Repository *repository.Repository
 }
 
-type ItemRequest struct {
-	ID         int    `json:"id"`
-	Serial     string `json:"serial" binding:"required"`
-	LocationId int    `json:"location_id" default:"1"`
-	Status     string `json:"status"`
-	CategoryId int    `json:"category_id"`
-}
-
-func RegisterRoutes(router *gin.Engine, db *sql.DB) {
-	handler := ItemHandler{DB: db}
+func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
+	handler := ItemHandler{Repository: r}
 
 	router.POST("/items", handler.CreateItem)
 	router.GET("/items", handler.GetItems)
-	router.POST("/items/categories", handler.CreateCategory)
+	router.POST("/items/categories", handler.CreateItemCategory)
 	router.GET("/items/categories", handler.GetItemCategories)
+	router.DELETE("/items/categories/:id", handler.RemoveItemCategory)
 }
 
 func (h *ItemHandler) GetItems(c *gin.Context) {
@@ -37,7 +30,7 @@ func (h *ItemHandler) GetItems(c *gin.Context) {
 
 func (h *ItemHandler) CreateItem(c *gin.Context) {
 
-	itemRequest := ItemRequest{
+	itemRequest := models.ItemRequest{
 		LocationId: 1,
 	}
 	if err := c.ShouldBindJSON(&itemRequest); err != nil {
@@ -46,7 +39,7 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 		return
 	}
 
-	item, err := h.PersistItem(itemRequest)
+	item, err := h.Repository.PersistItem(itemRequest)
 
 	if err != nil {
 		log.Fatal("Error executing SQL statement: ", err)
@@ -54,23 +47,4 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, item)
-}
-
-func (h *ItemHandler) PersistItem(itemRequest ItemRequest) (*models.Item, error) {
-	stmtString := "INSERT INTO items (item_serial, location_id, item_category_id) VALUES ($1, $2, $3)"
-	stmt, err := h.DB.Prepare(stmtString)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer stmt.Close()
-
-	var item models.Item
-	err = h.DB.QueryRow(
-		stmtString+" RETURNING id, item_serial, location_id, item_category_id",
-		itemRequest.Serial,
-		itemRequest.LocationId,
-		itemRequest.CategoryId,
-	).Scan(&item.ID, &item.Serial, &item.Location.ID, &item.Category.ID)
-
-	return &item, err
 }

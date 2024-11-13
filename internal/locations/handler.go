@@ -19,15 +19,6 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 	router.POST("/locations", handler.CreateLocation)
 	router.GET("/locations", handler.GetLocations)
 	router.GET("/locations/:id/items", handler.GetLocationItems)
-
-	// func(c *gin.Context) {
-	// 	items, err := GetLocationItems(db, c.Param("id"))
-	// 	if err != nil {
-	// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	// 		return
-	// 	}
-	// 	c.JSON(http.StatusOK, items)
-	// })
 }
 
 func (h *LocationHandler) GetLocations(c *gin.Context) {
@@ -86,7 +77,7 @@ func (h *LocationHandler) CreateLocation(c *gin.Context) {
 
 func (h *LocationHandler) GetLocationItems(c *gin.Context) {
 	// TODO: FIX LISTING
-	rows, err := h.DB.Query("SELECT id, item_serial FROM items WHERE location_id = $1", c.Param("id"))
+	rows, err := h.DB.Query("SELECT id, item_serial, item_category_id FROM items WHERE location_id = $1", c.Param("id"))
 	if err != nil {
 		log.Fatal("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
@@ -96,7 +87,7 @@ func (h *LocationHandler) GetLocationItems(c *gin.Context) {
 	var items []models.Item
 	for rows.Next() {
 		var item models.Item
-		if err := rows.Scan(&item.ID, &item.Serial); err != nil {
+		if err := rows.Scan(&item.ID, &item.Serial, &item.Category.ID); err != nil {
 			log.Fatal("Error executing SQL statement: ", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
 		}
