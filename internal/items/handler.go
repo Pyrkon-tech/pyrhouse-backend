@@ -15,7 +15,7 @@ type ItemHandler struct {
 
 type ItemRequest struct {
 	ID         int    `json:"id"`
-	Serial     string `json:"serial"`
+	Serial     string `json:"serial" binding:"required"`
 	LocationId int    `json:"location_id" default:"1"`
 	Status     string `json:"status"`
 	CategoryId int    `json:"category_id"`
@@ -26,6 +26,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB) {
 
 	router.POST("/items", handler.CreateItem)
 	router.GET("/items", handler.GetItems)
+	router.POST("/items/categories", handler.CreateCategory)
 	router.GET("/items/categories", handler.GetItemCategories)
 }
 
@@ -39,7 +40,7 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 	itemRequest := ItemRequest{
 		LocationId: 1,
 	}
-	if err := c.BindJSON(&itemRequest); err != nil {
+	if err := c.ShouldBindJSON(&itemRequest); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		log.Fatal(err)
 		return
