@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 
 	"warehouse/cmd"
-	"warehouse/internal/albums"
 	"warehouse/internal/database"
 	"warehouse/internal/items"
 	"warehouse/internal/locations"
@@ -54,15 +54,17 @@ func main() {
 	// Initialize the Gin router
 	router := gin.Default()
 
-	// Album routes
 	// To refactor
-	albums.RegisterRoutes(router, db)
 	items.RegisterRoutes(router, repository)
 	locations.RegisterRoutes(router, db)
 	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db)
 	router.GET("/openapi.yaml", func(c *gin.Context) {
 		c.File("./docs/openapi.yaml") // Path to your OpenAPI file
+	})
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		log.Println("Called healthcheck")
 	})
 
 	// Start the HTTP server
