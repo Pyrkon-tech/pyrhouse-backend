@@ -3,7 +3,36 @@ package repository
 import (
 	"log"
 	"warehouse/pkg/models"
+
+	"github.com/doug-martin/goqu/v9"
 )
+
+func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
+	qb := goqu.Dialect("postgres")
+	query := qb.Select("id", "item_category", "label").From("item_category")
+
+	// rows, err := r.Query(query)
+	sql, args, err := query.ToSQL()
+
+	if err != nil {
+		log.Fatalf("Failed to build query: %v", err)
+	}
+	rows, err := r.DB.Query(sql, args...)
+	if err != nil {
+		log.Fatalf("Failed to execute query: %v", err)
+	}
+	defer rows.Close()
+
+	var itemCategories []models.ItemCategory
+	for rows.Next() {
+		var itemCategory models.ItemCategory
+		if err := rows.Scan(&itemCategory.ID, &itemCategory.Type, &itemCategory.Label); err != nil {
+			return nil, err
+		}
+		itemCategories = append(itemCategories, itemCategory)
+	}
+	return &itemCategories, err
+}
 
 func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*models.ItemCategory, error) {
 	stmtString := "INSERT INTO item_category (item_category, label) VALUES ($1, $2)"
