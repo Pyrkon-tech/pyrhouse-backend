@@ -11,6 +11,7 @@ import (
 	"warehouse/internal/items"
 	"warehouse/internal/locations"
 	"warehouse/internal/repository"
+	"warehouse/internal/transfers"
 	"warehouse/internal/users"
 	"warehouse/pkg/security"
 
@@ -56,6 +57,7 @@ func main() {
 
 	// To refactor
 	items.RegisterRoutes(router, repository)
+	transfers.RegisterRoutes(router, repository)
 	locations.RegisterRoutes(router, db)
 	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db)
