@@ -1,40 +1,202 @@
 package repository
 
 import (
+	"fmt"
 	"log"
+	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 )
 
-func (r *Repository) MoveSerializedItems(items []int, locationID int, status string) error {
+func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool, error) {
 	qb := goqu.Dialect("postgres")
+	sql, args, err := qb.Select(goqu.COUNT("id")).From("items").Where(goqu.Ex{
+		"location_id": fromLocationId,
+		"id":          itemIDs,
+	}).ToSQL()
 
-	locationCase := goqu.Case()
-	statusCase := goqu.Case()
-
-	for _, item := range items {
-		locationCase = locationCase.When(goqu.Ex{"id": item}, locationID)
-		statusCase = statusCase.When(goqu.Ex{"id": item}, status)
-	}
-
-	// Build the update query
-	query := qb.From("items").Update().
-		Set(goqu.Record{
-			"location_id": locationCase,
-			"status":      statusCase,
-		}).
-		Where(goqu.C("id").In(items))
-
-	sql, args, err := query.ToSQL()
 	if err != nil {
 		log.Fatalf("Failed to build query: %v", err)
 	}
 
-	// Execute the query
-	_, execErr := r.DB.Exec(sql, args...)
-	if execErr != nil {
-		log.Fatalf("Failed to execute query: %v", execErr)
+	var count int
+	err = r.DB.QueryRow(sql, args...).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to execute query: %w", err)
 	}
 
-	return err
+	return count == len(itemIDs), nil
+}
+
+func (r *Repository) CanTransferNonSerializedItems(items []models.UnserializedItemRequest, locationID int) (map[int]bool, error) {
+	qb := goqu.Dialect("postgres")
+
+	conditions := make([]goqu.Expression, 0, len(items))
+	for _, item := range items {
+		conditions = append(conditions, goqu.And(
+			goqu.C("item_category_id").Eq(item.ItemCategoryID),
+			goqu.C("location_id").Eq(locationID),
+			goqu.C("quantity").Gte(item.Quantity),
+		))
+	}
+
+	sql, args, err := qb.From("non_serialized_items").
+		Select("item_category_id").
+		Where(goqu.Or(conditions...)).
+		ToSQL()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.DB.Query(sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[int]bool)
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan result: %w", err)
+		}
+		result[id] = true
+	}
+
+	return result, nil
+}
+
+func (r *Repository) PerformTransfer(req models.TransferRequest, transitStatus string) (int, error) {
+	rawTx, err := r.DB.Begin() // Start transaction
+	if err != nil {
+		return 0, fmt.Errorf("failed to start transaction: %w", err)
+	}
+
+	// Ensure rollback in case of error
+	defer func() {
+		if p := recover(); p != nil {
+			rawTx.Rollback()
+			panic(p)
+		} else if err != nil {
+			rawTx.Rollback()
+		} else {
+			rawTx.Commit()
+		}
+	}()
+
+	tx := goqu.NewTx("postgres", rawTx)
+
+	// Perform the transfer steps
+	var transferID int
+
+	if transferID, err = r.insertTransferRecord(tx, req); err != nil {
+		return 0, err
+	}
+	if len(req.SerialziedItemCollection) > 0 {
+		if err = r.moveSerializedItems(tx, req.SerialziedItemCollection, req.LocationID, transitStatus); err != nil {
+			return 0, err
+		}
+	}
+	if len(req.UnserializedItemCollection) > 0 {
+		if err = r.moveNonSerializedItems(tx, req.UnserializedItemCollection, req.LocationID, req.FromLocationID); err != nil {
+			return 0, err
+		}
+	}
+	// Commit transaction if everything succeeds
+	if err = tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return transferID, nil
+}
+
+func (r *Repository) moveSerializedItems(tx *goqu.TxDatabase, items []int, locationID int, transitStatus string) error {
+	locationCase := goqu.Case()
+	transitStatusCase := goqu.Case()
+
+	for _, item := range items {
+		locationCase = locationCase.When(goqu.Ex{"id": item}, locationID)
+		transitStatusCase = transitStatusCase.When(goqu.Ex{"id": item}, transitStatus)
+	}
+
+	query := tx.From("items").Update().
+		Set(goqu.Record{
+			"location_id": locationCase,
+			"status":      transitStatusCase,
+		}).
+		Where(goqu.C("id").In(items))
+
+	if _, err := query.Executor().Exec(); err != nil {
+		return fmt.Errorf("failed to update serialized items: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) moveNonSerializedItems(tx *goqu.TxDatabase, unserializedItems []models.UnserializedItemRequest, toLocationID int, fromLocationID int) error {
+	for _, unserializedItem := range unserializedItems {
+		query := tx.Insert("non_serialized_items").
+			Rows(goqu.Record{
+				"item_category_id": unserializedItem.ItemCategoryID,
+				"location_id":      toLocationID,
+				"quantity":         unserializedItem.Quantity,
+			}).
+			OnConflict(
+				goqu.DoUpdate(
+					"item_category_id, location_id",
+					goqu.Record{
+						"quantity": goqu.L("non_serialized_items.quantity + EXCLUDED.quantity"),
+					},
+				),
+			)
+
+		if _, err := query.Executor().Exec(); err != nil {
+			return fmt.Errorf("failed to upsert non-serialized item for category %d: %w", unserializedItem.ItemCategoryID, err)
+		}
+
+		// Step 2: Decrease the quantity from the source location
+		updateQuery := tx.Update("non_serialized_items").
+			Set(goqu.Record{
+				"quantity": goqu.L("quantity - ?", unserializedItem.Quantity),
+			}).
+			Where(goqu.Ex{
+				"item_category_id": unserializedItem.ItemCategoryID,
+				"location_id":      fromLocationID,
+			}).
+			Where(goqu.C("quantity").Gte(unserializedItem.Quantity)) // Ensure sufficient quantity
+
+		result, err := updateQuery.Executor().Exec()
+		if err != nil {
+			return fmt.Errorf("failed to decrease quantity for category %d from location %d: %w", unserializedItem.ItemCategoryID, fromLocationID, err)
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to check rows affected for category %d: %w", unserializedItem.ItemCategoryID, err)
+		}
+
+		if rowsAffected == 0 {
+			return fmt.Errorf("insufficient quantity for category %d at location %d", unserializedItem.ItemCategoryID, fromLocationID)
+		}
+	}
+
+	return nil
+}
+
+func (r *Repository) insertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error) {
+	query := tx.Insert("transfers").
+		Rows(goqu.Record{
+			"from_location_id": req.FromLocationID,
+			"to_location_id":   req.LocationID,
+			"status":           "in_transit",
+		}).
+		Returning("id")
+
+	var transferID int
+	if _, err := query.Executor().ScanVal(&transferID); err != nil {
+		return 0, fmt.Errorf("failed to insert transfer record: %w", err)
+	}
+
+	return transferID, nil
 }
