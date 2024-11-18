@@ -21,22 +21,28 @@ func (r *Repository) HasRelatedItems(categoryID string) bool {
 }
 
 func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Item, error) {
-	stmtString := "INSERT INTO items (item_serial, location_id, item_category_id) VALUES ($1, $2, $3)"
-	stmt, err := r.DB.Prepare(stmtString)
-	if err != nil {
-		log.Fatal(err)
+	query := r.GoguDBWrapper.Insert("items").
+		Rows(goqu.Record{
+			"item_serial":      itemRequest.Serial,
+			"location_id":      itemRequest.LocationId,
+			"item_category_id": itemRequest.CategoryId,
+		}).
+		Returning("id")
+	item := models.Item{
+		Serial: itemRequest.Serial,
+		Location: models.Location{
+			ID: itemRequest.LocationId,
+		},
+		Category: models.ItemCategory{
+			ID: itemRequest.CategoryId,
+		},
 	}
-	defer stmt.Close()
 
-	var item models.Item
-	err = r.DB.QueryRow(
-		stmtString+" RETURNING id, item_serial, location_id, item_category_id",
-		itemRequest.Serial,
-		itemRequest.LocationId,
-		itemRequest.CategoryId,
-	).Scan(&item.ID, &item.Serial, &item.Location.ID, &item.Category.ID)
+	if _, err := query.Executor().ScanVal(&item.ID); err != nil {
+		return nil, fmt.Errorf("failed to insert item record: %w", err)
+	}
 
-	return &item, err
+	return &item, nil
 }
 
 func (r *Repository) UpdateItemStatus(itemIDs []int, status string) error {

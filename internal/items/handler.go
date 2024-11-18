@@ -1,7 +1,6 @@
 package items
 
 import (
-	"log"
 	"net/http"
 	"warehouse/internal/repository"
 	"warehouse/pkg/models"
@@ -35,14 +34,12 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&itemRequest); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		log.Fatal(err)
 		return
 	}
 
 	item, err := h.Repository.PersistItem(itemRequest)
 
 	if err != nil {
-		log.Fatal("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create item"})
 		return
 	}

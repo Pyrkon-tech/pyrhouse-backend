@@ -9,8 +9,7 @@ import (
 )
 
 func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool, error) {
-	qb := goqu.Dialect("postgres")
-	sql, args, err := qb.Select(goqu.COUNT("id")).From("items").Where(goqu.Ex{
+	sql, args, err := r.GoguDBWrapper.Select(goqu.COUNT("id")).From("items").Where(goqu.Ex{
 		"location_id": fromLocationId,
 		"id":          itemIDs,
 	}).ToSQL()
@@ -29,8 +28,6 @@ func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool
 }
 
 func (r *Repository) CanTransferNonSerializedItems(items []models.UnserializedItemRequest, locationID int) (map[int]bool, error) {
-	qb := goqu.Dialect("postgres")
-
 	conditions := make([]goqu.Expression, 0, len(items))
 	for _, item := range items {
 		conditions = append(conditions, goqu.And(
@@ -40,7 +37,7 @@ func (r *Repository) CanTransferNonSerializedItems(items []models.UnserializedIt
 		))
 	}
 
-	sql, args, err := qb.From("non_serialized_items").
+	sql, args, err := r.GoguDBWrapper.From("non_serialized_items").
 		Select("item_category_id").
 		Where(goqu.Or(conditions...)).
 		ToSQL()
@@ -239,29 +236,6 @@ func (r *Repository) insertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, 
 	}
 
 	return nil
-}
-
-func withTransaction(db *goqu.Database, fn func(tx *goqu.TxDatabase) error) (err error) {
-	// TODO Check refactor chat
-	rawTx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to start transaction: %w", err)
-	}
-
-	tx := goqu.NewTx("postgres", rawTx)
-	defer func() {
-		if p := recover(); p != nil {
-			rawTx.Rollback()
-			panic(p)
-		} else if err != nil {
-			rawTx.Rollback()
-		} else {
-			err = rawTx.Commit()
-		}
-	}()
-
-	err = fn(tx)
-	return
 }
 
 func (r *Repository) handleSerializedItems(tx *goqu.TxDatabase, transferID int, items []int, locationID int, transitStatus string) error {
