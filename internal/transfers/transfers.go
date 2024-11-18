@@ -19,6 +19,7 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
 
 	router.POST("/transfers", handler.CreateTransfer)
 	router.PATCH("/transfers/:id/confirm", handler.UpdateTransfer)
+	router.PATCH("/transfers/:id/items/:item_id/restore-to-location", handler.RemoveItemFromTransfer)
 
 }
 
@@ -93,6 +94,40 @@ func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
 		"transfer_id": transferID,
 		"status":      req.Status,
 	})
+}
+
+// TODO Refactor
+type RemoveItemFromTransferRequest struct {
+	ID         int `uri:"id" binding:"required"`
+	ItemID     int `uri:"item_id" binding:"required"`
+	LocationID int `json:"location_id"`
+}
+
+func (h *TransferHandler) RemoveItemFromTransfer(c *gin.Context) {
+	var req RemoveItemFromTransferRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid URI parameters", "details": err.Error()})
+		return
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Unable to map json body", "details": err.Error()})
+		return
+	}
+
+	if req.LocationID == 0 {
+		c.JSON(400, gin.H{"error": "Missing required json location_id"})
+		return
+	}
+
+	err := h.Repository.RemoveFromTransfer(req.ID, req.ItemID, req.LocationID)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"transfer_id": req.ID})
 }
 
 func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) ([]struct {

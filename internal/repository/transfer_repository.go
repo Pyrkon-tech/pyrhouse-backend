@@ -92,7 +92,7 @@ func (r *Repository) PerformTransfer(req models.TransferRequest, transitStatus s
 }
 
 func (r *Repository) ConfirmTransfer(transferID string, status string) error {
-	// TODO Transaction + update transit status (do we really need this status?)
+	// TODO Transaction + remove transit status (do we really need this status?)
 	query := r.GoguDBWrapper.
 		Update("transfers").
 		Set(goqu.Record{
@@ -104,6 +104,41 @@ func (r *Repository) ConfirmTransfer(transferID string, status string) error {
 	_, err := query.Executor().Exec()
 	if err != nil {
 		return fmt.Errorf("failed to confirm transfer %s: %w", transferID, err)
+	}
+
+	return nil
+}
+
+func (r *Repository) RemoveFromTransfer(transferID int, itemID int, locationID int) error {
+	err := withTransaction(r.GoguDBWrapper, func(tx *goqu.TxDatabase) error {
+		var err error
+		_, err = tx.Delete("serialized_transfers").
+			Where(goqu.Ex{
+				"transfer_id": transferID,
+				"item_id":     itemID,
+			}).
+			Executor().
+			Exec()
+
+		if err != nil {
+			return fmt.Errorf("failed to remove item from transfer %d: %w", transferID, err)
+		}
+
+		_, err = tx.Update("items").
+			Set(goqu.Record{"location_id": locationID}).
+			Where(goqu.Ex{"id": itemID}).
+			Executor().
+			Exec()
+
+		if err != nil {
+			return fmt.Errorf("failed to remove item from transfer, unable to update location %d: %w", transferID, err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
 	}
 
 	return nil
