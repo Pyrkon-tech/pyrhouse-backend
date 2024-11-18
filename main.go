@@ -50,7 +50,7 @@ func main() {
 
 	log.Println("Connected to the database successfully!")
 
-	repository := &repository.Repository{DB: db}
+	repository := repository.NewRepository(db)
 
 	// Initialize the Gin router
 	router := gin.Default()

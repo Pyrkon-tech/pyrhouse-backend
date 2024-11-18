@@ -18,6 +18,8 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
 	handler := TransferHandler{Repository: r}
 
 	router.POST("/transfers", handler.CreateTransfer)
+	router.PATCH("/transfers/:id/confirm", handler.UpdateTransfer)
+
 }
 
 func (h *TransferHandler) CreateTransfer(c *gin.Context) {
@@ -47,6 +49,7 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 
 	if len(validationErrors) > 0 {
 		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Stock validation failed", "reasons": validationErrors})
+		return
 	}
 
 	transferID, err := h.Repository.PerformTransfer(transferRequest, itemTransitStatus)
@@ -56,7 +59,40 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 		return
 	}
 	log.Println("transfer ID: ", transferID)
+	transferRequest.TransferID = transferID
+
 	c.JSON(http.StatusCreated, transferRequest)
+}
+
+func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
+	// TODO "in_transit" to "completed" or "confirmed"  do something with that
+	transferID := c.Param("id")
+
+	if transferID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Transfer ID is required"})
+		return
+	}
+
+	var req struct {
+		Status string `json:"status" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.Repository.ConfirmTransfer(transferID, req.Status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Transfer confirmed successfully",
+		"transfer_id": transferID,
+		"status":      req.Status,
+	})
 }
 
 func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) ([]struct {

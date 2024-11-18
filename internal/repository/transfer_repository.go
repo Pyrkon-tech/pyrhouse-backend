@@ -68,47 +68,48 @@ func (r *Repository) CanTransferNonSerializedItems(items []models.UnserializedIt
 }
 
 func (r *Repository) PerformTransfer(req models.TransferRequest, transitStatus string) (int, error) {
-	rawTx, err := r.DB.Begin() // Start transaction
-	if err != nil {
-		return 0, fmt.Errorf("failed to start transaction: %w", err)
-	}
-
-	// Ensure rollback in case of error
-	defer func() {
-		if p := recover(); p != nil {
-			rawTx.Rollback()
-			panic(p)
-		} else if err != nil {
-			rawTx.Rollback()
-		} else {
-			rawTx.Commit()
-		}
-	}()
-
-	tx := goqu.NewTx("postgres", rawTx)
-
-	// Perform the transfer steps
 	var transferID int
 
-	if transferID, err = r.insertTransferRecord(tx, req); err != nil {
+	err := withTransaction(r.GoguDBWrapper, func(tx *goqu.TxDatabase) error {
+		var err error
+		if transferID, err = r.insertTransferRecord(tx, req); err != nil {
+			return fmt.Errorf("failed to insert transfer record: %w", err)
+		}
+
+		if err = r.handleSerializedItems(tx, transferID, req.SerialziedItemCollection, req.LocationID, transitStatus); err != nil {
+			return err
+		}
+
+		if err = r.handleNonSerializedItems(tx, transferID, req.UnserializedItemCollection, req.LocationID, req.FromLocationID); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return 0, err
-	}
-	if len(req.SerialziedItemCollection) > 0 {
-		if err = r.moveSerializedItems(tx, req.SerialziedItemCollection, req.LocationID, transitStatus); err != nil {
-			return 0, err
-		}
-	}
-	if len(req.UnserializedItemCollection) > 0 {
-		if err = r.moveNonSerializedItems(tx, req.UnserializedItemCollection, req.LocationID, req.FromLocationID); err != nil {
-			return 0, err
-		}
-	}
-	// Commit transaction if everything succeeds
-	if err = tx.Commit(); err != nil {
-		return 0, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return transferID, nil
+}
+
+func (r *Repository) ConfirmTransfer(transferID string, status string) error {
+	// TODO Transaction + update transit status (do we really need this status?)
+	query := r.GoguDBWrapper.
+		Update("transfers").
+		Set(goqu.Record{
+			"status": status,
+			// TODO "confirmed_at": goqu.L("NOW()"),
+		}).
+		Where(goqu.Ex{"id": transferID})
+
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to confirm transfer %s: %w", transferID, err)
+	}
+
+	return nil
 }
 
 func (r *Repository) moveSerializedItems(tx *goqu.TxDatabase, items []int, locationID int, transitStatus string) error {
@@ -199,4 +200,98 @@ func (r *Repository) insertTransferRecord(tx *goqu.TxDatabase, req models.Transf
 	}
 
 	return transferID, nil
+}
+
+func (r *Repository) insertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, items []int) error {
+	var records []goqu.Record
+	for _, itemID := range items {
+		records = append(records, goqu.Record{
+			"transfer_id": transferID,
+			"item_id":     itemID,
+		})
+	}
+
+	query := tx.Insert("serialized_transfers").Rows(records)
+
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to insert serialized item transfers: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) insertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.UnserializedItemRequest) error {
+	var records []goqu.Record
+	for _, unserializedItem := range unserializedItems {
+		records = append(records, goqu.Record{
+			"transfer_id":      transferID,
+			"item_category_id": unserializedItem.ItemCategoryID,
+			"quantity":         unserializedItem.Quantity,
+		})
+	}
+
+	query := tx.Insert("non_serialized_transfers").Rows(records)
+
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to insert serialized item transfers: %w", err)
+	}
+
+	return nil
+}
+
+func withTransaction(db *goqu.Database, fn func(tx *goqu.TxDatabase) error) (err error) {
+	// TODO Check refactor chat
+	rawTx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+
+	tx := goqu.NewTx("postgres", rawTx)
+	defer func() {
+		if p := recover(); p != nil {
+			rawTx.Rollback()
+			panic(p)
+		} else if err != nil {
+			rawTx.Rollback()
+		} else {
+			err = rawTx.Commit()
+		}
+	}()
+
+	err = fn(tx)
+	return
+}
+
+func (r *Repository) handleSerializedItems(tx *goqu.TxDatabase, transferID int, items []int, locationID int, transitStatus string) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	if err := r.insertSerializedItemTransferRecord(tx, transferID, items); err != nil {
+		return fmt.Errorf("failed to insert serialized item transfer record: %w", err)
+	}
+
+	if err := r.moveSerializedItems(tx, items, locationID, transitStatus); err != nil {
+		return fmt.Errorf("failed to move serialized items: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) handleNonSerializedItems(tx *goqu.TxDatabase, transferID int, items []models.UnserializedItemRequest, locationID, fromLocationID int) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	if err := r.insertNonSerializedItemTransferRecord(tx, transferID, items); err != nil {
+		return fmt.Errorf("failed to insert non-serialized item transfer record: %w", err)
+	}
+
+	if err := r.moveNonSerializedItems(tx, items, locationID, fromLocationID); err != nil {
+		return fmt.Errorf("failed to move non-serialized items: %w", err)
+	}
+
+	return nil
 }
