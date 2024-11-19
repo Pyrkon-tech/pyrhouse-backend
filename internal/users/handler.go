@@ -47,7 +47,11 @@ func (h *UsersHandler) RegisterUser(c *gin.Context) {
 	_, err = h.DB.Exec("INSERT INTO users (username, password_hash, fullname, role) VALUES ($1, $2, $3, $4)",
 		req.Username, string(hashedPassword), req.Fullname, req.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to create user",
+			// TODO Remove after prod
+			"debug": err.Error(),
+		})
 		return
 	}
 

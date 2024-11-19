@@ -13,4 +13,3 @@ migrate: ## run app migrations
 	go run ./main.go migrate --dir=./migrations
 # .PHONY: fixtures
 # fixtures: ## run app migrations
-	

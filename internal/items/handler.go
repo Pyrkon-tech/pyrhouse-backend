@@ -3,6 +3,7 @@ package items
 import (
 	"net/http"
 	"warehouse/internal/repository"
+	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -40,8 +41,15 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 	item, err := h.Repository.PersistItem(itemRequest)
 
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create item"})
-		return
+		switch err.(type) {
+		case *custom_error.UniqueViolationError:
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Item serial number already registered"})
+			return
+		default:
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create item"})
+			return
+		}
 	}
+
 	c.JSON(http.StatusCreated, item)
 }

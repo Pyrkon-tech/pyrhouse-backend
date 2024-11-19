@@ -3,9 +3,11 @@ package repository
 import (
 	"fmt"
 	"log"
+	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
+	"github.com/lib/pq"
 )
 
 func (r *Repository) HasRelatedItems(categoryID string) bool {
@@ -39,6 +41,11 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Item, 
 	}
 
 	if _, err := query.Executor().ScanVal(&item.ID); err != nil {
+		if pqErr, ok := err.(*pq.Error); ok {
+			if pqErr.Code == "23505" {
+				return nil, custom_error.WrapDBError("Duplicate serial number for item", string(pqErr.Code))
+			}
+		}
 		return nil, fmt.Errorf("failed to insert item record: %w", err)
 	}
 
