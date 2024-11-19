@@ -1,6 +1,6 @@
 package models
 
-type Item struct {
+type Asset struct { // assets table
 	ID       int          `json:"id"`
 	Serial   string       `json:"serial"`
 	Location Location     `json:"location"`

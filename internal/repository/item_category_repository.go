@@ -55,7 +55,7 @@ func (r *Repository) DeleteItemCategoryByID(CategoryID string) error {
 	query := `DELETE FROM item_category WHERE id = $1`
 	result, err := r.DB.Exec(query, CategoryID)
 	if err != nil {
-		log.Fatal("failed to delete item category: ", err)
+		log.Fatal("failed to delete asset category: ", err)
 		return err
 	}
 
@@ -66,7 +66,7 @@ func (r *Repository) DeleteItemCategoryByID(CategoryID string) error {
 	}
 
 	if rowsAffected == 0 {
-		log.Fatal("no item category found with id: ", CategoryID)
+		log.Fatal("no asset category found with id: ", CategoryID)
 		return err
 	}
 

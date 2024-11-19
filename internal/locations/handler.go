@@ -4,21 +4,23 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"warehouse/internal/repository"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
 )
 
 type LocationHandler struct {
-	DB *sql.DB
+	DB         *sql.DB
+	Repository *repository.Repository
 }
 
-func RegisterRoutes(router *gin.Engine, db *sql.DB) {
-	handler := LocationHandler{DB: db}
+func RegisterRoutes(router *gin.Engine, db *sql.DB, r *repository.Repository) {
+	handler := LocationHandler{DB: db, Repository: r}
 
 	router.POST("/locations", handler.CreateLocation)
 	router.GET("/locations", handler.GetLocations)
-	router.GET("/locations/:id/items", handler.GetLocationItems)
+	router.GET("/locations/:id/assets", handler.GetLocationItems)
 }
 
 func (h *LocationHandler) GetLocations(c *gin.Context) {
@@ -76,28 +78,12 @@ func (h *LocationHandler) CreateLocation(c *gin.Context) {
 }
 
 func (h *LocationHandler) GetLocationItems(c *gin.Context) {
-	// TODO: FIX LISTING
-	rows, err := h.DB.Query("SELECT id, item_serial, item_category_id FROM items WHERE location_id = $1", c.Param("id"))
+	locationEquipment, err := h.Repository.GetLocationEquipment(c.Param("id"))
+
 	if err != nil {
 		log.Fatal("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
 	}
-	defer rows.Close()
 
-	var items []models.Item
-	for rows.Next() {
-		var item models.Item
-		if err := rows.Scan(&item.ID, &item.Serial, &item.Category.ID); err != nil {
-			log.Fatal("Error executing SQL statement: ", err)
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
-		}
-		items = append(items, item)
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Fatal("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
-	}
-
-	c.JSON(http.StatusOK, items)
+	c.JSON(http.StatusOK, locationEquipment)
 }

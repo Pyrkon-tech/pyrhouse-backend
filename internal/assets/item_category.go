@@ -1,4 +1,4 @@
-package items
+package assets
 
 import (
 	"log"
@@ -14,7 +14,7 @@ func (h *ItemHandler) GetItemCategories(c *gin.Context) {
 
 	if err != nil {
 		log.Fatal("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create item"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset"})
 		return
 	}
 
@@ -29,14 +29,14 @@ func (h *ItemHandler) CreateItemCategory(c *gin.Context) {
 		return
 	}
 
-	item, err := h.Repository.PersistItemCategory(itemCategory)
+	asset, err := h.Repository.PersistItemCategory(itemCategory)
 
 	if err != nil {
 		log.Fatal("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create item"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset"})
 		return
 	}
-	c.JSON(http.StatusCreated, item)
+	c.JSON(http.StatusCreated, asset)
 }
 
 func (h *ItemHandler) RemoveItemCategory(c *gin.Context) {
@@ -51,13 +51,13 @@ func (h *ItemHandler) RemoveItemCategory(c *gin.Context) {
 	hasRelatedItems := h.Repository.HasRelatedItems(CategoryID)
 
 	if hasRelatedItems {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "cannot delete item category with id " + CategoryID + ": related items exist"})
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "cannot delete asset category with id " + CategoryID + ": related assets exist"})
 		return
 	}
 
 	err := h.Repository.DeleteItemCategoryByID(CategoryID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete item category"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete asset category"})
 		return
 	}
 

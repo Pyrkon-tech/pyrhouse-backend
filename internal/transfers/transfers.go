@@ -19,7 +19,7 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
 
 	router.POST("/transfers", handler.CreateTransfer)
 	router.PATCH("/transfers/:id/confirm", handler.UpdateTransfer)
-	router.PATCH("/transfers/:id/items/:item_id/restore-to-location", handler.RemoveItemFromTransfer)
+	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", handler.RemoveItemFromTransfer)
 
 }
 
@@ -142,14 +142,14 @@ func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) 
 	if len(transferRequest.SerialziedItemCollection) > 0 {
 		hasItemsOnStock, err := h.Repository.HasItemsInLocation(transferRequest.SerialziedItemCollection, transferRequest.FromLocationID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to validate serialized items: %w", err)
+			return nil, fmt.Errorf("failed to validate serialized assets: %w", err)
 		}
 		if !hasItemsOnStock {
 			validationState = append(validationState, struct {
 				message  string
 				property string
 			}{
-				message:  "Serialized items are not present in location",
+				message:  "Serialized assets are not present in location",
 				property: "serialized_item_collection",
 			})
 		}
@@ -158,7 +158,7 @@ func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) 
 	if len(transferRequest.UnserializedItemCollection) > 0 {
 		hasEnoughQuantity, err := h.Repository.CanTransferNonSerializedItems(transferRequest.UnserializedItemCollection, transferRequest.FromLocationID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to validate non-serialized items: %w", err)
+			return nil, fmt.Errorf("failed to validate non-serialized assets: %w", err)
 		}
 
 		if len(hasEnoughQuantity) != len(transferRequest.UnserializedItemCollection) {
@@ -166,7 +166,7 @@ func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) 
 				message  string
 				property string
 			}{
-				message:  "Non-serialized items are not present in location",
+				message:  "Non-serialized assets are not present in location",
 				property: "unserialized_item_collection",
 			})
 		}

@@ -7,8 +7,9 @@ import (
 	"os"
 
 	"warehouse/cmd"
+	"warehouse/internal/assets"
+
 	"warehouse/internal/database"
-	"warehouse/internal/items"
 	"warehouse/internal/locations"
 	"warehouse/internal/repository"
 	"warehouse/internal/transfers"
@@ -56,9 +57,9 @@ func main() {
 	router := gin.Default()
 
 	// To refactor
-	items.RegisterRoutes(router, repository)
+	assets.RegisterRoutes(router, repository)
 	transfers.RegisterRoutes(router, repository)
-	locations.RegisterRoutes(router, db)
+	locations.RegisterRoutes(router, db, repository)
 	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db)
 	router.GET("/openapi.yaml", func(c *gin.Context) {

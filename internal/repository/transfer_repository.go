@@ -27,13 +27,13 @@ func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool
 	return count == len(itemIDs), nil
 }
 
-func (r *Repository) CanTransferNonSerializedItems(items []models.UnserializedItemRequest, locationID int) (map[int]bool, error) {
-	conditions := make([]goqu.Expression, 0, len(items))
-	for _, item := range items {
+func (r *Repository) CanTransferNonSerializedItems(assets []models.UnserializedItemRequest, locationID int) (map[int]bool, error) {
+	conditions := make([]goqu.Expression, 0, len(assets))
+	for _, asset := range assets {
 		conditions = append(conditions, goqu.And(
-			goqu.C("item_category_id").Eq(item.ItemCategoryID),
+			goqu.C("item_category_id").Eq(asset.ItemCategoryID),
 			goqu.C("location_id").Eq(locationID),
-			goqu.C("quantity").Gte(item.Quantity),
+			goqu.C("quantity").Gte(asset.Quantity),
 		))
 	}
 
@@ -121,7 +121,7 @@ func (r *Repository) RemoveFromTransfer(transferID int, itemID int, locationID i
 			Exec()
 
 		if err != nil {
-			return fmt.Errorf("failed to remove item from transfer %d: %w", transferID, err)
+			return fmt.Errorf("failed to remove asset from transfer %d: %w", transferID, err)
 		}
 
 		_, err = tx.Update("items").
@@ -131,7 +131,7 @@ func (r *Repository) RemoveFromTransfer(transferID int, itemID int, locationID i
 			Exec()
 
 		if err != nil {
-			return fmt.Errorf("failed to remove item from transfer, unable to update location %d: %w", transferID, err)
+			return fmt.Errorf("failed to remove asset from transfer, unable to update location %d: %w", transferID, err)
 		}
 
 		return nil
@@ -144,13 +144,13 @@ func (r *Repository) RemoveFromTransfer(transferID int, itemID int, locationID i
 	return nil
 }
 
-func (r *Repository) moveSerializedItems(tx *goqu.TxDatabase, items []int, locationID int, transitStatus string) error {
+func (r *Repository) moveSerializedItems(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error {
 	locationCase := goqu.Case()
 	transitStatusCase := goqu.Case()
 
-	for _, item := range items {
-		locationCase = locationCase.When(goqu.Ex{"id": item}, locationID)
-		transitStatusCase = transitStatusCase.When(goqu.Ex{"id": item}, transitStatus)
+	for _, asset := range assets {
+		locationCase = locationCase.When(goqu.Ex{"id": asset}, locationID)
+		transitStatusCase = transitStatusCase.When(goqu.Ex{"id": asset}, transitStatus)
 	}
 
 	query := tx.From("items").Update().
@@ -158,10 +158,10 @@ func (r *Repository) moveSerializedItems(tx *goqu.TxDatabase, items []int, locat
 			"location_id": locationCase,
 			"status":      transitStatusCase,
 		}).
-		Where(goqu.C("id").In(items))
+		Where(goqu.C("id").In(assets))
 
 	if _, err := query.Executor().Exec(); err != nil {
-		return fmt.Errorf("failed to update serialized items: %w", err)
+		return fmt.Errorf("failed to update serialized assets: %w", err)
 	}
 
 	return nil
@@ -185,7 +185,7 @@ func (r *Repository) moveNonSerializedItems(tx *goqu.TxDatabase, unserializedIte
 			)
 
 		if _, err := query.Executor().Exec(); err != nil {
-			return fmt.Errorf("failed to upsert non-serialized item for category %d: %w", unserializedItem.ItemCategoryID, err)
+			return fmt.Errorf("failed to upsert non-serialized asset for category %d: %w", unserializedItem.ItemCategoryID, err)
 		}
 
 		// Step 2: Decrease the quantity from the source location
@@ -234,9 +234,9 @@ func (r *Repository) insertTransferRecord(tx *goqu.TxDatabase, req models.Transf
 	return transferID, nil
 }
 
-func (r *Repository) insertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, items []int) error {
+func (r *Repository) insertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error {
 	var records []goqu.Record
-	for _, itemID := range items {
+	for _, itemID := range assets {
 		records = append(records, goqu.Record{
 			"transfer_id": transferID,
 			"item_id":     itemID,
@@ -247,7 +247,7 @@ func (r *Repository) insertSerializedItemTransferRecord(tx *goqu.TxDatabase, tra
 
 	_, err := query.Executor().Exec()
 	if err != nil {
-		return fmt.Errorf("failed to insert serialized item transfers: %w", err)
+		return fmt.Errorf("failed to insert serialized asset transfers: %w", err)
 	}
 
 	return nil
@@ -267,39 +267,39 @@ func (r *Repository) insertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, 
 
 	_, err := query.Executor().Exec()
 	if err != nil {
-		return fmt.Errorf("failed to insert serialized item transfers: %w", err)
+		return fmt.Errorf("failed to insert serialized asset transfers: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Repository) handleSerializedItems(tx *goqu.TxDatabase, transferID int, items []int, locationID int, transitStatus string) error {
-	if len(items) == 0 {
+func (r *Repository) handleSerializedItems(tx *goqu.TxDatabase, transferID int, assets []int, locationID int, transitStatus string) error {
+	if len(assets) == 0 {
 		return nil
 	}
 
-	if err := r.insertSerializedItemTransferRecord(tx, transferID, items); err != nil {
-		return fmt.Errorf("failed to insert serialized item transfer record: %w", err)
+	if err := r.insertSerializedItemTransferRecord(tx, transferID, assets); err != nil {
+		return fmt.Errorf("failed to insert serialized asset transfer record: %w", err)
 	}
 
-	if err := r.moveSerializedItems(tx, items, locationID, transitStatus); err != nil {
-		return fmt.Errorf("failed to move serialized items: %w", err)
+	if err := r.moveSerializedItems(tx, assets, locationID, transitStatus); err != nil {
+		return fmt.Errorf("failed to move serialized assets: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Repository) handleNonSerializedItems(tx *goqu.TxDatabase, transferID int, items []models.UnserializedItemRequest, locationID, fromLocationID int) error {
-	if len(items) == 0 {
+func (r *Repository) handleNonSerializedItems(tx *goqu.TxDatabase, transferID int, assets []models.UnserializedItemRequest, locationID, fromLocationID int) error {
+	if len(assets) == 0 {
 		return nil
 	}
 
-	if err := r.insertNonSerializedItemTransferRecord(tx, transferID, items); err != nil {
-		return fmt.Errorf("failed to insert non-serialized item transfer record: %w", err)
+	if err := r.insertNonSerializedItemTransferRecord(tx, transferID, assets); err != nil {
+		return fmt.Errorf("failed to insert non-serialized asset transfer record: %w", err)
 	}
 
-	if err := r.moveNonSerializedItems(tx, items, locationID, fromLocationID); err != nil {
-		return fmt.Errorf("failed to move non-serialized items: %w", err)
+	if err := r.moveNonSerializedItems(tx, assets, locationID, fromLocationID); err != nil {
+		return fmt.Errorf("failed to move non-serialized assets: %w", err)
 	}
 
 	return nil

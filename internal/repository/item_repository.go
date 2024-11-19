@@ -11,18 +11,18 @@ import (
 )
 
 func (r *Repository) HasRelatedItems(categoryID string) bool {
-	query := `SELECT COUNT(*) FROM items WHERE item_category_id = $1`
+	query := `SELECT COUNT(*) FROM assets WHERE item_category_id = $1`
 	var count int
 	err := r.DB.QueryRow(query, categoryID).Scan(&count)
 	if err != nil {
-		log.Fatal("failed to check related items: ", err)
+		log.Fatal("failed to check related assets: ", err)
 
 		return false
 	}
 	return count > 0
 }
 
-func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Item, error) {
+func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset, error) {
 	query := r.GoguDBWrapper.Insert("items").
 		Rows(goqu.Record{
 			"item_serial":      itemRequest.Serial,
@@ -30,7 +30,7 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Item, 
 			"item_category_id": itemRequest.CategoryId,
 		}).
 		Returning("id")
-	item := models.Item{
+	asset := models.Asset{
 		Serial: itemRequest.Serial,
 		Location: models.Location{
 			ID: itemRequest.LocationId,
@@ -40,16 +40,16 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Item, 
 		},
 	}
 
-	if _, err := query.Executor().ScanVal(&item.ID); err != nil {
+	if _, err := query.Executor().ScanVal(&asset.ID); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23505" {
-				return nil, custom_error.WrapDBError("Duplicate serial number for item", string(pqErr.Code))
+				return nil, custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
 			}
 		}
-		return nil, fmt.Errorf("failed to insert item record: %w", err)
+		return nil, fmt.Errorf("failed to insert asset record: %w", err)
 	}
 
-	return &item, nil
+	return &asset, nil
 }
 
 func (r *Repository) UpdateItemStatus(itemIDs []int, status string) error {
@@ -62,7 +62,7 @@ func (r *Repository) UpdateItemStatus(itemIDs []int, status string) error {
 
 	_, err := query.Executor().Exec()
 	if err != nil {
-		return fmt.Errorf("failed to confirm items transfer: %w", err)
+		return fmt.Errorf("failed to confirm assets transfer: %w", err)
 	}
 
 	return nil

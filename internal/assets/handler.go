@@ -1,4 +1,4 @@
-package items
+package assets
 
 import (
 	"net/http"
@@ -16,11 +16,11 @@ type ItemHandler struct {
 func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
 	handler := ItemHandler{Repository: r}
 
-	router.POST("/items", handler.CreateItem)
-	router.GET("/items", handler.GetItems)
-	router.POST("/items/categories", handler.CreateItemCategory)
-	router.GET("/items/categories", handler.GetItemCategories)
-	router.DELETE("/items/categories/:id", handler.RemoveItemCategory)
+	router.POST("/assets", handler.CreateItem)
+	router.GET("/assets", handler.GetItems)
+	router.POST("/assets/categories", handler.CreateItemCategory)
+	router.GET("/assets/categories", handler.GetItemCategories)
+	router.DELETE("/assets/categories/:id", handler.RemoveItemCategory)
 }
 
 func (h *ItemHandler) GetItems(c *gin.Context) {
@@ -38,7 +38,7 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 		return
 	}
 
-	item, err := h.Repository.PersistItem(itemRequest)
+	asset, err := h.Repository.PersistItem(itemRequest)
 
 	if err != nil {
 		switch err.(type) {
@@ -46,10 +46,10 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Item serial number already registered"})
 			return
 		default:
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create item"})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset"})
 			return
 		}
 	}
 
-	c.JSON(http.StatusCreated, item)
+	c.JSON(http.StatusCreated, asset)
 }

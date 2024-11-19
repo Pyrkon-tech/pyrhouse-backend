@@ -44,11 +44,11 @@ paths:
                   properties:
                     token:
                       type: string
-  /items:
+  /assets:
     post:
       tags:
-        - item
-      summary: Add a new item
+        - asset
+      summary: Add a new asset
       description: ""
       operationId: addItem
       requestBody:
@@ -62,7 +62,7 @@ paths:
           description: created
     get:
       tags:
-        - item
+        - asset
       summary: NOT IMPLEMENTED YET
       description: ...
       operationId: findPetsByStatus
@@ -74,7 +74,7 @@ paths:
           explode: true
           schema:
             type: array
-            items:
+            assets:
               type: string
               enum:
                 - available
@@ -88,12 +88,12 @@ paths:
             application/xml:
               schema:
                 type: array
-                items:
+                assets:
                   $ref: "#/components/schemas/Item"
             application/json:
               schema:
                 type: array
-                items:
+                assets:
                   $ref: "#/components/schemas/Item"
         "400":
           description: Invalid status value
@@ -127,7 +127,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
+                assets:
                   $ref: "#/components/schemas/User"
 servers:
   - url: pyrhouse-backend-f26ml.ondigitalocean.app
@@ -152,14 +152,14 @@ components:
         application/json:
           schema:
             type: array
-            items:
+            assets:
               $ref: "#/components/schemas/UserRequest"
     UserArray:
       content:
         application/json:
           schema:
             type: array
-            items:
+            assets:
               $ref: "#/components/schemas/User"
       description: List of user object
       required: true
