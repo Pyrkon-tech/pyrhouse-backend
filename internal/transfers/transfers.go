@@ -19,8 +19,8 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
 
 	router.POST("/transfers", handler.CreateTransfer)
 	router.PATCH("/transfers/:id/confirm", handler.UpdateTransfer)
-	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", handler.RemoveItemFromTransfer)
-
+	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", handler.RemoveAssetFromTransfer)
+	router.PATCH("/transfers/:id/stock/:stock_id/restore-to-location", handler.RemoveStockItemFromTransfer)
 }
 
 func (h *TransferHandler) CreateTransfer(c *gin.Context) {
@@ -103,7 +103,7 @@ type RemoveItemFromTransferRequest struct {
 	LocationID int `json:"location_id"`
 }
 
-func (h *TransferHandler) RemoveItemFromTransfer(c *gin.Context) {
+func (h *TransferHandler) RemoveAssetFromTransfer(c *gin.Context) {
 	var req RemoveItemFromTransferRequest
 	if err := c.ShouldBindUri(&req); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid URI parameters", "details": err.Error()})
@@ -120,7 +120,7 @@ func (h *TransferHandler) RemoveItemFromTransfer(c *gin.Context) {
 		return
 	}
 
-	err := h.Repository.RemoveFromTransfer(req.ID, req.ItemID, req.LocationID)
+	err := h.Repository.RemoveAssetFromTransfer(req.ID, req.ItemID, req.LocationID)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -128,6 +128,11 @@ func (h *TransferHandler) RemoveItemFromTransfer(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"transfer_id": req.ID})
+}
+
+func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
+
+	c.JSON(http.StatusNotImplemented, gin.H{"message": "not implemented"})
 }
 
 func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) ([]struct {

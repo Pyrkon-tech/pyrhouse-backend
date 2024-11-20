@@ -109,7 +109,7 @@ func (r *Repository) ConfirmTransfer(transferID string, status string) error {
 	return nil
 }
 
-func (r *Repository) RemoveFromTransfer(transferID int, itemID int, locationID int) error {
+func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
 	err := withTransaction(r.GoguDBWrapper, func(tx *goqu.TxDatabase) error {
 		var err error
 		_, err = tx.Delete("serialized_transfers").

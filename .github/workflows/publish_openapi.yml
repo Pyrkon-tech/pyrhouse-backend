@@ -1,0 +1,31 @@
+name: Deploy OpenAPI to GitHub Pages
+
+on:
+  push:
+    paths:
+      - "docs/openapi.yaml" # Trigger only when this file changes
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Convert openapi.yaml to static HTML (using Swagger UI CLI)
+      - name: Convert OpenAPI YAML to HTML
+        run: |
+          npm install -g redoc-cli # Install Redoc CLI
+          mkdir -p generated-docs
+          redoc-cli bundle docs/openapi.yaml -o generated-docs/index.html # Generate HTML
+        
+      # Step 3: Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: generated-docs
