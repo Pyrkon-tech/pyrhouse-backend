@@ -22,11 +22,11 @@ jobs:
         run: |
           npm install -g redoc-cli # Install Redoc CLI
           mkdir -p generated-docs
-          redoc-cli bundle docs/openapi.yaml -o generated-docs/index.html # Generate HTML
+          redoc-cli bundle docs/openapi.yaml -o docs/index.html # Generate HTML
         
       # Step 3: Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: generated-docs
+          publish_dir: docs
