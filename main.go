@@ -63,13 +63,13 @@ func main() {
 	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db)
 
-	openapiFilePath := "./docs/openapi.html"
+	openapiFilePath := "./docs/index.html"
 	if _, err := os.Stat(openapiFilePath); err == nil {
 		// File exists, register the route
 		router.GET("/openapi.html", func(c *gin.Context) {
 			c.File(openapiFilePath)
 		})
-		log.Println("Route /openapi.html registered successfully.")
+		log.Println("Route docs/index.html registered successfully.")
 	} else {
 		// File does not exist, log a warning
 		log.Printf("Warning: %s not found. Route /openapi.html will not be registered.\n", openapiFilePath)
