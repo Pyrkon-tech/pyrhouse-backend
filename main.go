@@ -62,9 +62,19 @@ func main() {
 	locations.RegisterRoutes(router, db, repository)
 	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db)
-	router.GET("/openapi.yaml", func(c *gin.Context) {
-		c.File("./docs/openapi.yaml") // Path to your OpenAPI file
-	})
+
+	openapiFilePath := "./docs/openapi.html"
+	if _, err := os.Stat(openapiFilePath); err == nil {
+		// File exists, register the route
+		router.GET("/openapi.html", func(c *gin.Context) {
+			c.File(openapiFilePath)
+		})
+		log.Println("Route /openapi.html registered successfully.")
+	} else {
+		// File does not exist, log a warning
+		log.Printf("Warning: %s not found. Route /openapi.html will not be registered.\n", openapiFilePath)
+	}
+
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		log.Println("Called healthcheck")
