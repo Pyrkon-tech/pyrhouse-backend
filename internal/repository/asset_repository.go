@@ -22,8 +22,27 @@ func (r *Repository) HasRelatedItems(categoryID string) bool {
 	return count > 0
 }
 
+func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool, error) {
+	sql, args, err := r.goquDBWrapper.Select(goqu.COUNT("id")).From("items").Where(goqu.Ex{
+		"location_id": fromLocationId,
+		"id":          itemIDs,
+	}).ToSQL()
+
+	if err != nil {
+		log.Fatalf("Failed to build query: %v", err)
+	}
+
+	var count int
+	err = r.DB.QueryRow(sql, args...).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	return count == len(itemIDs), nil
+}
+
 func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset, error) {
-	query := r.GoguDBWrapper.Insert("items").
+	query := r.goquDBWrapper.Insert("items").
 		Rows(goqu.Record{
 			"item_serial":      itemRequest.Serial,
 			"location_id":      itemRequest.LocationId,
@@ -53,7 +72,7 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset,
 }
 
 func (r *Repository) UpdateItemStatus(itemIDs []int, status string) error {
-	query := r.GoguDBWrapper.
+	query := r.goquDBWrapper.
 		Update("items").
 		Set(goqu.Record{
 			"status": status,
@@ -63,6 +82,41 @@ func (r *Repository) UpdateItemStatus(itemIDs []int, status string) error {
 	_, err := query.Executor().Exec()
 	if err != nil {
 		return fmt.Errorf("failed to confirm assets transfer: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
+	err := withTransaction(r.goquDBWrapper, func(tx *goqu.TxDatabase) error {
+		var err error
+		_, err = tx.Delete("serialized_transfers").
+			Where(goqu.Ex{
+				"transfer_id": transferID,
+				"item_id":     itemID,
+			}).
+			Executor().
+			Exec()
+
+		if err != nil {
+			return fmt.Errorf("failed to remove asset from transfer %d: %w", transferID, err)
+		}
+
+		_, err = tx.Update("items").
+			Set(goqu.Record{"location_id": locationID}).
+			Where(goqu.Ex{"id": itemID}).
+			Executor().
+			Exec()
+
+		if err != nil {
+			return fmt.Errorf("failed to remove asset from transfer, unable to update location %d: %w", transferID, err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
 	}
 
 	return nil

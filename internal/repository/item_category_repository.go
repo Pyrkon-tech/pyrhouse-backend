@@ -1,10 +1,13 @@
 package repository
 
 import (
+	"fmt"
 	"log"
+	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
+	"github.com/lib/pq"
 )
 
 func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
@@ -35,25 +38,28 @@ func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
 }
 
 func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*models.ItemCategory, error) {
-	stmtString := "INSERT INTO item_category (item_category, label) VALUES ($1, $2)"
-	stmt, err := r.DB.Prepare(stmtString)
-	if err != nil {
-		log.Fatal(err)
+	query := r.goquDBWrapper.Insert("items").
+		Rows(goqu.Record{
+			"item_category": itemCategory.Type,
+			"label":         itemCategory.Label,
+		}).
+		Returning("id")
+
+	if _, err := query.Executor().ScanVal(&itemCategory.ID); err != nil {
+		if pqErr, ok := err.(*pq.Error); ok {
+			if pqErr.Code == "23505" {
+				return nil, custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
+			}
+		}
+		return nil, fmt.Errorf("failed to insert item_category record: %w", err)
 	}
-	defer stmt.Close()
 
-	err = r.DB.QueryRow(
-		stmtString+" RETURNING id",
-		itemCategory.Type,
-		itemCategory.Label,
-	).Scan(&itemCategory.ID)
-
-	return &itemCategory, err
+	return &itemCategory, nil
 }
 
-func (r *Repository) DeleteItemCategoryByID(CategoryID string) error {
-	query := `DELETE FROM item_category WHERE id = $1`
-	result, err := r.DB.Exec(query, CategoryID)
+func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
+	result, err := r.goquDBWrapper.Delete("item_category").Where(goqu.Ex{"id": categoryID}).Executor().Exec()
+
 	if err != nil {
 		log.Fatal("failed to delete asset category: ", err)
 		return err
@@ -61,13 +67,11 @@ func (r *Repository) DeleteItemCategoryByID(CategoryID string) error {
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		log.Fatal("could not retrieve rows affected: ", err)
-		return err
+		return fmt.Errorf("could not retrieve rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		log.Fatal("no asset category found with id: ", CategoryID)
-		return err
+		return fmt.Errorf("no asset category found with id: %s", categoryID)
 	}
 
 	return nil

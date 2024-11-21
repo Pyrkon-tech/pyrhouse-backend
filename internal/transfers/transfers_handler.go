@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"warehouse/internal/repository"
+	transfer_request "warehouse/internal/transfers/request"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +22,7 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
 	router.POST("/transfers", handler.CreateTransfer)
 	router.PATCH("/transfers/:id/confirm", handler.UpdateTransfer)
 	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", handler.RemoveAssetFromTransfer)
-	router.PATCH("/transfers/:id/stock/:stock_id/restore-to-location", handler.RemoveStockItemFromTransfer)
+	router.PATCH("/transfers/:id/categories/:category_id/restore-to-location", handler.RemoveStockItemFromTransfer)
 }
 
 func (h *TransferHandler) CreateTransfer(c *gin.Context) {
@@ -96,15 +98,8 @@ func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
 	})
 }
 
-// TODO Refactor
-type RemoveItemFromTransferRequest struct {
-	ID         int `uri:"id" binding:"required"`
-	ItemID     int `uri:"item_id" binding:"required"`
-	LocationID int `json:"location_id"`
-}
-
 func (h *TransferHandler) RemoveAssetFromTransfer(c *gin.Context) {
-	var req RemoveItemFromTransferRequest
+	var req transfer_request.RemoveItemFromTransferRequest
 	if err := c.ShouldBindUri(&req); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid URI parameters", "details": err.Error()})
 		return
@@ -131,8 +126,47 @@ func (h *TransferHandler) RemoveAssetFromTransfer(c *gin.Context) {
 }
 
 func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
+	var req transfer_request.RemoveStockItemFromTransferRequest
 
-	c.JSON(http.StatusNotImplemented, gin.H{"message": "not implemented"})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unable to map JSON body", "details": err.Error()})
+		return
+	}
+
+	getAndConvertParam := func(key string) (int, error) {
+		param := c.Param(key)
+		if param == "" {
+			return 0, fmt.Errorf("parameter %s missing from URI", key)
+		}
+		value, err := strconv.Atoi(param)
+		if err != nil {
+			return 0, fmt.Errorf("invalid %s format: %w", key, err)
+		}
+		return value, nil
+	}
+
+	transferID, err := getAndConvertParam("id")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	categoryID, err := getAndConvertParam("category_id")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	req.TransferID = transferID
+	req.CategoryID = categoryID
+
+	// Call the repository method
+	if err := h.Repository.RemoveStockItemFromTransfer(req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove stock item from transfer", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Stock item removed from transfer successfully"})
 }
 
 func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) ([]struct {

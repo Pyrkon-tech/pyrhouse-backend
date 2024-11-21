@@ -7,21 +7,21 @@ import (
 	"github.com/doug-martin/goqu/v9"
 )
 
+// TODO lower case, no need for public
 type Repository struct {
 	DB            *sql.DB
-	GoguDBWrapper *goqu.Database
+	goquDBWrapper *goqu.Database
 }
 
 // TODO remove db on migration period
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{
 		DB:            db,
-		GoguDBWrapper: goqu.New("postgres", db),
+		goquDBWrapper: goqu.New("postgres", db),
 	}
 }
 
 func withTransaction(db *goqu.Database, fn func(tx *goqu.TxDatabase) error) (err error) {
-	// TODO Check refactor chat
 	rawTx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)

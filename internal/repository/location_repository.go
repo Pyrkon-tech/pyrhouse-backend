@@ -29,7 +29,7 @@ func (r *Repository) GetLocationEquipment(locationID string) (*models.LocationEq
 }
 
 func (r *Repository) getLocationAssets(locationID string) ([]models.Asset, error) {
-	query := r.GoguDBWrapper.
+	query := r.goquDBWrapper.
 		From(goqu.T("items").As("i")).
 		Select(
 			"i.id",
@@ -64,7 +64,7 @@ func (r *Repository) getLocationAssets(locationID string) ([]models.Asset, error
 }
 
 func (r *Repository) getLocationStock(locationID string) ([]models.StockItem, error) {
-	query := r.GoguDBWrapper.
+	query := r.goquDBWrapper.
 		From(goqu.T("non_serialized_items").As("i")).
 		Select(
 			"i.id",
