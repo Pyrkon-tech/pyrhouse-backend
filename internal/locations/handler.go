@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"warehouse/internal/repository"
+	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,7 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB, r *repository.Repository) {
 	router.POST("/locations", handler.CreateLocation)
 	router.GET("/locations", handler.GetLocations)
 	router.GET("/locations/:id/assets", handler.GetLocationItems)
+	router.DELETE("/locations/:id", handler.RemoveLocation)
 }
 
 func (h *LocationHandler) GetLocations(c *gin.Context) {
@@ -51,29 +53,25 @@ func (h *LocationHandler) GetLocations(c *gin.Context) {
 
 func (h *LocationHandler) CreateLocation(c *gin.Context) {
 	var location models.Location
-	if err := c.BindJSON(&location); err != nil {
+	var err error
+	if err = c.BindJSON(&location); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		log.Fatal(err)
 		return
 	}
 
-	//should be in repo
-	stmtString := "INSERT INTO locations (name) VALUES ($1)"
-	stmt, err := h.DB.Prepare(stmtString)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer stmt.Close()
-
-	var insertedID int
-	err = h.DB.QueryRow(stmtString+" RETURNING id", location.Name).Scan(&insertedID)
-
-	if err != nil {
-		log.Fatal("Error executing SQL statement: ", err)
+	err = h.Repository.PersistLocation(&location)
+	if _, ok := err.(*custom_error.UniqueViolationError); ok {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Could not insert, location, name not unique", "details": err.Error()})
+	} else if err != nil {
+		log.Println("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
+	}
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
 	}
-	location.ID = insertedID
+
 	c.JSON(http.StatusCreated, location)
 }
 
@@ -81,9 +79,23 @@ func (h *LocationHandler) GetLocationItems(c *gin.Context) {
 	locationEquipment, err := h.Repository.GetLocationEquipment(c.Param("id"))
 
 	if err != nil {
-		log.Fatal("Error executing SQL statement: ", err)
+		log.Println("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
 	}
 
 	c.JSON(http.StatusOK, locationEquipment)
+}
+
+func (h *LocationHandler) RemoveLocation(c *gin.Context) {
+	err := h.Repository.RemoveLocation(c.Param("id"))
+
+	if _, ok := err.(*custom_error.ForeignKeyViolationError); ok {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Could not delete location, location", "details": err.Error()})
+		return
+	} else if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not delete location", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Location deleted successfully"})
 }
