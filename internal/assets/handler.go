@@ -3,6 +3,7 @@ package assets
 import (
 	"net/http"
 	"warehouse/internal/repository"
+	"warehouse/pkg/auditlog"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
@@ -11,10 +12,14 @@ import (
 
 type ItemHandler struct {
 	Repository *repository.Repository
+	AuditLog   *auditlog.Auditlog
 }
 
-func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
-	handler := ItemHandler{Repository: r}
+func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Auditlog) {
+	handler := ItemHandler{
+		Repository: r,
+		AuditLog:   a,
+	}
 
 	router.POST("/assets", handler.CreateItem)
 	router.GET("/assets", handler.GetItems)
@@ -50,6 +55,15 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 			return
 		}
 	}
+	go h.AuditLog.Log(
+		"create",
+		map[string]interface{}{
+			"serial":      asset.Serial,
+			"location_id": asset.Location.ID,
+			"msg":         "Register asset in warehouse",
+		},
+		asset,
+	)
 
 	c.JSON(http.StatusCreated, asset)
 }

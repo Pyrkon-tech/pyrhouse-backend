@@ -25,7 +25,8 @@ paths:
           description: Serves docs in html format
   /health:
     get:
-      summary: basic ping endpoint
+      summary: Health
+      description: Basic health endpoint
       responses:
         "200":
           content:

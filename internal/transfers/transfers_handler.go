@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"warehouse/internal/repository"
 	transfer_request "warehouse/internal/transfers/request"
+	"warehouse/pkg/auditlog"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -14,10 +15,14 @@ import (
 
 type TransferHandler struct {
 	Repository *repository.Repository
+	AuditLog   *auditlog.Auditlog
 }
 
-func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
-	handler := TransferHandler{Repository: r}
+func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Auditlog) {
+	handler := TransferHandler{
+		Repository: r,
+		AuditLog:   a,
+	}
 
 	router.POST("/transfers", handler.CreateTransfer)
 	router.PATCH("/transfers/:id/confirm", handler.UpdateTransfer)

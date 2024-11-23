@@ -14,6 +14,7 @@ import (
 	"warehouse/internal/repository"
 	"warehouse/internal/transfers"
 	"warehouse/internal/users"
+	"warehouse/pkg/auditlog"
 	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"
@@ -52,26 +53,22 @@ func main() {
 	log.Println("Connected to the database successfully!")
 
 	repository := repository.NewRepository(db)
+	auditLog := auditlog.NewAuditLog(repository)
 
-	// Initialize the Gin router
 	router := gin.Default()
-
-	// To refactor
-	assets.RegisterRoutes(router, repository)
-	transfers.RegisterRoutes(router, repository)
+	assets.RegisterRoutes(router, repository, auditLog)
+	transfers.RegisterRoutes(router, repository, auditLog)
 	locations.RegisterRoutes(router, db, repository)
 	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db)
 
 	openapiFilePath := "./docs/index.html"
 	if _, err := os.Stat(openapiFilePath); err == nil {
-		// File exists, register the route
 		router.GET("/openapi.html", func(c *gin.Context) {
 			c.File(openapiFilePath)
 		})
 		log.Println("Route docs/index.html registered successfully.")
 	} else {
-		// File does not exist, log a warning
 		log.Printf("Warning: %s not found. Route /openapi.html will not be registered.\n", openapiFilePath)
 	}
 
@@ -80,7 +77,6 @@ func main() {
 		log.Println("Called healthcheck")
 	})
 
-	// Start the HTTP server
 	if err := router.Run(os.Getenv("APP_HOST")); err != nil {
 		panic(err)
 	}
