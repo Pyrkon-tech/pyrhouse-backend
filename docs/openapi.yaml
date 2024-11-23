@@ -10,40 +10,63 @@ info:
     
 security:
   - bearerAuth: [] # use the same name as above    
-tags:
-  - name: user
-    description: Operations about user
-    externalDocs:
-      description: Find out more about...
-      url: http://swagger.io
+# tags:
+#   - name: users
+#     description: Operations about user
+#     externalDocs:
+#       description: Find out more about...
+#       url: http://swagger.io
 paths:
-  /auth:
-      post:
-        tags:
-          - auth
-        summary: Authorize & generate jwt
-        description: ""
-        operationId: auth
-        requestBody:
+  /openapi.html:
+    get:
+      summary: Get docs
+      responses:
+        "200":
+          description: Serves docs in html format
+  /health:
+    get:
+      summary: basic ping endpoint
+      responses:
+        "200":
           content:
             application/json:
               schema:
                   type: object
                   properties:
-                    username:
+                    status:
                       type: string
-                    password:
-                      type: string
-        responses:
-          "201":
-            description: created
-            content:
-              application/json:
-                schema:
-                  type: object
-                  properties:
-                    token:
-                      type: string
+                      example: ok
+
+          description: Serves docs in html format
+  /auth:
+    post:
+      tags:
+        - auth
+      summary: Authorize & generate jwt
+      description: ""
+      operationId: auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  example: admin
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
   /assets:
     post:
       tags:
@@ -85,15 +108,10 @@ paths:
         "200":
           description: successful operation
           content:
-            application/xml:
-              schema:
-                type: array
-                assets:
-                  $ref: "#/components/schemas/Item"
             application/json:
               schema:
                 type: array
-                assets:
+                items:
                   $ref: "#/components/schemas/Item"
         "400":
           description: Invalid status value 
@@ -122,9 +140,10 @@ paths:
           description: Invalid payload
         "409":
           description: Name already taken
-  # TODO 
   /locations/{locationID}/assets: 
     get:
+      tags:
+        - location
       summary: Get list of assets and stock items in given location to-refactor path
       responses:
         "200":
@@ -147,6 +166,8 @@ paths:
           $ref: "#/components/responses/DefaultError"
   /locations/{locationID}:
     delete:
+      tags:
+        - location
       summary: Remove location by ID
       parameters:
         - in: path
@@ -180,6 +201,149 @@ paths:
       requestBody:
         $ref: "#/components/requestBodies/TransferRequest"
         required: true
+  /transfers/{transferId}/confirm:
+    patch:
+      tags:
+        - transfer
+      description: Update transfer status
+      requestBody:
+        content:
+          application/json:
+            schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - completed
+                      - confirmed
+                      - in_transit
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                # TODO unify with STOCKs
+                  transfer_id:
+                    type: integer
+                    example: 3
+                  status:
+                    type: string
+                    example: completed
+                  message:
+                    type: string
+                    example: happy message
+  /transfers/{transferId}/assets/{itemId}/restore-to-location:
+    patch:
+      tags:
+        - transfer
+      description: Update transfer status
+      requestBody:
+        content:
+          application/json:
+            schema:
+                type: object
+                properties:
+                  location_id:
+                    type: integer
+                    example: 1
+                    description: id of location where to restore item
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                # TODO unify with STOCKs
+                  transfer_id:
+                    type: integer
+                    example: 3
+                    description: Location deleted successfully      
+        "400":
+          $ref: "#/components/responses/DefaultError"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+  /transfers/{transferId}/categories/{categoryId}/restore-to-location:
+    patch:
+      tags:
+        - transfer
+      description: Update transfer status
+      requestBody:
+        content:
+          application/json:
+            schema:
+                type: object
+                properties:
+                  location_id:
+                    type: integer
+                    example: 1
+                    description: id of location where to restore item
+                  quantity:
+                    type: integer
+                    example: 32
+                    description: what amount should be moved from current location
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Stock item removed from transfer successfully      
+        "400":
+          $ref: "#/components/responses/DefaultError"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+  /items/categories:
+    post:
+      tags:
+        - item category
+      summary: Register user
+      description: This can only be done by the logged in user.
+      operationId: createUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  example: laptop       
+                label:
+                  type: string
+                  example: Laptop
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemCategory"
+        "400":
+          $ref: "#/components/responses/DefaultError"        
+    get:
+      tags:
+        - item category
+      summary: Returns collection of users
+      description: ...
+      responses:
+        "200":
+          description: List all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                $ref: "#/components/schemas/ItemCategory"
   /users:
     post:
       tags:
@@ -328,8 +492,10 @@ components:
       properties:
         id:
           type: integer
+          example: 321
         serial:
           type: string
+          example: XYZ321
         category:
           $ref: "#/components/schemas/ItemCategory"
     Stock:
