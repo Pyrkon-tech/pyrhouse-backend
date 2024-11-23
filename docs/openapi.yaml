@@ -116,6 +116,36 @@ paths:
                   $ref: "#/components/schemas/Item"
         "400":
           description: Invalid status value 
+  /stocks:
+    post:
+      tags:
+        - stock
+      summary: Register stock item
+      description: Create stock item
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                category_id:
+                  type: integer
+                  example: 4
+                  required: true
+                  description: category of stock
+                quantity:
+                  type: integer
+                  example: 99
+                  required: true
+      responses:
+        "201":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockItem"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+  
   /locations:
     post:
       tags:
@@ -424,7 +454,7 @@ components:
               unserialized_item_collection:
                 type: array
                 items:
-                  $ref: "#/components/schemas/UnserializedItem"
+                  $ref: "#/components/schemas/StockItem"
 
     UserCreateRequest:
       content:
@@ -542,9 +572,11 @@ components:
 #           type: string
         role:
           type: string
-    UnserializedItem:
+    StockItem:
       type: object
       properties:
+        id:
+          type: integer
         category_id:
           type: integer
           example: 4

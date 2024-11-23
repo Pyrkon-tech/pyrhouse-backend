@@ -2,11 +2,37 @@ package repository
 
 import (
 	"fmt"
+	stock_request "warehouse/internal/stocks/request"
 	transfer_request "warehouse/internal/transfers/request"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 )
+
+func (r *Repository) PersistStockItem(stockRequest stock_request.StockItemRequest) (*models.StockItem, error) {
+	query := r.goquDBWrapper.Insert("non_serialized_items").
+		Rows(goqu.Record{
+			"quantity":         stockRequest.Quantity,
+			"location_id":      stockRequest.LocationID,
+			"item_category_id": stockRequest.CategoryID,
+		}).
+		Returning("id")
+	stockItem := models.StockItem{
+		Quantity: stockRequest.Quantity,
+		Category: models.ItemCategory{
+			ID: stockRequest.CategoryID,
+		},
+		Location: models.Location{
+			ID: stockRequest.LocationID,
+		},
+	}
+
+	if _, err := query.Executor().ScanVal(&stockItem.ID); err != nil {
+		return nil, fmt.Errorf("failed to insert stock item record: %w", err)
+	}
+
+	return &stockItem, nil
+}
 
 func (r *Repository) moveNonSerializedItems(tx *goqu.TxDatabase, unserializedItems []models.UnserializedItemRequest, toLocationID int, fromLocationID int) error {
 	for _, unserializedItem := range unserializedItems {

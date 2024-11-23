@@ -8,6 +8,7 @@ import (
 
 	"warehouse/cmd"
 	"warehouse/internal/assets"
+	"warehouse/internal/stocks"
 
 	"warehouse/internal/database"
 	"warehouse/internal/locations"
@@ -57,6 +58,7 @@ func main() {
 
 	router := gin.Default()
 	assets.RegisterRoutes(router, repository, auditLog)
+	stocks.RegisterRoutes(router, repository, auditLog)
 	transfers.RegisterRoutes(router, repository, auditLog)
 	locations.RegisterRoutes(router, db, repository)
 	security.RegisterRoutes(router, db)
