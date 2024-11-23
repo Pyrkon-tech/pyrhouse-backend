@@ -18,7 +18,7 @@ type LocationEquipment struct {
 func (r *Repository) GetLocationEquipment(locationID string) (*models.LocationEquipment, error) {
 	var locationEquipment models.LocationEquipment
 	var err error
-
+	// TODO error handling
 	locationEquipment.Assets, err = r.getLocationAssets(locationID)
 	if err != nil {
 		return nil, err
