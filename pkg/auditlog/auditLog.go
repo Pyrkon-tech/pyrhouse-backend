@@ -2,7 +2,7 @@ package auditlog
 
 import (
 	"log"
-	"warehouse/internal/repository"
+	"warehouse/internal/repository" //TODO do something with that
 	"warehouse/pkg/models"
 )
 

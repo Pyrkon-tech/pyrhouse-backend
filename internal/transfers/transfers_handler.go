@@ -24,10 +24,29 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Au
 		AuditLog:   a,
 	}
 
+	router.GET("/transfers/:id", handler.GetTransfer)
 	router.POST("/transfers", handler.CreateTransfer)
 	router.PATCH("/transfers/:id/confirm", handler.UpdateTransfer)
 	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", handler.RemoveAssetFromTransfer)
 	router.PATCH("/transfers/:id/categories/:category_id/restore-to-location", handler.RemoveStockItemFromTransfer)
+}
+
+func (h *TransferHandler) GetTransfer(c *gin.Context) {
+	transferID := c.Param("id")
+
+	if transferID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Transfer ID is required"})
+		return
+	}
+
+	transfer, err := h.Repository.GetTransfer(transferID)
+	if err != nil {
+		log.Println("Error executing SQL statement: ", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to get transfer", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, transfer)
 }
 
 func (h *TransferHandler) CreateTransfer(c *gin.Context) {
@@ -69,7 +88,43 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 	log.Println("transfer ID: ", transferID)
 	transferRequest.TransferID = transferID
 
+	go h.createTransferAuditLogEntry("in_transfer", transferRequest)
+
 	c.JSON(http.StatusCreated, transferRequest)
+}
+
+func (h *TransferHandler) createTransferAuditLogEntry(action string, req models.TransferRequest) {
+	// TODO handle Transfer model itself
+
+	for _, assetID := range req.SerialziedItemCollection {
+		asset := models.Asset{ID: assetID}
+		go h.AuditLog.Log(
+			action,
+			map[string]interface{}{
+				"tranfer_id":       req.TransferID,
+				"from_location_id": req.FromLocationID,
+				"to_location_id":   req.LocationID,
+				"msg":              "Item moved in transfer",
+			},
+			&asset,
+		)
+	}
+
+	// TODO BUG -> need proper transfer object FFS
+	for _, s := range req.UnserializedItemCollection {
+		stockItem := models.StockItem{Quantity: s.Quantity}
+		stockItem.Category.ID = s.ItemCategoryID
+		go h.AuditLog.Log(
+			action,
+			map[string]interface{}{
+				"tranfer_id":       req.TransferID,
+				"from_location_id": req.FromLocationID,
+				"to_location_id":   req.LocationID,
+				"msg":              "Item moved in transfer",
+			},
+			&stockItem,
+		)
+	}
 }
 
 func (h *TransferHandler) UpdateTransfer(c *gin.Context) {

@@ -46,7 +46,7 @@ func (h *StockHandler) CreateStock(c *gin.Context) {
 		map[string]interface{}{
 			"quantity":    stockItem.Quantity,
 			"location_id": stockItem.Location.ID,
-			"msg":         "Register asset in warehouse",
+			"msg":         "Register stock item in warehouse",
 		},
 		stockItem,
 	)

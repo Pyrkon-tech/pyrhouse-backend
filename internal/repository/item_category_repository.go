@@ -38,7 +38,7 @@ func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
 }
 
 func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*models.ItemCategory, error) {
-	query := r.goquDBWrapper.Insert("items").
+	query := r.goquDBWrapper.Insert("item_category").
 		Rows(goqu.Record{
 			"item_category": itemCategory.Type,
 			"label":         itemCategory.Label,

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"time"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
@@ -69,6 +70,62 @@ func (r *Repository) PerformTransfer(req models.TransferRequest, transitStatus s
 	}
 
 	return transferID, nil
+}
+
+type FlatTransfer struct {
+	ID               int       `db:"transfer_id"`
+	FromLocationID   int       `db:"from_location_id"`
+	FromLocationName string    `db:"from_location_name"`
+	ToLocationID     int       `db:"to_location_id"`
+	ToLocationName   string    `db:"to_location_name"`
+	TransferDate     time.Time `db:"transfer_date"`
+	Status           string    `db:"transfer_status"`
+}
+
+func (r *Repository) GetTransfer(transferID string) (*models.Transfer, error) {
+	var flatTransfer FlatTransfer
+
+	query := r.goquDBWrapper.
+		Select(
+			goqu.I("t.id").As("transfer_id"),
+			goqu.I("l1.id").As("from_location_id"),
+			goqu.I("l1.name").As("from_location_name"),
+			goqu.I("l2.id").As("to_location_id"),
+			goqu.I("l2.name").As("to_location_name"),
+			goqu.I("t.status").As("transfer_status"),
+			goqu.I("t.transfer_date").As("transfer_date"),
+			//TODO goqu.I("t.receiver").As("transfer_receiver"),
+		).
+		From(goqu.T("transfers").As("t")).
+		LeftJoin(
+			goqu.T("locations").As("l1"),
+			goqu.On(goqu.Ex{"t.from_location_id": goqu.I("l1.id")}),
+		).
+		LeftJoin(
+			goqu.T("locations").As("l2"),
+			goqu.On(goqu.Ex{"t.to_location_id": goqu.I("l2.id")}),
+		).
+		Where(goqu.Ex{"t.id": transferID})
+	_, err := query.Executor().ScanStruct(&flatTransfer)
+	if err != nil {
+		return nil, fmt.Errorf("error executing SQL statement: %w", err)
+	}
+
+	transfer := models.Transfer{
+		ID: flatTransfer.ID,
+		FromLocation: models.Location{
+			ID:   flatTransfer.FromLocationID,
+			Name: flatTransfer.FromLocationName,
+		},
+		ToLocation: models.Location{
+			ID:   flatTransfer.ToLocationID,
+			Name: flatTransfer.ToLocationName,
+		},
+		TransferDate: flatTransfer.TransferDate,
+		Status:       flatTransfer.Status,
+	}
+
+	return &transfer, nil
 }
 
 func (r *Repository) ConfirmTransfer(transferID string, status string) error {
