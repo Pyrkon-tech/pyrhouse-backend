@@ -32,9 +32,9 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Au
 }
 
 func (h *TransferHandler) GetTransfer(c *gin.Context) {
-	transferID := c.Param("id")
+	transferID, err := strconv.Atoi(c.Param("id"))
 
-	if transferID == "" {
+	if err != nil || transferID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Transfer ID is required"})
 		return
 	}
@@ -85,44 +85,54 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to transfer Serialized Items", "path": "serialized_item_collection"})
 		return
 	}
+	transfer, _ := h.Repository.GetTransfer(transferID)
 	log.Println("transfer ID: ", transferID)
-	transferRequest.TransferID = transferID
 
-	go h.createTransferAuditLogEntry("in_transfer", transferRequest)
+	go h.createTransferAuditLogEntry("in_transfer", transfer)
 
 	c.JSON(http.StatusCreated, transferRequest)
 }
 
-func (h *TransferHandler) createTransferAuditLogEntry(action string, req models.TransferRequest) {
+func (h *TransferHandler) createTransferAuditLogEntry(action string, ts *models.Transfer) {
 	// TODO handle Transfer model itself
+	go h.AuditLog.Log(
+		action,
+		map[string]interface{}{
+			"tranfer_id":       ts.ID,
+			"from_location_id": ts.FromLocation.ID,
+			"to_location_id":   ts.ToLocation.ID,
+			"msg":              "Transfer register",
+		},
+		ts,
+	)
 
-	for _, assetID := range req.SerialziedItemCollection {
-		asset := models.Asset{ID: assetID}
+	for _, asset := range ts.AssetsCollection {
+		// asset := models.Asset{ID: assetID}
 		go h.AuditLog.Log(
 			action,
 			map[string]interface{}{
-				"tranfer_id":       req.TransferID,
-				"from_location_id": req.FromLocationID,
-				"to_location_id":   req.LocationID,
-				"msg":              "Item moved in transfer",
+				"tranfer_id":       ts.ID,
+				"from_location_id": ts.FromLocation.ID,
+				"to_location_id":   ts.ToLocation.ID,
+				"msg":              "Asset moved in transfer",
 			},
 			&asset,
 		)
 	}
 
 	// TODO BUG -> need proper transfer object FFS
-	for _, s := range req.UnserializedItemCollection {
-		stockItem := models.StockItem{Quantity: s.Quantity}
-		stockItem.Category.ID = s.ItemCategoryID
+	for _, s := range ts.StockItemsCollection {
+		// stockItem := models.StockItem{Quantity: s.Quantity}
+		// stockItem.Category.ID = s.Category.ID
 		go h.AuditLog.Log(
 			action,
 			map[string]interface{}{
-				"tranfer_id":       req.TransferID,
-				"from_location_id": req.FromLocationID,
-				"to_location_id":   req.LocationID,
-				"msg":              "Item moved in transfer",
+				"tranfer_id":       ts.ID,
+				"from_location_id": ts.FromLocation.ID,
+				"to_location_id":   ts.ToLocation.ID,
+				"msg":              "Stock moved in transfer",
 			},
-			&stockItem,
+			s,
 		)
 	}
 }

@@ -1,6 +1,8 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 type Transfer struct {
 	ID                   int         `json:"id"`
@@ -15,6 +17,6 @@ type Transfer struct {
 func (t *Transfer) CreateLogView() AuditLog {
 	return AuditLog{
 		ResourceID:   t.ID,
-		ResourceType: "stock",
+		ResourceType: "transfer",
 	}
 }

@@ -121,3 +121,26 @@ func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locatio
 
 	return nil
 }
+
+func (r *Repository) fetchTransferAssets(transferID int) (*[]models.Asset, error) {
+	var assets []models.Asset
+
+	query := r.goquDBWrapper.
+		Select(
+			goqu.I("a.id").As("asset_id"),
+			goqu.I("a.item_serial").As("item_serial"),
+		).
+		From(goqu.T("serialized_transfers").As("ta")).
+		LeftJoin(
+			goqu.T("items").As("a"),
+			goqu.On(goqu.Ex{"ta.item_id": goqu.I("a.id")}),
+		).
+		Where(goqu.Ex{"ta.transfer_id": transferID})
+	err := query.Executor().ScanStructs(&assets)
+
+	if err != nil {
+		return nil, fmt.Errorf("error executing SQL statement for assets: %w", err)
+	}
+
+	return &assets, nil
+}

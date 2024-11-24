@@ -34,6 +34,35 @@ func (r *Repository) PersistStockItem(stockRequest stock_request.StockItemReques
 	return &stockItem, nil
 }
 
+func (r *Repository) fetchTransferStock(transferID int) (*[]models.StockItem, error) {
+
+	var flatStocks []models.StockItemFlat
+	// Query to fetch flat stock data
+	query := r.goquDBWrapper.
+		Select(
+			goqu.I("nst.item_category_id").As("category_id"),
+			goqu.I("nst.quantity").As("quantity"),
+		).
+		From(goqu.T("non_serialized_transfers").As("nst")).
+		Where(goqu.Ex{"nst.transfer_id": transferID})
+	err := query.Executor().ScanStructs(&flatStocks)
+	if err != nil {
+		return nil, fmt.Errorf("error executing SQL statement for stock items: %w", err)
+	}
+
+	var stocks []models.StockItem
+	for _, flatStock := range flatStocks {
+		stocks = append(stocks, models.StockItem{
+			Category: models.ItemCategory{
+				ID: flatStock.CategoryID,
+			},
+			Quantity: flatStock.Quantity,
+		})
+	}
+
+	return &stocks, nil
+}
+
 func (r *Repository) moveNonSerializedItems(tx *goqu.TxDatabase, unserializedItems []models.UnserializedItemRequest, toLocationID int, fromLocationID int) error {
 	for _, unserializedItem := range unserializedItems {
 		query := tx.Insert("non_serialized_items").

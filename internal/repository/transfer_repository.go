@@ -82,7 +82,7 @@ type FlatTransfer struct {
 	Status           string    `db:"transfer_status"`
 }
 
-func (r *Repository) GetTransfer(transferID string) (*models.Transfer, error) {
+func (r *Repository) GetTransfer(transferID int) (*models.Transfer, error) {
 	var flatTransfer FlatTransfer
 
 	query := r.goquDBWrapper.
@@ -111,6 +111,15 @@ func (r *Repository) GetTransfer(transferID string) (*models.Transfer, error) {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}
 
+	assets, err := r.fetchTransferAssets(transferID)
+	if err != nil {
+		return nil, err
+	}
+	stockItems, err := r.fetchTransferStock(transferID)
+	if err != nil {
+		return nil, err
+	}
+
 	transfer := models.Transfer{
 		ID: flatTransfer.ID,
 		FromLocation: models.Location{
@@ -121,8 +130,10 @@ func (r *Repository) GetTransfer(transferID string) (*models.Transfer, error) {
 			ID:   flatTransfer.ToLocationID,
 			Name: flatTransfer.ToLocationName,
 		},
-		TransferDate: flatTransfer.TransferDate,
-		Status:       flatTransfer.Status,
+		TransferDate:         flatTransfer.TransferDate,
+		Status:               flatTransfer.Status,
+		AssetsCollection:     *assets,
+		StockItemsCollection: *stockItems,
 	}
 
 	return &transfer, nil
