@@ -15,6 +15,7 @@ import (
 	"warehouse/internal/locations"
 	"warehouse/internal/repository"
 	AuditLogRepository "warehouse/internal/repository/auditlog"
+	UserRepository "warehouse/internal/repository/user"
 	"warehouse/internal/transfers"
 	"warehouse/internal/users"
 	"warehouse/pkg/auditlog"
@@ -58,8 +59,8 @@ func main() {
 
 	repository := repository.NewRepository(db)
 	auditLogRepository := AuditLogRepository.NewRepository(repository)
+	userRepository := UserRepository.NewRepository(repository)
 	auditLog := auditlog.NewAuditLog(auditLogRepository)
-
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5000"}, // Add your domain and localhost
@@ -75,7 +76,7 @@ func main() {
 	transfers.RegisterRoutes(router, repository, auditLog)
 	locations.RegisterRoutes(router, db, repository)
 	security.RegisterRoutes(router, db)
-	users.RegisterRoutes(router, db)
+	users.RegisterRoutes(router, db, userRepository)
 
 	openapiFilePath := "./docs/index.html"
 	if _, err := os.Stat(openapiFilePath); err == nil {

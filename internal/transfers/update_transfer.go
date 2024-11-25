@@ -32,7 +32,7 @@ func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
 	case "completed":
 		err := h.confirmTransfer(transferID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to update transfer status", "details": err.Error()})
 			return
 		}
 

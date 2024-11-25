@@ -257,7 +257,6 @@ paths:
               schema:
                 type: object
                 properties:
-                # TODO unify with STOCKs
                   transfer_id:
                     type: integer
                     example: 3
@@ -267,6 +266,10 @@ paths:
                   message:
                     type: string
                     example: happy message
+        "500":
+          description: Backend unable to update transfer status
+          $ref: "#/components/responses/DefaultError"
+
   /transfers/{transferId}/assets/{itemId}/restore-to-location:
     patch:
       tags:

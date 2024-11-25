@@ -99,7 +99,6 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 }
 
 func (h *TransferHandler) createTransferAuditLogEntry(action string, ts *models.Transfer) {
-	// TODO handle Transfer model itself
 	go h.AuditLog.Log(
 		action,
 		map[string]interface{}{
@@ -112,7 +111,6 @@ func (h *TransferHandler) createTransferAuditLogEntry(action string, ts *models.
 	)
 
 	for _, asset := range ts.AssetsCollection {
-		// asset := models.Asset{ID: assetID}
 		go h.AuditLog.Log(
 			action,
 			map[string]interface{}{
@@ -125,9 +123,7 @@ func (h *TransferHandler) createTransferAuditLogEntry(action string, ts *models.
 		)
 	}
 
-	// TODO BUG -> need proper transfer object FFS
 	for _, s := range ts.StockItemsCollection {
-		// stockItem := models.StockItem{Quantity: s.Quantity}
 		// stockItem.Category.ID = s.Category.ID
 		go h.AuditLog.Log(
 			action,
@@ -135,6 +131,7 @@ func (h *TransferHandler) createTransferAuditLogEntry(action string, ts *models.
 				"tranfer_id":       ts.ID,
 				"from_location_id": ts.FromLocation.ID,
 				"to_location_id":   ts.ToLocation.ID,
+				"quantity":         s.Quantity,
 				"msg":              "Stock moved in transfer",
 			},
 			s,
