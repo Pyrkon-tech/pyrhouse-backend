@@ -42,7 +42,6 @@ func (h *ItemHandler) CreateItemCategory(c *gin.Context) {
 func (h *ItemHandler) RemoveItemCategory(c *gin.Context) {
 	CategoryID := c.Param("id")
 
-	// Validate that id is an integer
 	if _, err := strconv.Atoi(CategoryID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid id parameter, must be an integer"})
 		return

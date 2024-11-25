@@ -15,6 +15,7 @@ func (a StockItem) CreateLogView() AuditLog {
 }
 
 type StockItemFlat struct {
+	ID         int `db:"stock_id"`
 	CategoryID int `db:"category_id"`
 	Quantity   int `db:"quantity"`
 }

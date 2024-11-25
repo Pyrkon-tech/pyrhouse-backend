@@ -38,7 +38,7 @@ func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
 }
 
 func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*models.ItemCategory, error) {
-	query := r.goquDBWrapper.Insert("item_category").
+	query := r.GoquDBWrapper.Insert("item_category").
 		Rows(goqu.Record{
 			"item_category": itemCategory.Type,
 			"label":         itemCategory.Label,
@@ -58,7 +58,7 @@ func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*mod
 }
 
 func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
-	result, err := r.goquDBWrapper.Delete("item_category").Where(goqu.Ex{"id": categoryID}).Executor().Exec()
+	result, err := r.GoquDBWrapper.Delete("item_category").Where(goqu.Ex{"id": categoryID}).Executor().Exec()
 
 	if err != nil {
 		log.Fatal("failed to delete asset category: ", err)

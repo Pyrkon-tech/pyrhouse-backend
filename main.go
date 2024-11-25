@@ -14,6 +14,7 @@ import (
 	"warehouse/internal/database"
 	"warehouse/internal/locations"
 	"warehouse/internal/repository"
+	AuditLogRepository "warehouse/internal/repository/auditlog"
 	"warehouse/internal/transfers"
 	"warehouse/internal/users"
 	"warehouse/pkg/auditlog"
@@ -56,7 +57,8 @@ func main() {
 	log.Println("Connected to the database successfully!")
 
 	repository := repository.NewRepository(db)
-	auditLog := auditlog.NewAuditLog(repository)
+	auditLogRepository := AuditLogRepository.NewRepository(repository)
+	auditLog := auditlog.NewAuditLog(auditLogRepository)
 
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{

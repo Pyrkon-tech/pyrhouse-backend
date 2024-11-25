@@ -18,7 +18,7 @@ func (r *Repository) CanTransferNonSerializedItems(assets []models.UnserializedI
 		))
 	}
 
-	sql, args, err := r.goquDBWrapper.From("non_serialized_items").
+	sql, args, err := r.GoquDBWrapper.From("non_serialized_items").
 		Select("item_category_id").
 		Where(goqu.Or(conditions...)).
 		ToSQL()
@@ -48,7 +48,7 @@ func (r *Repository) CanTransferNonSerializedItems(assets []models.UnserializedI
 func (r *Repository) PerformTransfer(req models.TransferRequest, transitStatus string) (int, error) {
 	var transferID int
 
-	err := withTransaction(r.goquDBWrapper, func(tx *goqu.TxDatabase) error {
+	err := WithTransaction(r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		var err error
 		if transferID, err = r.insertTransferRecord(tx, req); err != nil {
 			return fmt.Errorf("failed to insert transfer record: %w", err)
@@ -85,7 +85,7 @@ type FlatTransfer struct {
 func (r *Repository) GetTransfer(transferID int) (*models.Transfer, error) {
 	var flatTransfer FlatTransfer
 
-	query := r.goquDBWrapper.
+	query := r.GoquDBWrapper.
 		Select(
 			goqu.I("t.id").As("transfer_id"),
 			goqu.I("l1.id").As("from_location_id"),
@@ -111,11 +111,11 @@ func (r *Repository) GetTransfer(transferID int) (*models.Transfer, error) {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}
 
-	assets, err := r.fetchTransferAssets(transferID)
+	assets, err := r.GetTransferAssets(transferID)
 	if err != nil {
 		return nil, err
 	}
-	stockItems, err := r.fetchTransferStock(transferID)
+	stockItems, err := r.GetStockItemsByTransfer(transferID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,9 +139,9 @@ func (r *Repository) GetTransfer(transferID int) (*models.Transfer, error) {
 	return &transfer, nil
 }
 
-func (r *Repository) ConfirmTransfer(transferID string, status string) error {
+func (r *Repository) ConfirmTransfer(transferID int, status string) error {
 	// TODO Transaction + remove transit status (do we really need this status?)
-	query := r.goquDBWrapper.
+	query := r.GoquDBWrapper.
 		Update("transfers").
 		Set(goqu.Record{
 			"status": status,

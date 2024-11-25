@@ -80,7 +80,7 @@ func (h *LocationHandler) GetLocationItems(c *gin.Context) {
 
 	if err != nil {
 		log.Println("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location", "details": err.Error()})
 	}
 
 	c.JSON(http.StatusOK, locationEquipment)

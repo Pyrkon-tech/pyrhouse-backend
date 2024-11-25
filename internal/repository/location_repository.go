@@ -32,7 +32,7 @@ func (r *Repository) GetLocationEquipment(locationID string) (*models.LocationEq
 }
 
 func (r *Repository) PersistLocation(location *models.Location) error {
-	query := r.goquDBWrapper.Insert("locations").
+	query := r.GoquDBWrapper.Insert("locations").
 		Rows(goqu.Record{
 			"name": location.Name,
 		}).
@@ -52,7 +52,7 @@ func (r *Repository) PersistLocation(location *models.Location) error {
 }
 
 func (r *Repository) RemoveLocation(locationID string) error {
-	result, err := r.goquDBWrapper.Delete("locations").Where(goqu.Ex{"id": locationID}).Executor().Exec()
+	result, err := r.GoquDBWrapper.Delete("locations").Where(goqu.Ex{"id": locationID}).Executor().Exec()
 
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
@@ -75,11 +75,12 @@ func (r *Repository) RemoveLocation(locationID string) error {
 }
 
 func (r *Repository) getLocationAssets(locationID string) ([]models.Asset, error) {
-	query := r.goquDBWrapper.
+	query := r.GoquDBWrapper.
 		From(goqu.T("items").As("i")).
 		Select(
 			"i.id",
 			"i.item_serial",
+			"i.status",
 			"i.item_category_id",
 			"c.item_category",
 			"c.label",
@@ -97,6 +98,7 @@ func (r *Repository) getLocationAssets(locationID string) ([]models.Asset, error
 		if err := rows.Scan(
 			&asset.ID,
 			&asset.Serial,
+			&asset.Status,
 			&asset.Category.ID,
 			&asset.Category.Type,
 			&asset.Category.Label,
@@ -110,7 +112,7 @@ func (r *Repository) getLocationAssets(locationID string) ([]models.Asset, error
 }
 
 func (r *Repository) getLocationStock(locationID string) ([]models.StockItem, error) {
-	query := r.goquDBWrapper.
+	query := r.GoquDBWrapper.
 		From(goqu.T("non_serialized_items").As("i")).
 		Select(
 			"i.id",

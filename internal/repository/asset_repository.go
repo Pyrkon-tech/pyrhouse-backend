@@ -23,7 +23,7 @@ func (r *Repository) HasRelatedItems(categoryID string) bool {
 }
 
 func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool, error) {
-	sql, args, err := r.goquDBWrapper.Select(goqu.COUNT("id")).From("items").Where(goqu.Ex{
+	sql, args, err := r.GoquDBWrapper.Select(goqu.COUNT("id")).From("items").Where(goqu.Ex{
 		"location_id": fromLocationId,
 		"id":          itemIDs,
 	}).ToSQL()
@@ -42,7 +42,7 @@ func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool
 }
 
 func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset, error) {
-	query := r.goquDBWrapper.Insert("items").
+	query := r.GoquDBWrapper.Insert("items").
 		Rows(goqu.Record{
 			"item_serial":      itemRequest.Serial,
 			"location_id":      itemRequest.LocationId,
@@ -72,7 +72,7 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset,
 }
 
 func (r *Repository) UpdateItemStatus(itemIDs []int, status string) error {
-	query := r.goquDBWrapper.
+	query := r.GoquDBWrapper.
 		Update("items").
 		Set(goqu.Record{
 			"status": status,
@@ -88,7 +88,7 @@ func (r *Repository) UpdateItemStatus(itemIDs []int, status string) error {
 }
 
 func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
-	err := withTransaction(r.goquDBWrapper, func(tx *goqu.TxDatabase) error {
+	err := WithTransaction(r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		var err error
 		_, err = tx.Delete("serialized_transfers").
 			Where(goqu.Ex{
@@ -122,10 +122,10 @@ func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locatio
 	return nil
 }
 
-func (r *Repository) fetchTransferAssets(transferID int) (*[]models.Asset, error) {
+func (r *Repository) GetTransferAssets(transferID int) (*[]models.Asset, error) {
 	var assets []models.Asset
 
-	query := r.goquDBWrapper.
+	query := r.GoquDBWrapper.
 		Select(
 			goqu.I("a.id").As("asset_id"),
 			goqu.I("a.item_serial").As("item_serial"),

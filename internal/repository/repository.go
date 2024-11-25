@@ -10,18 +10,19 @@ import (
 // TODO lower case, no need for public
 type Repository struct {
 	DB            *sql.DB
-	goquDBWrapper *goqu.Database
+	GoquDBWrapper *goqu.Database
 }
 
 // TODO remove db on migration period
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{
 		DB:            db,
-		goquDBWrapper: goqu.New("postgres", db),
+		GoquDBWrapper: goqu.New("postgres", db),
 	}
 }
 
-func withTransaction(db *goqu.Database, fn func(tx *goqu.TxDatabase) error) (err error) {
+// TODO ogarnij transakcje to allow public
+func WithTransaction(db *goqu.Database, fn func(tx *goqu.TxDatabase) error) (err error) {
 	rawTx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)

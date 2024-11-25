@@ -10,7 +10,7 @@ import (
 )
 
 func (r *Repository) PersistStockItem(stockRequest stock_request.StockItemRequest) (*models.StockItem, error) {
-	query := r.goquDBWrapper.Insert("non_serialized_items").
+	query := r.GoquDBWrapper.Insert("non_serialized_items").
 		Rows(goqu.Record{
 			"quantity":         stockRequest.Quantity,
 			"location_id":      stockRequest.LocationID,
@@ -34,16 +34,29 @@ func (r *Repository) PersistStockItem(stockRequest stock_request.StockItemReques
 	return &stockItem, nil
 }
 
-func (r *Repository) fetchTransferStock(transferID int) (*[]models.StockItem, error) {
-
+func (r *Repository) GetStockItemsByTransfer(transferID int) (*[]models.StockItem, error) {
 	var flatStocks []models.StockItemFlat
 	// Query to fetch flat stock data
-	query := r.goquDBWrapper.
+	query := r.GoquDBWrapper.
 		Select(
+			goqu.I("s.id").As("stock_id"),
 			goqu.I("nst.item_category_id").As("category_id"),
 			goqu.I("nst.quantity").As("quantity"),
 		).
 		From(goqu.T("non_serialized_transfers").As("nst")).
+		LeftJoin(
+			goqu.T("transfers").As("t"),
+			goqu.On(goqu.Ex{
+				"t.id": transferID, // Directly use the value
+			}),
+		).
+		LeftJoin(
+			goqu.T("non_serialized_items").As("s"),
+			goqu.On(goqu.Ex{
+				"s.location_id":      goqu.I("t.to_location_id"),
+				"s.item_category_id": goqu.I("nst.item_category_id"),
+			}),
+		).
 		Where(goqu.Ex{"nst.transfer_id": transferID})
 	err := query.Executor().ScanStructs(&flatStocks)
 	if err != nil {
@@ -53,6 +66,7 @@ func (r *Repository) fetchTransferStock(transferID int) (*[]models.StockItem, er
 	var stocks []models.StockItem
 	for _, flatStock := range flatStocks {
 		stocks = append(stocks, models.StockItem{
+			ID: flatStock.ID,
 			Category: models.ItemCategory{
 				ID: flatStock.CategoryID,
 			},
@@ -114,12 +128,12 @@ func (r *Repository) moveNonSerializedItems(tx *goqu.TxDatabase, unserializedIte
 }
 
 func (r *Repository) RemoveStockItemFromTransfer(transferReq transfer_request.RemoveStockItemFromTransferRequest) error {
-	return withTransaction(r.goquDBWrapper, func(tx *goqu.TxDatabase) error {
+	return WithTransaction(r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		if err := decreaseStockInTransfer(tx, transferReq); err != nil {
 			return err
 		}
 
-		if err := removeZeroQuantityStock(r.goquDBWrapper, transferReq); err != nil {
+		if err := removeZeroQuantityStock(r.GoquDBWrapper, transferReq); err != nil {
 			return err
 		}
 

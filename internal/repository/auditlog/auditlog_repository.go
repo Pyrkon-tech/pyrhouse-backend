@@ -1,14 +1,19 @@
-package repository
+package auditlog
 
 import (
 	"encoding/json"
 	"fmt"
+	"warehouse/internal/repository"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 )
 
-func (r *Repository) PersistLog(auditlog models.AuditLog, auditLogData interface{}) error {
+type AuditLogRepository struct {
+	repository *repository.Repository
+}
+
+func (r *AuditLogRepository) PersistLog(auditlog models.AuditLog, auditLogData interface{}) error {
 	// all what is required resourceID int, resourceType, action string, data interface{}, userID *int
 
 	dataJSON, err := json.Marshal(auditLogData) // Convert data to JSON
@@ -16,7 +21,7 @@ func (r *Repository) PersistLog(auditlog models.AuditLog, auditLogData interface
 		return fmt.Errorf("failed to marshal audit log data: %w", err)
 	}
 
-	query := r.goquDBWrapper.Insert("audit_logs").
+	query := r.repository.GoquDBWrapper.Insert("audit_logs").
 		Rows(goqu.Record{
 			"resource_id":   auditlog.ResourceID,
 			"resource_type": auditlog.ResourceType,
@@ -31,4 +36,8 @@ func (r *Repository) PersistLog(auditlog models.AuditLog, auditLogData interface
 	}
 
 	return nil
+}
+
+func NewRepository(r *repository.Repository) *AuditLogRepository {
+	return &AuditLogRepository{repository: r}
 }

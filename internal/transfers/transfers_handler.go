@@ -75,7 +75,7 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 	}
 
 	if len(validationErrors) > 0 {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Stock validation failed", "reasons": validationErrors})
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Warehouse equipment validation failed", "reasons": validationErrors})
 		return
 	}
 
@@ -85,12 +85,17 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to transfer Serialized Items", "path": "serialized_item_collection"})
 		return
 	}
-	transfer, _ := h.Repository.GetTransfer(transferID)
+	transfer, err := h.Repository.GetTransfer(transferID)
+
+	if err != nil {
+		c.JSON(http.StatusAccepted, gin.H{"message": "Transfer created successfully but unable to generate full object now", "id": transferID})
+	}
+
 	log.Println("transfer ID: ", transferID)
 
 	go h.createTransferAuditLogEntry("in_transfer", transfer)
 
-	c.JSON(http.StatusCreated, transferRequest)
+	c.JSON(http.StatusCreated, transfer)
 }
 
 func (h *TransferHandler) createTransferAuditLogEntry(action string, ts *models.Transfer) {
@@ -135,37 +140,6 @@ func (h *TransferHandler) createTransferAuditLogEntry(action string, ts *models.
 			s,
 		)
 	}
-}
-
-func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
-	// TODO "in_transit" to "completed" or "confirmed"  do something with that
-	transferID := c.Param("id")
-
-	if transferID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Transfer ID is required"})
-		return
-	}
-
-	var req struct {
-		Status string `json:"status" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	err := h.Repository.ConfirmTransfer(transferID, req.Status)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":     "Transfer confirmed successfully",
-		"transfer_id": transferID,
-		"status":      req.Status,
-	})
 }
 
 func (h *TransferHandler) RemoveAssetFromTransfer(c *gin.Context) {
@@ -230,7 +204,6 @@ func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
 	req.TransferID = transferID
 	req.CategoryID = categoryID
 
-	// Call the repository method
 	if err := h.Repository.RemoveStockItemFromTransfer(req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove stock item from transfer", "details": err.Error()})
 		return
@@ -239,14 +212,13 @@ func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Stock item removed from transfer successfully"})
 }
 
-func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) ([]struct {
-	message  string
-	property string
-}, error) {
-	validationState := []struct {
-		message  string
-		property string
-	}{}
+type ValidationError struct {
+	Message  string `json:"message"`
+	Property string `json:"property"`
+}
+
+func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) ([]ValidationError, error) {
+	var validationState []ValidationError
 
 	if len(transferRequest.SerialziedItemCollection) > 0 {
 		hasItemsOnStock, err := h.Repository.HasItemsInLocation(transferRequest.SerialziedItemCollection, transferRequest.FromLocationID)
@@ -254,12 +226,9 @@ func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) 
 			return nil, fmt.Errorf("failed to validate serialized assets: %w", err)
 		}
 		if !hasItemsOnStock {
-			validationState = append(validationState, struct {
-				message  string
-				property string
-			}{
-				message:  "Serialized assets are not present in location",
-				property: "serialized_item_collection",
+			validationState = append(validationState, ValidationError{
+				Message:  "Serialized assets are not present in location",
+				Property: "serialized_item_collection",
 			})
 		}
 	}
@@ -271,12 +240,9 @@ func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) 
 		}
 
 		if len(hasEnoughQuantity) != len(transferRequest.UnserializedItemCollection) {
-			validationState = append(validationState, struct {
-				message  string
-				property string
-			}{
-				message:  "Non-serialized assets are not present in location",
-				property: "unserialized_item_collection",
+			validationState = append(validationState, ValidationError{
+				Message:  "Non-serialized assets are not present in location",
+				Property: "unserialized_item_collection",
 			})
 		}
 	}
