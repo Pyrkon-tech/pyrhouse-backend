@@ -2,10 +2,10 @@ package transfers
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"warehouse/internal/repository"
+	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"
@@ -30,7 +30,7 @@ func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
 	}
 	switch req.Status {
 	case "completed":
-		err := h.confirmTransfer(transferID, req.Status)
+		err := h.confirmTransfer(transferID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -46,28 +46,37 @@ func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
 	}
 }
 
-func (h *TransferHandler) confirmTransfer(transferID int, status string) error {
+func (h *TransferHandler) confirmTransfer(transferID int) error {
 	var err error
-	stockItems, stockErr := h.Repository.GetStockItemsByTransfer(transferID)
-	assets, err := h.Repository.GetTransferAssets(transferID)
+	status := "completed" // to I need this?
+	// TODO that's not needed at all
+	// stockItems, stockErr := h.Repository.GetStockItemsByTransfer(transferID)
+	// if stockErr != nil || err != nil {
+	// 	return fmt.Errorf("unable to obtain transfer equipment: %s", err.Error())
+	// }
 
-	if stockErr != nil || err != nil {
-		return fmt.Errorf("unable to obtain transfer equipment: %s", err.Error())
-	}
+	// TODO get only ids?
+	assets, err := h.Repository.GetTransferAssets(transferID)
+	assetIDs := func(assets []models.Asset) []int {
+		var ids []int
+		for _, asset := range assets {
+			ids = append(ids, asset.ID)
+		}
+		return ids
+	}(*assets)
 
 	repository.WithTransaction(h.Repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		if err := h.Repository.UpdateItemStatus(assetIDs, "delivered"); err != nil {
+			return fmt.Errorf("unable to update assets err: %w", err)
+		}
 
-		// Last step
-		// err = h.Repository.ConfirmTransfer(transferID, status)
-		// if err != nil {
-		// 	return err
-		// }
+		err = h.Repository.ConfirmTransfer(transferID, status)
+		if err != nil {
+			return err
+		}
 
 		return nil
 	})
-
-	log.Println("Stock ID", stockItems)
-	log.Println("Assets ID", assets)
 
 	return nil
 }
