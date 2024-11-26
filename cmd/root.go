@@ -31,6 +31,7 @@ var MigrateCmd = &cobra.Command{
 			return fmt.Errorf("migrate database: %w", err)
 		}
 
+		os.Exit(0)
 		return nil
 	},
 }

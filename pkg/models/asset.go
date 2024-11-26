@@ -6,6 +6,7 @@ type Asset struct {
 	Location Location     `json:"location,omitempty"`
 	Category ItemCategory `json:"category"`
 	Status   string       `json:"status"`
+	PyrCode  string       `json:"pyrcode"`
 }
 
 func (a *Asset) CreateLogView() AuditLog {

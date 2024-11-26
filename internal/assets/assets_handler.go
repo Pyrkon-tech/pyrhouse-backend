@@ -22,15 +22,31 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Au
 	}
 
 	router.POST("/assets", handler.CreateItem)
-	router.GET("/assets", handler.GetItems)
+	router.GET("/assets/serial/:serial", handler.GetItemByPyrCode)
 	router.POST("/assets/categories", handler.CreateItemCategory)
 	router.GET("/assets/categories", handler.GetItemCategories)
 	router.DELETE("/assets/categories/:id", handler.RemoveItemCategory)
 }
 
-func (h *ItemHandler) GetItems(c *gin.Context) {
+func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {
+	serial := c.Param("serial")
 
-	c.JSON(http.StatusOK, "Hello World")
+	if serial == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unable to bind serial number"})
+		return
+	}
+
+	asset, err := h.Repository.FindItemByPyrCode(serial)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to get asset", "details": err.Error()})
+		return
+	} else if asset.ID == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Unable to locate status with given pyr_code"})
+		return
+	}
+
+	c.JSON(http.StatusOK, asset)
 }
 
 func (h *ItemHandler) CreateItem(c *gin.Context) {

@@ -52,6 +52,7 @@ func (h *UsersHandler) RegisterUser(c *gin.Context) {
 }
 
 func (h *UsersHandler) GetUser(c *gin.Context) {
+	// TODO ?
 	c.JSON(http.StatusInternalServerError, gin.H{"message": "Not implemented"})
 }
 

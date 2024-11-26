@@ -10,6 +10,28 @@ import (
 	"github.com/lib/pq"
 )
 
+func (r *Repository) FindItemByPyrCode(pyrCode string) (*models.Asset, error) {
+	var asset models.Asset
+	query := r.GoquDBWrapper.Select(
+		goqu.I("id").As("asset_id"),
+		"status",
+		"item_serial",
+	).
+		From("items").
+		// LeftJoin(
+		// 	goqu.T("items").As("a"),
+		// 	goqu.On(goqu.Ex{"ta.item_id": goqu.I("a.id")}),
+		// ).
+		Where(goqu.Ex{"pyr_code": pyrCode})
+	_, err := query.Executor().ScanStruct(&asset)
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to select asset from database: %s", err.Error())
+	}
+
+	return &asset, nil
+}
+
 func (r *Repository) HasRelatedItems(categoryID string) bool {
 	query := `SELECT COUNT(*) FROM assets WHERE item_category_id = $1`
 	var count int

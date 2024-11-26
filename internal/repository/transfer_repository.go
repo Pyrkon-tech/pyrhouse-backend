@@ -151,7 +151,7 @@ func (r *Repository) ConfirmTransfer(transferID int, status string) error {
 
 	_, err := query.Executor().Exec()
 	if err != nil {
-		return fmt.Errorf("failed to confirm transfer %s: %w", transferID, err)
+		return fmt.Errorf("failed to confirm transfer %d: %w", transferID, err)
 	}
 
 	return nil

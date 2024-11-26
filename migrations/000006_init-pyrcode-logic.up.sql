@@ -1,0 +1,5 @@
+BEGIN;
+ALTER TABLE items ADD COLUMN pyr_code VARCHAR(128) UNIQUE;
+ALTER TABLE item_category ADD COLUMN pyr_id VARCHAR(3);
+ALTER TABLE item_category ADD COLUMN accessories JSONB;
+COMMIT;

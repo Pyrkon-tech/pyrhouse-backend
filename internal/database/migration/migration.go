@@ -21,12 +21,13 @@ func Migrate(dbURL string, migrationsPath string, verbose bool, log *zap.Logger)
 	if err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
 			log.Info("Database migration: no change needed")
+			return nil
 		} else {
-			log.Error("Database migration failed", zap.Error(err))
+			log.Error("Database migration: failed", zap.Error(err))
 			return err
 		}
 	}
-
+	log.Info("Database migration: changes applied")
 	return nil
 }
 
