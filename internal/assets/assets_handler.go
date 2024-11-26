@@ -72,10 +72,14 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 			return
 		}
 	}
+
+	// asset.PyrCode = pyrcode.NewPyrCode(*asset)
+
 	go h.AuditLog.Log(
 		"create",
 		map[string]interface{}{
 			"serial":      asset.Serial,
+			"pyr_code":    asset.PyrCode,
 			"location_id": asset.Location.ID,
 			"msg":         "Register asset in warehouse",
 		},

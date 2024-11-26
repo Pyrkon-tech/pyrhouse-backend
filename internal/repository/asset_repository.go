@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	custom_error "warehouse/pkg/errors"
@@ -11,22 +12,48 @@ import (
 )
 
 func (r *Repository) FindItemByPyrCode(pyrCode string) (*models.Asset, error) {
-	var asset models.Asset
+	return r.fetchFlatAssetByCondition(goqu.Ex{"i.pyr_code": pyrCode})
+}
+
+func (r *Repository) GetItem(id int) (*models.Asset, error) {
+	return r.fetchFlatAssetByCondition(goqu.Ex{"id": id})
+}
+
+func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*models.Asset, error) {
 	query := r.GoquDBWrapper.Select(
-		goqu.I("id").As("asset_id"),
-		"status",
-		"item_serial",
+		goqu.I("i.id").As("asset_id"),
+		"i.status",
+		goqu.I("i.item_serial").As("item_serial"),
+		goqu.I("i.accessories").As("accessories"),
+		goqu.I("i.pyr_code").As("pyr_code"),
+		goqu.I("c.id").As("category_id"),
+		goqu.I("c.item_category").As("category_type"),
+		goqu.I("c.label").As("category_label"),
+		goqu.I("c.pyr_id").As("category_pyr_id"),
+		goqu.I("l.id").As("location_id"),
+		goqu.I("l.name").As("location_name"),
 	).
-		From("items").
-		// LeftJoin(
-		// 	goqu.T("items").As("a"),
-		// 	goqu.On(goqu.Ex{"ta.item_id": goqu.I("a.id")}),
-		// ).
-		Where(goqu.Ex{"pyr_code": pyrCode})
-	_, err := query.Executor().ScanStruct(&asset)
+		From(goqu.T("items").As("i")).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),
+		).
+		LeftJoin(
+			goqu.T("locations").As("l"),
+			goqu.On(goqu.Ex{"i.location_id": goqu.I("l.id")}),
+		).
+		Where(condition)
+
+	var flatAsset models.FlatAssetRecord
+	_, err := query.Executor().ScanStruct(&flatAsset)
 
 	if err != nil {
 		return nil, fmt.Errorf("unable to select asset from database: %s", err.Error())
+	}
+	asset, err := flatAsset.TransformToAsset()
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to fetch asset accessories from database: %s", err.Error())
 	}
 
 	return &asset, nil
@@ -64,11 +91,18 @@ func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool
 }
 
 func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset, error) {
+	accessoriesJSON, err := json.Marshal(itemRequest.Accessories)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal accessories: %w", err)
+	}
+
 	query := r.GoquDBWrapper.Insert("items").
 		Rows(goqu.Record{
 			"item_serial":      itemRequest.Serial,
 			"location_id":      itemRequest.LocationId,
 			"item_category_id": itemRequest.CategoryId,
+			"accessories":      accessoriesJSON,
+			// "pyrcode":
 		}).
 		Returning("id")
 	asset := models.Asset{
@@ -79,13 +113,12 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset,
 		Category: models.ItemCategory{
 			ID: itemRequest.CategoryId,
 		},
+		Accessories: itemRequest.Accessories,
 	}
 
 	if _, err := query.Executor().ScanVal(&asset.ID); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
-			if pqErr.Code == "23505" {
-				return nil, custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
-			}
+			return nil, custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
 		}
 		return nil, fmt.Errorf("failed to insert asset record: %w", err)
 	}

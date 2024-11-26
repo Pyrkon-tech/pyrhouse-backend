@@ -1,5 +1,7 @@
 package pyrcode
 
+import "warehouse/pkg/models"
+
 type PyrCode struct {
 	init     string
 	category string
@@ -12,11 +14,15 @@ func (pyr *PyrCode) GeneratePyrCode() string {
 	return "PYR"
 }
 
-func NewPyrCode(categoryType string, itemId string) PyrCode {
+func NewPyrCode(asset *models.Asset) PyrCode {
 	var code PyrCode
 
 	code.init = Init
-	code.category = categoryType
+	code.category = asset.Category.PyrID
 
 	return code
+}
+
+func getAccessoriesCode(accessories *models.AssetAccessories) string {
+	return "001"
 }
