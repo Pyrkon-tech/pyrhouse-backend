@@ -2,6 +2,7 @@ package assets
 
 import (
 	"net/http"
+	"warehouse/internal/pyrcode"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
 	custom_error "warehouse/pkg/errors"
@@ -73,8 +74,9 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 		}
 	}
 
-	// asset.PyrCode = pyrcode.NewPyrCode(*asset)
-
+	pyrCode := pyrcode.NewPyrCode(asset)
+	asset.PyrCode = pyrCode.GeneratePyrCode()
+	go h.Repository.UpdatePyrCode(asset.ID, asset.PyrCode)
 	go h.AuditLog.Log(
 		"create",
 		map[string]interface{}{

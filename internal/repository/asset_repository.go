@@ -16,7 +16,7 @@ func (r *Repository) FindItemByPyrCode(pyrCode string) (*models.Asset, error) {
 }
 
 func (r *Repository) GetItem(id int) (*models.Asset, error) {
-	return r.fetchFlatAssetByCondition(goqu.Ex{"id": id})
+	return r.fetchFlatAssetByCondition(goqu.Ex{"i.id": id})
 }
 
 func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*models.Asset, error) {
@@ -96,50 +96,65 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset,
 		return nil, fmt.Errorf("failed to marshal accessories: %w", err)
 	}
 
+	var assetID int
+
 	query := r.GoquDBWrapper.Insert("items").
 		Rows(goqu.Record{
 			"item_serial":      itemRequest.Serial,
 			"location_id":      itemRequest.LocationId,
 			"item_category_id": itemRequest.CategoryId,
+			"status":           itemRequest.Status,
 			"accessories":      accessoriesJSON,
-			// "pyrcode":
 		}).
 		Returning("id")
-	asset := models.Asset{
-		Serial: itemRequest.Serial,
-		Location: models.Location{
-			ID: itemRequest.LocationId,
-		},
-		Category: models.ItemCategory{
-			ID: itemRequest.CategoryId,
-		},
-		Accessories: itemRequest.Accessories,
-	}
 
-	if _, err := query.Executor().ScanVal(&asset.ID); err != nil {
+	if _, err := query.Executor().ScanVal(&assetID); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			return nil, custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
 		}
 		return nil, fmt.Errorf("failed to insert asset record: %w", err)
 	}
 
-	return &asset, nil
+	asset, err := r.GetItem(assetID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return asset, nil
 }
 
-func (r *Repository) UpdateItemStatus(itemIDs []int, status string) error {
-	query := r.GoquDBWrapper.
-		Update("items").
-		Set(goqu.Record{
-			"status": status,
-		}).
-		Where(goqu.Ex{"id": itemIDs})
-
-	_, err := query.Executor().Exec()
+func (r *Repository) UpdateItemStatus(assetIDs []int, status string) error {
+	record := goqu.Record{"status": status}
+	condition := goqu.Ex{"id": assetIDs}
+	err := r.updateAsset(record, condition)
 	if err != nil {
-		return fmt.Errorf("failed to confirm assets transfer: %w", err)
+		return fmt.Errorf("failed to update asset status: %w", err)
 	}
 
 	return nil
+}
+
+func (r *Repository) UpdatePyrCode(assetID int, pyrCode string) error {
+	record := goqu.Record{"pyr_code": pyrCode}
+	condition := goqu.Ex{"id": assetID}
+	err := r.updateAsset(record, condition)
+	if err != nil {
+		return fmt.Errorf("failed to update asset pyrcode: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) updateAsset(record goqu.Record, condition goqu.Expression) error {
+	query := r.GoquDBWrapper.
+		Update("items").
+		Set(record).
+		Where(condition)
+
+	_, err := query.Executor().Exec()
+
+	return err
 }
 
 func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {

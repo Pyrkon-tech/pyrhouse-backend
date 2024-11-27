@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 )
@@ -21,17 +22,17 @@ type AssetAccessories struct {
 }
 
 type FlatAssetRecord struct {
-	ID            int    `db:"asset_id"`
-	Serial        string `db:"item_serial"`
-	Status        string `db:"status"`
-	PyrCode       string `db:"pyr_code"`
-	Accessories   []byte `db:"accessories"`
-	LocationId    int    `db:"location_id"`
-	LocationName  string `db:"location_name"`
-	CategoryId    int    `db:"category_id"`
-	CategoryType  string `db:"category_type"`
-	CategoryLabel string `db:"category_label"`
-	CategoryPyrId string `db:"category_pyr_id"`
+	ID            int            `db:"asset_id"`
+	Serial        string         `db:"item_serial"`
+	Status        string         `db:"status"`
+	PyrCode       sql.NullString `db:"pyr_code"`
+	Accessories   []byte         `db:"accessories"`
+	LocationId    int            `db:"location_id"`
+	LocationName  string         `db:"location_name"`
+	CategoryId    int            `db:"category_id"`
+	CategoryType  string         `db:"category_type"`
+	CategoryLabel string         `db:"category_label"`
+	CategoryPyrId string         `db:"category_pyr_id"`
 }
 
 func (fa *FlatAssetRecord) TransformToAsset() (Asset, error) {
@@ -44,7 +45,7 @@ func (fa *FlatAssetRecord) TransformToAsset() (Asset, error) {
 		ID:          fa.ID,
 		Serial:      fa.Serial,
 		Status:      fa.Status,
-		PyrCode:     fa.PyrCode,
+		PyrCode:     fa.PyrCode.String,
 		Accessories: accessories,
 		Location: Location{
 			ID:   fa.LocationId,
