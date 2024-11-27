@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -13,8 +14,7 @@ func (h *ItemHandler) GetItemCategories(c *gin.Context) {
 	itemCategories, err := h.Repository.GetCategories()
 
 	if err != nil {
-		log.Fatal("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset", "details": err.Error()})
 		return
 	}
 
@@ -22,21 +22,27 @@ func (h *ItemHandler) GetItemCategories(c *gin.Context) {
 }
 
 func (h *ItemHandler) CreateItemCategory(c *gin.Context) {
-	var itemCategory models.ItemCategory
+	var req models.ItemCategory
 
-	if err := c.ShouldBindJSON(&itemCategory); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	asset, err := h.Repository.PersistItemCategory(itemCategory)
+	if req.PyrID == "" {
+		str := req.Type
+		str = str[:3]
+		req.PyrID = strings.ToUpper(str)
+	}
+
+	itemCategory, err := h.Repository.PersistItemCategory(req)
 
 	if err != nil {
 		log.Fatal("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset"})
 		return
 	}
-	c.JSON(http.StatusCreated, asset)
+	c.JSON(http.StatusCreated, itemCategory)
 }
 
 func (h *ItemHandler) RemoveItemCategory(c *gin.Context) {

@@ -11,30 +11,22 @@ import (
 )
 
 func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
-	qb := goqu.Dialect("postgres")
-	query := qb.Select("id", "item_category", "label").From("item_category")
+	var categories []models.ItemCategory
+	query := r.GoquDBWrapper.Select(
+		goqu.I("id").As("category_id"),
+		goqu.I("item_category").As("type"),
+		goqu.I("label"),
+		goqu.I("pyr_id"),
+	).
+		From("item_category")
 
-	// rows, err := r.Query(query)
-	sql, args, err := query.ToSQL()
+	err := query.Executor().ScanStructs(&categories)
 
 	if err != nil {
-		log.Fatalf("Failed to build query: %v", err)
+		return nil, fmt.Errorf("failed to query categories: %w", err)
 	}
-	rows, err := r.DB.Query(sql, args...)
-	if err != nil {
-		log.Fatalf("Failed to execute query: %v", err)
-	}
-	defer rows.Close()
 
-	var itemCategories []models.ItemCategory
-	for rows.Next() {
-		var itemCategory models.ItemCategory
-		if err := rows.Scan(&itemCategory.ID, &itemCategory.Type, &itemCategory.Label); err != nil {
-			return nil, err
-		}
-		itemCategories = append(itemCategories, itemCategory)
-	}
-	return &itemCategories, err
+	return &categories, err
 }
 
 func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*models.ItemCategory, error) {
@@ -42,6 +34,7 @@ func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*mod
 		Rows(goqu.Record{
 			"item_category": itemCategory.Type,
 			"label":         itemCategory.Label,
+			"pyr_id":        itemCategory.PyrID,
 		}).
 		Returning("id")
 
