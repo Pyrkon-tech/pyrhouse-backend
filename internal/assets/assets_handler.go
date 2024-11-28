@@ -7,6 +7,7 @@ import (
 	"warehouse/pkg/auditlog"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
+	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,12 +22,17 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Au
 		Repository: r,
 		AuditLog:   a,
 	}
-
+	// move to main when appropriate
 	router.POST("/assets", handler.CreateItem)
 	router.GET("/assets/serial/:serial", handler.GetItemByPyrCode)
-	router.POST("/assets/categories", handler.CreateItemCategory)
-	router.GET("/assets/categories", handler.GetItemCategories)
-	router.DELETE("/assets/categories/:id", handler.RemoveItemCategory)
+
+	protectedRoutes := router.Group("")
+	protectedRoutes.Use(security.JWTMiddleware())
+	{
+		router.POST("/assets/categories", handler.CreateItemCategory)
+		router.GET("/assets/categories", security.JWTMiddleware(), security.Authorize("admin"), handler.GetItemCategories)
+		router.DELETE("/assets/categories/:id", handler.RemoveItemCategory)
+	}
 }
 
 func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {

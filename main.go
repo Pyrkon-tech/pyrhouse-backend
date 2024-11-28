@@ -70,12 +70,11 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-
+	security.RegisterRoutes(router, db)
 	assets.RegisterRoutes(router, repository, auditLog)
 	stocks.RegisterRoutes(router, repository, auditLog)
 	transfers.RegisterRoutes(router, repository, auditLog)
 	locations.RegisterRoutes(router, db, repository)
-	security.RegisterRoutes(router, db)
 	users.RegisterRoutes(router, db, userRepository)
 
 	openapiFilePath := "./docs/index.html"
