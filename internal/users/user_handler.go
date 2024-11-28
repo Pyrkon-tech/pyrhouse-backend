@@ -6,21 +6,21 @@ import (
 	"net/http"
 	"warehouse/internal/repository/user"
 	"warehouse/pkg/models"
+	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type UsersHandler struct {
-	DB         *sql.DB
 	Repository *user.UserRepository
 }
 
-func RegisterRoutes(router *gin.Engine, db *sql.DB, r *user.UserRepository) {
-	handler := UsersHandler{DB: db, Repository: r}
+func RegisterRoutes(router *gin.RouterGroup, db *sql.DB, r *user.UserRepository) {
+	handler := UsersHandler{Repository: r}
 
-	router.POST("/users", handler.RegisterUser)
-	router.GET("/users", handler.GetUserList)
+	router.POST("/users", security.Authorize("admin"), handler.RegisterUser)
+	router.GET("/users", security.Authorize("moderator"), handler.GetUserList)
 }
 
 func (h *UsersHandler) RegisterUser(c *gin.Context) {

@@ -1,7 +1,6 @@
 package locations
 
 import (
-	"database/sql"
 	"log"
 	"net/http"
 	"warehouse/internal/repository"
@@ -12,12 +11,11 @@ import (
 )
 
 type LocationHandler struct {
-	DB         *sql.DB
 	Repository *repository.Repository
 }
 
-func RegisterRoutes(router *gin.Engine, db *sql.DB, r *repository.Repository) {
-	handler := LocationHandler{DB: db, Repository: r}
+func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
+	handler := LocationHandler{Repository: r}
 
 	router.POST("/locations", handler.CreateLocation)
 	router.GET("/locations", handler.GetLocations)
@@ -26,26 +24,10 @@ func RegisterRoutes(router *gin.Engine, db *sql.DB, r *repository.Repository) {
 }
 
 func (h *LocationHandler) GetLocations(c *gin.Context) {
-	rows, err := h.DB.Query("SELECT id, name FROM locations")
+	locations, err := h.Repository.GetLocations()
 	if err != nil {
-		log.Fatal("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
-	}
-	defer rows.Close()
-
-	var locations []models.Location
-	for rows.Next() {
-		var location models.Location
-		if err := rows.Scan(&location.ID, &location.Name); err != nil {
-			log.Fatal("Error executing SQL statement: ", err)
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
-		}
-		locations = append(locations, location)
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Fatal("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not list locations", "details": err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, locations)
@@ -63,9 +45,10 @@ func (h *LocationHandler) CreateLocation(c *gin.Context) {
 	err = h.Repository.PersistLocation(&location)
 	if _, ok := err.(*custom_error.UniqueViolationError); ok {
 		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Could not insert, location, name not unique", "details": err.Error()})
+		return
 	} else if err != nil {
-		log.Println("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
+		return
 	}
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
@@ -79,8 +62,8 @@ func (h *LocationHandler) GetLocationItems(c *gin.Context) {
 	locationEquipment, err := h.Repository.GetLocationEquipment(c.Param("id"))
 
 	if err != nil {
-		log.Println("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not get location items", "details": err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, locationEquipment)

@@ -9,6 +9,18 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+const (
+	RoleUser      = 1
+	RoleModerator = 2
+	RoleAdmin     = 3
+)
+
+var roleHierarchy = map[string]int{
+	"user":      RoleUser,
+	"moderator": RoleModerator,
+	"admin":     RoleAdmin,
+}
+
 // JWTMiddleware validates JWT and extracts claims.
 func JWTMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -45,11 +57,27 @@ func JWTMiddleware() gin.HandlerFunc {
 func Authorize(requiredRole string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get("role")
-		if !exists || role != requiredRole {
+		if !exists {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
 			c.Abort()
 			return
 		}
+		userRole, ok := role.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid role format"})
+			c.Abort()
+			return
+		}
+
+		requiredRoleLevel, requiredExists := roleHierarchy[requiredRole]
+		userRoleLevel, userExists := roleHierarchy[userRole]
+
+		if !requiredExists || !userExists || userRoleLevel < requiredRoleLevel {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
+			c.Abort()
+			return
+		}
+
 		c.Next()
 	}
 }

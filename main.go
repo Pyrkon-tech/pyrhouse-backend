@@ -3,23 +3,17 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
 	"warehouse/cmd"
-	"warehouse/internal/assets"
-	"warehouse/internal/stocks"
+	"warehouse/internal/routes"
 
 	"warehouse/internal/database"
-	"warehouse/internal/locations"
 	"warehouse/internal/repository"
 	AuditLogRepository "warehouse/internal/repository/auditlog"
 	UserRepository "warehouse/internal/repository/user"
-	"warehouse/internal/transfers"
-	"warehouse/internal/users"
 	"warehouse/pkg/auditlog"
-	"warehouse/pkg/security"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -35,32 +29,36 @@ func init() {
 		log.Println("Warning: No .env file found, falling back to system environment variables.")
 	}
 
-	// Execute migration CMD
 	cmd.Execute(ctx)
 }
 
 func main() {
-	// Load environment variables
 	var err error
 
+	// Setup DB
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		log.Fatalf("Starting server on port %s", dbURL)
 	}
-
-	// Connect to the database
 	db, err := database.NewPostgresConnection(dbURL)
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 	}
 	defer db.Close()
-
-	log.Println("Connected to the database successfully!")
+	log.Println("[DB]: Setup completed")
 
 	repository := repository.NewRepository(db)
 	auditLogRepository := AuditLogRepository.NewRepository(repository)
 	userRepository := UserRepository.NewRepository(repository)
 	auditLog := auditlog.NewAuditLog(auditLogRepository)
+	router := setupRouter(repository, auditLog, userRepository)
+
+	if err := router.Run(os.Getenv("APP_HOST")); err != nil {
+		panic(err)
+	}
+}
+
+func setupRouter(repo *repository.Repository, auditLog *auditlog.Auditlog, userRepo *UserRepository.UserRepository) *gin.Engine {
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5000"}, // Add your domain and localhost
@@ -70,29 +68,12 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-	security.RegisterRoutes(router, db)
-	assets.RegisterRoutes(router, repository, auditLog)
-	stocks.RegisterRoutes(router, repository, auditLog)
-	transfers.RegisterRoutes(router, repository, auditLog)
-	locations.RegisterRoutes(router, db, repository)
-	users.RegisterRoutes(router, db, userRepository)
 
-	openapiFilePath := "./docs/index.html"
-	if _, err := os.Stat(openapiFilePath); err == nil {
-		router.GET("/openapi.html", func(c *gin.Context) {
-			c.File(openapiFilePath)
-		})
-		log.Println("Route docs/index.html registered successfully.")
-	} else {
-		log.Printf("Warning: %s not found. Route /openapi.html will not be registered.\n", openapiFilePath)
-	}
+	routes.RegisterPublicRoutes(router, repo, auditLog)
+	routes.RegisterProtectedRoutes(router, repo, auditLog, userRepo)
+	routes.RegisterUtilityRoutes(router)
 
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-		log.Println("Called healthcheck")
-	})
+	log.Println("[Router]: Setup completed")
 
-	if err := router.Run(os.Getenv("APP_HOST")); err != nil {
-		panic(err)
-	}
+	return router
 }

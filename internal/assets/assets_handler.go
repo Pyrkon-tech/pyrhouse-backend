@@ -22,10 +22,10 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Au
 		Repository: r,
 		AuditLog:   a,
 	}
-	// move to main when appropriate
 	router.POST("/assets", handler.CreateItem)
 	router.GET("/assets/serial/:serial", handler.GetItemByPyrCode)
 
+	// move to main when appropriate
 	protectedRoutes := router.Group("")
 	protectedRoutes.Use(security.JWTMiddleware())
 	{

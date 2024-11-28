@@ -15,6 +15,16 @@ type LocationEquipment struct {
 	NonSerializedItems []models.StockItem
 }
 
+func (r *Repository) GetLocations() (*[]models.Location, error) {
+	var locations []models.Location
+	query := r.GoquDBWrapper.Select("id", "name").From("locations")
+	if err := query.Executor().ScanStructs(&locations); err != nil {
+		return nil, fmt.Errorf("unable to execute SQL: %w", err)
+	}
+
+	return &locations, nil
+}
+
 func (r *Repository) GetLocationEquipment(locationID string) (*models.LocationEquipment, error) {
 	var locationEquipment models.LocationEquipment
 	var err error

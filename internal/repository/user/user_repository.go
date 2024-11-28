@@ -23,7 +23,7 @@ func (r *UserRepository) PersistUser(req models.UserRequest, hashedPassword []by
 
 	_, err := query.Executor().Exec()
 	if err != nil {
-		return fmt.Errorf("failed to insert audit log: %w", err)
+		return fmt.Errorf("failed to insert User: %w", err)
 	}
 
 	return nil

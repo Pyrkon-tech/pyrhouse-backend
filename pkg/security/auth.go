@@ -1,22 +1,24 @@
 package security
 
 import (
-	"database/sql"
 	"time"
+	"warehouse/internal/repository"
 	"warehouse/pkg/models"
 
+	"github.com/doug-martin/goqu/v9"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
+// TODO CHANGE ME FFS
 var jwtSecret = []byte("your_secret_key")
 
-// AuthenticateUser verifies username and password from the database.
-func AuthenticateUser(username, password string, db *sql.DB) (*models.User, error) {
+func AuthenticateUser(username, password string, repo *repository.Repository) (*models.User, error) {
 	var user models.User
 
-	row := db.QueryRow("SELECT id, username, password_hash, role FROM users WHERE username = $1", username)
-	if err := row.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role); err != nil {
+	query := repo.GoquDBWrapper.Select("id", "username", "password_hash", "role").From("users").Where(goqu.Ex{"username": username})
+
+	if _, err := query.Executor().ScanStruct(&user); err != nil {
 		return nil, err
 	}
 
@@ -27,12 +29,11 @@ func AuthenticateUser(username, password string, db *sql.DB) (*models.User, erro
 	return &user, nil
 }
 
-// GenerateJWT generates a new JWT for a user.
 func GenerateJWT(userID string, role string) (string, error) {
 	claims := jwt.MapClaims{
 		"userID": userID,
 		"role":   role,
-		"exp":    time.Now().Add(time.Hour * 1).Unix(),
+		"exp":    time.Now().Add(time.Hour * 120).Unix(), // 4 DAYS
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

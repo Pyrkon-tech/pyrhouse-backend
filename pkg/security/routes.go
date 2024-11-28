@@ -1,20 +1,18 @@
 package security
 
 import (
-	"database/sql"
 	"net/http"
 	"strconv"
+	"warehouse/internal/repository"
 
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterRoutes registers all routes with handlers.
-func RegisterRoutes(router *gin.Engine, db *sql.DB) {
-	router.POST("/auth", LoginHandler(db))
+func RegisterRoutes(router *gin.Engine, repo *repository.Repository) {
+	router.POST("/auth", LoginHandler(repo))
 }
 
-// LoginHandler handles user login and JWT generation.
-func LoginHandler(db *sql.DB) gin.HandlerFunc {
+func LoginHandler(repo *repository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Username string `json:"username" binding:"required"`
@@ -26,7 +24,7 @@ func LoginHandler(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 
-		user, err := AuthenticateUser(req.Username, req.Password, db)
+		user, err := AuthenticateUser(req.Username, req.Password, repo)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 			return
