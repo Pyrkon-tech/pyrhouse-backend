@@ -192,6 +192,48 @@ func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locatio
 	return nil
 }
 
+func (r *Repository) CanRemoveAsset(assetID int) (bool, error) {
+	var id int
+	query := r.GoquDBWrapper.Select("i.id").
+		From(goqu.T("items").As("i")).
+		Where(goqu.Ex{
+			"i.id":          assetID,
+			"i.location_id": models.DefaultEquipmentLocationID,
+			"i.status":      models.AssetStatusInStock,
+		}).
+		Where(goqu.L("NOT EXISTS (?)",
+			r.GoquDBWrapper.From(goqu.T("serialized_transfers").As("st")).
+				Select(goqu.L("1")).
+				Where(goqu.Ex{
+					"st.item_id": assetID,
+				}),
+		))
+	result, err := query.Executor().ScanVal(&id)
+
+	if err != nil {
+		return false, fmt.Errorf("unable to execute sql: %w", err)
+	}
+
+	return result, nil
+}
+
+func (r *Repository) RemoveAsset(assetID int) (string, error) {
+	var assetSerial string
+	query := r.GoquDBWrapper.
+		Delete("items").
+		Where(goqu.Ex{"id": assetID}).
+		Returning("item_serial")
+
+	_, err := query.Executor().ScanVal(&assetSerial)
+
+	if err != nil {
+		log.Fatal("failed to delete asset category: ", err)
+		return "", err
+	}
+
+	return assetSerial, nil
+}
+
 func (r *Repository) GetTransferAssets(transferID int) (*[]models.Asset, error) {
 	var assets []models.Asset
 

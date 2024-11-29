@@ -2,6 +2,7 @@ package assets
 
 import (
 	"net/http"
+	"strconv"
 	"warehouse/internal/pyrcode"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
@@ -22,16 +23,17 @@ func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Au
 		Repository: r,
 		AuditLog:   a,
 	}
-	router.POST("/assets", handler.CreateItem)
 	router.GET("/assets/serial/:serial", handler.GetItemByPyrCode)
 
 	// move to main when appropriate
 	protectedRoutes := router.Group("")
 	protectedRoutes.Use(security.JWTMiddleware())
 	{
-		router.POST("/assets/categories", handler.CreateItemCategory)
-		router.GET("/assets/categories", security.JWTMiddleware(), security.Authorize("admin"), handler.GetItemCategories)
-		router.DELETE("/assets/categories/:id", handler.RemoveItemCategory)
+		protectedRoutes.DELETE("/assets/:id", security.Authorize("admin"), handler.RemoveAsset)
+		protectedRoutes.POST("/assets/categories", handler.CreateItemCategory)
+		protectedRoutes.POST("/assets", handler.CreateAsset)
+		protectedRoutes.GET("/assets/categories", security.Authorize("admin"), handler.GetItemCategories)
+		protectedRoutes.DELETE("/assets/categories/:id", handler.RemoveItemCategory)
 	}
 }
 
@@ -56,7 +58,7 @@ func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {
 	c.JSON(http.StatusOK, asset)
 }
 
-func (h *ItemHandler) CreateItem(c *gin.Context) {
+func (h *ItemHandler) CreateAsset(c *gin.Context) {
 
 	itemRequest := models.ItemRequest{
 		LocationId: 1,
@@ -84,15 +86,57 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 	asset.PyrCode = pyrCode.GeneratePyrCode()
 	go h.Repository.UpdatePyrCode(asset.ID, asset.PyrCode)
 	go h.AuditLog.Log(
-		"create",
+		"remove",
 		map[string]interface{}{
 			"serial":      asset.Serial,
 			"pyr_code":    asset.PyrCode,
 			"location_id": asset.Location.ID,
-			"msg":         "Register asset in warehouse",
+			"msg":         "Remove asset from warehouse",
 		},
 		asset,
 	)
 
 	c.JSON(http.StatusCreated, asset)
+}
+
+func (h *ItemHandler) RemoveAsset(c *gin.Context) {
+	var asset models.Asset
+	var err error
+	asset.ID, err = strconv.Atoi(c.Param("id"))
+	if asset.ID == 0 || err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unable to bind serial number, value must be asset ID"})
+		return
+	}
+
+	res, err := h.Repository.CanRemoveAsset(asset.ID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error":   "Unable to validate asset",
+			"details": err.Error(),
+		})
+		return
+	} else if !res {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"message": "Asset cannot be removed",
+			"details": "Asset is either moved from stock or in dissalloved status",
+		})
+		return
+	}
+
+	asset.Serial, err = h.Repository.RemoveAsset(asset.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete asset category", "details": err.Error()})
+		return
+	}
+
+	go h.AuditLog.Log(
+		"remove",
+		map[string]interface{}{
+			"serial": asset.Serial,
+			"msg":    "Remove asset from warehouse",
+		},
+		&asset,
+	)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Asset deleted successfully"})
 }
