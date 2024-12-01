@@ -116,6 +116,56 @@ paths:
                   $ref: "#/components/schemas/Item"
         "400":
           description: Invalid status value 
+  /assets/{serial}:
+    get:
+      tags: 
+        - asset
+      deprecated: false
+      parameters:
+        - in: path
+          name: assetID
+          schema:
+            type: integer
+          required: true
+          description: Numeric ID of the asset
+      responses:
+        "200":
+            description: successful operation
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Item"
+        "404":
+            description: not found
+  /assets/{assetID}:
+    delete:
+      tags: 
+        - asset
+      deprecated: false
+      parameters:
+        - in: path
+          name: assetID
+          schema:
+            type: integer
+          required: true
+          description: Numeric ID of the asset
+      responses:
+        "200":
+            description: successful operation
+            content:
+              application/json:
+                schema:
+                  properties:
+                    message:
+                      type: string
+        "409":
+            description: unable to delete asset, asset already moved or unavailable 
+            content:
+              application/json:
+                schema:
+                  properties:
+                    message:
+                      type: string
   /stocks:
     post:
       tags:
@@ -232,6 +282,23 @@ paths:
       requestBody:
         $ref: "#/components/requestBodies/TransferRequest"
         required: true
+  
+  /transfers/{transferID}:
+    get:
+      tags:
+        - item category
+      summary: Returns collection of users
+      description: ...
+      responses:
+        "200":
+          description: List all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                $ref: "#/components/schemas/Transfers"
+
   /transfers/{transferId}/confirm:
     patch:
       tags:
@@ -378,6 +445,35 @@ paths:
                 type: array
                 items:
                 $ref: "#/components/schemas/ItemCategory"
+  /items/categories/{categoryID}:
+    delete:
+      tags: 
+        - item category
+      deprecated: false
+      parameters:
+        - in: path
+          name: categoryID
+          schema:
+            type: integer
+          required: true
+          description: Numeric ID of the item category
+      responses:
+        "200":
+            description: successful operation
+            content:
+              application/json:
+                schema:
+                  properties:
+                    message:
+                      type: string
+        "409":
+            description: unable to delete asset, asset already moved or unavailable 
+            content:
+              application/json:
+                schema:
+                  properties:
+                    message:
+                      type: string
   /users:
     post:
       tags:
@@ -430,9 +526,32 @@ components:
           schema:
             properties:
               serial:
+                required: true
                 type: string
               category_id:
+                required: true
                 type: string
+              origin:
+                required: true
+                type: string
+                description: Where is it from, default types are enum, but it allows to pass also personal & other, it just need to contain "keyword" to pass like druga-era-external
+                enum:
+                  - druga-era
+                  - probis
+                  - targowe
+                  - personal-{}
+                  - other-{}
+              accessories:
+                required: false
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    label:
+                      type: string
+
     TransferRequest:
       content:
         application/json:
@@ -530,8 +649,15 @@ components:
         serial:
           type: string
           example: XYZ321
+        pyrcode:
+          type: string
+          example: PYR0L100
+        location:
+          $ref: "#/components/schemas/Location"
         category:
           $ref: "#/components/schemas/ItemCategory"
+        accessories:
+          type: array
     Stock:
       type: object
       properties:
@@ -561,6 +687,28 @@ components:
         name:
           type: string
           example: "Gzdaczroom"
+    Transfer:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        from_location:
+          $ref: "#/components/schemas/Location"
+        to_location:
+          $ref: "#/components/schemas/Location"
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+        stock_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Stock"
+        transfer_date:
+          type: date-time
+        status:
+          type: string
     User:
       type: object
       properties:

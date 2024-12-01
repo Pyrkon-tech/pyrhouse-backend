@@ -9,9 +9,9 @@ type Transfer struct {
 	FromLocation         Location    `json:"from_location"`
 	ToLocation           Location    `json:"to_location"`
 	AssetsCollection     []Asset     `json:"assets"`
-	StockItemsCollection []StockItem `json:"stockItems"`
+	StockItemsCollection []StockItem `json:"stock_items"`
 	TransferDate         time.Time   `json:"transfer_date"`
-	Status               string      `json:"string"`
+	Status               string      `json:"status"`
 }
 
 func (t *Transfer) CreateLogView() AuditLog {
