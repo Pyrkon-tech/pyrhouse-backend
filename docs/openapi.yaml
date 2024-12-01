@@ -286,7 +286,7 @@ paths:
   /transfers/{transferID}:
     get:
       tags:
-        - item category
+        - transfer
       summary: Returns collection of users
       description: ...
       responses:
@@ -297,7 +297,7 @@ paths:
               schema:
                 type: array
                 items:
-                $ref: "#/components/schemas/Transfers"
+                $ref: "#/components/schemas/Transfer"
 
   /transfers/{transferId}/confirm:
     patch:
