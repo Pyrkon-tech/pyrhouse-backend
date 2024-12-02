@@ -14,13 +14,15 @@ type LocationHandler struct {
 	Repository *repository.Repository
 }
 
-func RegisterRoutes(router *gin.Engine, r *repository.Repository) {
-	handler := LocationHandler{Repository: r}
+func NewLocationHandler(r *repository.Repository) *LocationHandler {
+	return &LocationHandler{Repository: r}
+}
 
-	router.POST("/locations", handler.CreateLocation)
-	router.GET("/locations", handler.GetLocations)
-	router.GET("/locations/:id/assets", handler.GetLocationItems)
-	router.DELETE("/locations/:id", handler.RemoveLocation)
+func (h *LocationHandler) RegisterRoutes(router *gin.Engine) {
+	router.POST("/locations", h.CreateLocation)
+	router.GET("/locations", h.GetLocations)
+	router.GET("/locations/:id/assets", h.GetLocationItems)
+	router.DELETE("/locations/:id", h.RemoveLocation)
 }
 
 func (h *LocationHandler) GetLocations(c *gin.Context) {

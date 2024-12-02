@@ -8,11 +8,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(router *gin.Engine, repo *repository.Repository) {
-	router.POST("/auth", LoginHandler(repo))
+type LoginHandler struct {
+	repo *repository.Repository
 }
 
-func LoginHandler(repo *repository.Repository) gin.HandlerFunc {
+func NewLoginHandler(r *repository.Repository) *LoginHandler {
+	return &LoginHandler{repo: r}
+}
+
+func (l *LoginHandler) RegisterRoutes(router *gin.Engine) {
+	router.POST("/auth", l.LoginHandler())
+}
+
+func (l *LoginHandler) LoginHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Username string `json:"username" binding:"required"`
@@ -24,7 +32,7 @@ func LoginHandler(repo *repository.Repository) gin.HandlerFunc {
 			return
 		}
 
-		user, err := AuthenticateUser(req.Username, req.Password, repo)
+		user, err := AuthenticateUser(req.Username, req.Password, l.repo)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 			return

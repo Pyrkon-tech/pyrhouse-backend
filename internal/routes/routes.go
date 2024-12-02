@@ -4,33 +4,25 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"warehouse/internal/assets"
-	"warehouse/internal/locations"
-	UserRepository "warehouse/internal/repository/user"
-	"warehouse/internal/stocks"
-	"warehouse/internal/transfers"
-	"warehouse/internal/users"
-	"warehouse/pkg/auditlog"
+	"warehouse/internal/container"
 	"warehouse/pkg/security"
-
-	"warehouse/internal/repository"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterPublicRoutes(router *gin.Engine, repo *repository.Repository, auditLog *auditlog.Auditlog) {
-	security.RegisterRoutes(router, repo)
-	assets.RegisterRoutes(router, repo, auditLog)
-	stocks.RegisterRoutes(router, repo, auditLog)
-	transfers.RegisterRoutes(router, repo, auditLog)
-	locations.RegisterRoutes(router, repo)
+func RegisterPublicRoutes(router *gin.Engine, container *container.Container) {
+	container.LoginHandler.RegisterRoutes(router)
+	container.AssetHandler.RegisterRoutes(router)
+	container.StockHandler.RegisterRoutes(router)
+	container.TransferHandler.RegisterRoutes(router)
+	container.LocationHandler.RegisterRoutes(router)
 }
 
-func RegisterProtectedRoutes(router *gin.Engine, repo *repository.Repository, auditLog *auditlog.Auditlog, userRepo *UserRepository.UserRepository) {
+func RegisterProtectedRoutes(router *gin.Engine, container *container.Container) {
 	protectedRoutes := router.Group("")
 	protectedRoutes.Use(security.JWTMiddleware())
 
-	users.RegisterRoutes(protectedRoutes, repo.DB, userRepo)
+	container.UserHandler.RegisterRoutes(protectedRoutes)
 }
 
 func RegisterUtilityRoutes(router *gin.Engine) {

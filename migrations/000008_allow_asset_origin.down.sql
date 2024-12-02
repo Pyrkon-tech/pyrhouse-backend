@@ -1,0 +1,3 @@
+BEGIN;
+ALTER TABLE item DROP COLUMN origin;
+COMMIT;

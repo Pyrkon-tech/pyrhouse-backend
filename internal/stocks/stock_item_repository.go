@@ -1,16 +1,23 @@
-package repository
+package stocks
 
 import (
 	"fmt"
-	stock_request "warehouse/internal/stocks/request"
-	transfer_request "warehouse/internal/transfers/request"
+	"warehouse/internal/repository"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 )
 
-func (r *Repository) PersistStockItem(stockRequest stock_request.StockItemRequest) (*models.StockItem, error) {
-	query := r.GoquDBWrapper.Insert("non_serialized_items").
+type StockRepository struct {
+	repository *repository.Repository
+}
+
+func NewRepository(r *repository.Repository) *StockRepository {
+	return &StockRepository{repository: r}
+}
+
+func (r *StockRepository) PersistStockItem(stockRequest StockItemRequest) (*models.StockItem, error) {
+	query := r.repository.GoquDBWrapper.Insert("non_serialized_items").
 		Rows(goqu.Record{
 			"quantity":         stockRequest.Quantity,
 			"location_id":      stockRequest.LocationID,
@@ -34,10 +41,10 @@ func (r *Repository) PersistStockItem(stockRequest stock_request.StockItemReques
 	return &stockItem, nil
 }
 
-func (r *Repository) GetStockItemsByTransfer(transferID int) (*[]models.StockItem, error) {
+func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.StockItem, error) {
 	var flatStocks []models.StockItemFlat
 	// Query to fetch flat stock data
-	query := r.GoquDBWrapper.
+	query := r.repository.GoquDBWrapper.
 		Select(
 			goqu.I("s.id").As("stock_id"),
 			goqu.I("nst.item_category_id").As("category_id"),
@@ -77,7 +84,7 @@ func (r *Repository) GetStockItemsByTransfer(transferID int) (*[]models.StockIte
 	return &stocks, nil
 }
 
-func (r *Repository) moveNonSerializedItems(tx *goqu.TxDatabase, unserializedItems []models.UnserializedItemRequest, toLocationID int, fromLocationID int) error {
+func (r *StockRepository) MoveNonSerializedItems(tx *goqu.TxDatabase, unserializedItems []models.UnserializedItemRequest, toLocationID int, fromLocationID int) error {
 	for _, unserializedItem := range unserializedItems {
 		query := tx.Insert("non_serialized_items").
 			Rows(goqu.Record{
@@ -127,57 +134,8 @@ func (r *Repository) moveNonSerializedItems(tx *goqu.TxDatabase, unserializedIte
 	return nil
 }
 
-func (r *Repository) RemoveStockItemFromTransfer(transferReq transfer_request.RemoveStockItemFromTransferRequest) error {
-	return WithTransaction(r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		if err := decreaseStockInTransfer(tx, transferReq); err != nil {
-			return err
-		}
-
-		if err := removeZeroQuantityStock(r.GoquDBWrapper, transferReq); err != nil {
-			return err
-		}
-
-		var previousLocation int
-		_, err := tx.Select("to_location_id").From("transfers").Where(goqu.Ex{"id": transferReq.TransferID}).Executor().ScanVal(&previousLocation)
-		if err != nil {
-			return fmt.Errorf("failed to fetch to_location_id: %w", err)
-		}
-
-		if err := restoreStockToLocation(tx, transferReq, previousLocation); err != nil {
-			return err
-		}
-
-		return nil
-	})
-}
-
-func decreaseStockInTransfer(tx *goqu.TxDatabase, transferReq transfer_request.RemoveStockItemFromTransferRequest) error {
-	updateResult, err := tx.Update("non_serialized_transfers").
-		Set(goqu.Record{"quantity": goqu.L("quantity - ?", transferReq.Quantity)}).
-		Where(goqu.Ex{
-			"transfer_id":      transferReq.TransferID,
-			"item_category_id": transferReq.CategoryID,
-		}).
-		Where(goqu.C("quantity").Gte(transferReq.Quantity)).
-		Executor().
-		Exec()
-	if err != nil {
-		return fmt.Errorf("failed to lower stock from transfer %d: %w", transferReq.TransferID, err)
-	}
-
-	rowsAffected, err := updateResult.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		return fmt.Errorf("insufficient stock for item_category_id %d at location %d", transferReq.CategoryID, transferReq.LocationID)
-	}
-
-	return nil
-}
-
-func removeZeroQuantityStock(dbWrapper *goqu.Database, transferReq transfer_request.RemoveStockItemFromTransferRequest) error {
-	deleteQuery := dbWrapper.Delete("non_serialized_transfers").
+func (r *StockRepository) RemoveZeroQuantityStock(tx *goqu.TxDatabase, transferReq RemoveStockItemFromTransferRequest) error {
+	deleteQuery := tx.Delete("non_serialized_transfers").
 		Where(goqu.Ex{
 			"item_category_id": transferReq.CategoryID,
 			"transfer_id":      transferReq.TransferID,
@@ -192,7 +150,7 @@ func removeZeroQuantityStock(dbWrapper *goqu.Database, transferReq transfer_requ
 }
 
 // TODO add handling to remove from previous location
-func restoreStockToLocation(tx *goqu.TxDatabase, transferReq transfer_request.RemoveStockItemFromTransferRequest, previousLocation int) error {
+func RestoreStockToLocation(tx *goqu.TxDatabase, transferReq RemoveStockItemFromTransferRequest, previousLocation int) error {
 	_, err := tx.Update("non_serialized_items").
 		Set(goqu.Record{"quantity": goqu.L("quantity + ?", transferReq.Quantity)}).
 		Where(goqu.Ex{

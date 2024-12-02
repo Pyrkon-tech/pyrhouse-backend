@@ -1,9 +1,9 @@
-package transfer_request
+package stocks
 
-type RemoveItemFromTransferRequest struct {
-	ID         int `uri:"id" binding:"required"`
-	ItemID     int `uri:"item_id" binding:"required"`
+type StockItemRequest struct {
+	CategoryID int `json:"category_id" binding:"required"`
 	LocationID int `json:"location_id"`
+	Quantity   int `json:"quantity" binding:"required"`
 }
 
 type RemoveStockItemFromTransferRequest struct {

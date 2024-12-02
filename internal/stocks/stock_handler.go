@@ -3,28 +3,33 @@ package stocks
 import (
 	"net/http"
 	"warehouse/internal/repository"
-	stock_request "warehouse/internal/stocks/request"
 	"warehouse/pkg/auditlog"
 
 	"github.com/gin-gonic/gin"
 )
 
 type StockHandler struct {
-	Repository *repository.Repository
-	AuditLog   *auditlog.Auditlog
+	Repository      *repository.Repository
+	StockRepository *StockRepository
+	AuditLog        *auditlog.Auditlog
 }
 
-func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Auditlog) {
-	handler := StockHandler{
-		Repository: r,
-		AuditLog:   a,
-	}
+func NewStockHandler(r *repository.Repository, a *auditlog.Auditlog) *StockHandler {
+	stockRepo := NewRepository(r)
 
-	router.POST("/stocks", handler.CreateStock)
+	return &StockHandler{
+		Repository:      r,
+		StockRepository: stockRepo,
+		AuditLog:        a,
+	}
+}
+
+func (h *StockHandler) RegisterRoutes(router *gin.Engine) {
+	router.POST("/stocks", h.CreateStock)
 }
 
 func (h *StockHandler) CreateStock(c *gin.Context) {
-	var stockRequest stock_request.StockItemRequest
+	var stockRequest StockItemRequest
 
 	if err := c.ShouldBindJSON(&stockRequest); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
@@ -34,7 +39,7 @@ func (h *StockHandler) CreateStock(c *gin.Context) {
 		stockRequest.LocationID = 1 // setting up default location if other is not provided
 	}
 
-	stockItem, err := h.Repository.PersistStockItem(stockRequest)
+	stockItem, err := h.StockRepository.PersistStockItem(stockRequest)
 
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create stock item"})

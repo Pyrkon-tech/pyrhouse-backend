@@ -3,7 +3,7 @@ package assets
 import (
 	"net/http"
 	"strconv"
-	"warehouse/internal/pyrcode"
+	"warehouse/internal/metadata"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
 	custom_error "warehouse/pkg/errors"
@@ -18,22 +18,25 @@ type ItemHandler struct {
 	AuditLog   *auditlog.Auditlog
 }
 
-func RegisterRoutes(router *gin.Engine, r *repository.Repository, a *auditlog.Auditlog) {
-	handler := ItemHandler{
+func NewAssetHandler(r *repository.Repository, a *auditlog.Auditlog) *ItemHandler {
+	return &ItemHandler{
 		Repository: r,
 		AuditLog:   a,
 	}
-	router.GET("/assets/serial/:serial", handler.GetItemByPyrCode)
+}
+
+func (h *ItemHandler) RegisterRoutes(router *gin.Engine) {
+	router.GET("/assets/serial/:serial", h.GetItemByPyrCode)
 
 	// move to main when appropriate
 	protectedRoutes := router.Group("")
 	protectedRoutes.Use(security.JWTMiddleware())
 	{
-		protectedRoutes.DELETE("/assets/:id", security.Authorize("admin"), handler.RemoveAsset)
-		protectedRoutes.POST("/assets/categories", handler.CreateItemCategory)
-		protectedRoutes.POST("/assets", handler.CreateAsset)
-		protectedRoutes.GET("/assets/categories", security.Authorize("admin"), handler.GetItemCategories)
-		protectedRoutes.DELETE("/assets/categories/:id", handler.RemoveItemCategory)
+		protectedRoutes.DELETE("/assets/:id", security.Authorize("admin"), h.RemoveAsset)
+		protectedRoutes.POST("/assets/categories", h.CreateItemCategory)
+		protectedRoutes.POST("/assets", h.CreateAsset)
+		protectedRoutes.GET("/assets/categories", security.Authorize("admin"), h.GetItemCategories)
+		protectedRoutes.DELETE("/assets/categories/:id", h.RemoveItemCategory)
 	}
 }
 
@@ -60,16 +63,25 @@ func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {
 
 func (h *ItemHandler) CreateAsset(c *gin.Context) {
 
-	itemRequest := models.ItemRequest{
+	req := models.ItemRequest{
 		LocationId: 1,
 		Status:     "in_stock",
 	}
-	if err := c.ShouldBindJSON(&itemRequest); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
 	}
 
-	asset, err := h.Repository.PersistItem(itemRequest)
+	origin, err := metadata.NewOrigin(req.Origin)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid asset origin",
+			"details": err.Error(),
+		})
+		return
+	}
+	req.Origin = origin.String()
+	asset, err := h.Repository.PersistItem(req)
 
 	if err != nil {
 		switch err.(type) {
@@ -82,7 +94,7 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 		}
 	}
 
-	pyrCode := pyrcode.NewPyrCode(asset)
+	pyrCode := metadata.NewPyrCode(asset)
 	asset.PyrCode = pyrCode.GeneratePyrCode()
 	go h.Repository.UpdatePyrCode(asset.ID, asset.PyrCode)
 	go h.AuditLog.Log(

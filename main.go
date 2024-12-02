@@ -7,13 +7,10 @@ import (
 	"time"
 
 	"warehouse/cmd"
+	"warehouse/internal/container"
 	"warehouse/internal/routes"
 
 	"warehouse/internal/database"
-	"warehouse/internal/repository"
-	AuditLogRepository "warehouse/internal/repository/auditlog"
-	UserRepository "warehouse/internal/repository/user"
-	"warehouse/pkg/auditlog"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -47,18 +44,15 @@ func main() {
 	defer db.Close()
 	log.Println("[DB]: Setup completed")
 
-	repository := repository.NewRepository(db)
-	auditLogRepository := AuditLogRepository.NewRepository(repository)
-	userRepository := UserRepository.NewRepository(repository)
-	auditLog := auditlog.NewAuditLog(auditLogRepository)
-	router := setupRouter(repository, auditLog, userRepository)
+	container := container.NewAppContainer(db)
+	router := setupRouter(container)
 
 	if err := router.Run(os.Getenv("APP_HOST")); err != nil {
 		panic(err)
 	}
 }
 
-func setupRouter(repo *repository.Repository, auditLog *auditlog.Auditlog, userRepo *UserRepository.UserRepository) *gin.Engine {
+func setupRouter(container *container.Container) *gin.Engine {
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5000"}, // Add your domain and localhost
@@ -69,8 +63,8 @@ func setupRouter(repo *repository.Repository, auditLog *auditlog.Auditlog, userR
 		MaxAge:           12 * time.Hour,
 	}))
 
-	routes.RegisterPublicRoutes(router, repo, auditLog)
-	routes.RegisterProtectedRoutes(router, repo, auditLog, userRepo)
+	routes.RegisterPublicRoutes(router, container)
+	routes.RegisterProtectedRoutes(router, container)
 	routes.RegisterUtilityRoutes(router)
 
 	log.Println("[Router]: Setup completed")

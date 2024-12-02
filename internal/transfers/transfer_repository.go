@@ -1,14 +1,24 @@
-package repository
+package transfers
 
 import (
 	"fmt"
 	"time"
+	"warehouse/internal/repository"
+	"warehouse/internal/stocks"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 )
 
-func (r *Repository) CanTransferNonSerializedItems(assets []models.UnserializedItemRequest, locationID int) (map[int]bool, error) {
+type TransferRepository struct {
+	Repo *repository.Repository
+}
+
+func NewRepository(r *repository.Repository) *TransferRepository {
+	return &TransferRepository{Repo: r}
+}
+
+func (r *TransferRepository) CanTransferNonSerializedItems(assets []models.UnserializedItemRequest, locationID int) (map[int]bool, error) {
 	conditions := make([]goqu.Expression, 0, len(assets))
 	for _, asset := range assets {
 		conditions = append(conditions, goqu.And(
@@ -18,7 +28,7 @@ func (r *Repository) CanTransferNonSerializedItems(assets []models.UnserializedI
 		))
 	}
 
-	sql, args, err := r.GoquDBWrapper.From("non_serialized_items").
+	sql, args, err := r.Repo.GoquDBWrapper.From("non_serialized_items").
 		Select("item_category_id").
 		Where(goqu.Or(conditions...)).
 		ToSQL()
@@ -27,7 +37,7 @@ func (r *Repository) CanTransferNonSerializedItems(assets []models.UnserializedI
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	rows, err := r.DB.Query(sql, args...)
+	rows, err := r.Repo.DB.Query(sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -45,33 +55,6 @@ func (r *Repository) CanTransferNonSerializedItems(assets []models.UnserializedI
 	return result, nil
 }
 
-func (r *Repository) PerformTransfer(req models.TransferRequest, transitStatus string) (int, error) {
-	var transferID int
-
-	err := WithTransaction(r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		var err error
-		if transferID, err = r.insertTransferRecord(tx, req); err != nil {
-			return fmt.Errorf("failed to insert transfer record: %w", err)
-		}
-
-		if err = r.handleSerializedItems(tx, transferID, req.SerialziedItemCollection, req.LocationID, transitStatus); err != nil {
-			return err
-		}
-
-		if err = r.handleNonSerializedItems(tx, transferID, req.UnserializedItemCollection, req.LocationID, req.FromLocationID); err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return 0, err
-	}
-
-	return transferID, nil
-}
-
 type FlatTransfer struct {
 	ID               int       `db:"transfer_id"`
 	FromLocationID   int       `db:"from_location_id"`
@@ -82,10 +65,11 @@ type FlatTransfer struct {
 	Status           string    `db:"transfer_status"`
 }
 
-func (r *Repository) GetTransfer(transferID int) (*models.Transfer, error) {
+// TODO Service method
+func (r *TransferRepository) GetTransferRow(transferID int) (*FlatTransfer, error) {
 	var flatTransfer FlatTransfer
 
-	query := r.GoquDBWrapper.
+	query := r.Repo.GoquDBWrapper.
 		Select(
 			goqu.I("t.id").As("transfer_id"),
 			goqu.I("l1.id").As("from_location_id"),
@@ -111,37 +95,12 @@ func (r *Repository) GetTransfer(transferID int) (*models.Transfer, error) {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}
 
-	assets, err := r.GetTransferAssets(transferID)
-	if err != nil {
-		return nil, err
-	}
-	stockItems, err := r.GetStockItemsByTransfer(transferID)
-	if err != nil {
-		return nil, err
-	}
-
-	transfer := models.Transfer{
-		ID: flatTransfer.ID,
-		FromLocation: models.Location{
-			ID:   flatTransfer.FromLocationID,
-			Name: flatTransfer.FromLocationName,
-		},
-		ToLocation: models.Location{
-			ID:   flatTransfer.ToLocationID,
-			Name: flatTransfer.ToLocationName,
-		},
-		TransferDate:         flatTransfer.TransferDate,
-		Status:               flatTransfer.Status,
-		AssetsCollection:     *assets,
-		StockItemsCollection: *stockItems,
-	}
-
-	return &transfer, nil
+	return &flatTransfer, nil
 }
 
-func (r *Repository) ConfirmTransfer(transferID int, status string) error {
+func (r *TransferRepository) ConfirmTransfer(transferID int, status string) error {
 	// TODO Transaction + remove transit status (do we really need this status?)
-	query := r.GoquDBWrapper.
+	query := r.Repo.GoquDBWrapper.
 		Update("transfers").
 		Set(goqu.Record{
 			"status": status,
@@ -157,7 +116,7 @@ func (r *Repository) ConfirmTransfer(transferID int, status string) error {
 	return nil
 }
 
-func (r *Repository) moveSerializedItems(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error {
+func (r *TransferRepository) MoveSerializedItems(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error {
 	locationCase := goqu.Case()
 	transitStatusCase := goqu.Case()
 
@@ -180,39 +139,7 @@ func (r *Repository) moveSerializedItems(tx *goqu.TxDatabase, assets []int, loca
 	return nil
 }
 
-func (r *Repository) handleSerializedItems(tx *goqu.TxDatabase, transferID int, assets []int, locationID int, transitStatus string) error {
-	if len(assets) == 0 {
-		return nil
-	}
-
-	if err := r.insertSerializedItemTransferRecord(tx, transferID, assets); err != nil {
-		return fmt.Errorf("failed to insert serialized asset transfer record: %w", err)
-	}
-
-	if err := r.moveSerializedItems(tx, assets, locationID, transitStatus); err != nil {
-		return fmt.Errorf("failed to move serialized assets: %w", err)
-	}
-
-	return nil
-}
-
-func (r *Repository) handleNonSerializedItems(tx *goqu.TxDatabase, transferID int, assets []models.UnserializedItemRequest, locationID, fromLocationID int) error {
-	if len(assets) == 0 {
-		return nil
-	}
-
-	if err := r.insertNonSerializedItemTransferRecord(tx, transferID, assets); err != nil {
-		return fmt.Errorf("failed to insert non-serialized asset transfer record: %w", err)
-	}
-
-	if err := r.moveNonSerializedItems(tx, assets, locationID, fromLocationID); err != nil {
-		return fmt.Errorf("failed to move non-serialized assets: %w", err)
-	}
-
-	return nil
-}
-
-func (r *Repository) insertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error) {
+func (r *TransferRepository) InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error) {
 	query := tx.Insert("transfers").
 		Rows(goqu.Record{
 			"from_location_id": req.FromLocationID,
@@ -229,7 +156,7 @@ func (r *Repository) insertTransferRecord(tx *goqu.TxDatabase, req models.Transf
 	return transferID, nil
 }
 
-func (r *Repository) insertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error {
+func (r *TransferRepository) InsertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error {
 	var records []goqu.Record
 	for _, itemID := range assets {
 		records = append(records, goqu.Record{
@@ -248,7 +175,7 @@ func (r *Repository) insertSerializedItemTransferRecord(tx *goqu.TxDatabase, tra
 	return nil
 }
 
-func (r *Repository) insertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.UnserializedItemRequest) error {
+func (r *TransferRepository) InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.UnserializedItemRequest) error {
 	var records []goqu.Record
 	for _, unserializedItem := range unserializedItems {
 		records = append(records, goqu.Record{
@@ -263,6 +190,44 @@ func (r *Repository) insertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, 
 	_, err := query.Executor().Exec()
 	if err != nil {
 		return fmt.Errorf("failed to insert serialized asset transfers: %w", err)
+	}
+
+	return nil
+}
+
+func (r *TransferRepository) GetTransferLocationById(tx *goqu.TxDatabase, transferID int) (int, error) {
+	var locationId int
+	_, err := tx.Select("to_location_id").
+		From("transfers").
+		Where(goqu.Ex{"id": transferID}).
+		Executor().
+		ScanVal(&locationId)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch to_location_id: %w", err)
+	}
+	return locationId, nil
+}
+
+func decreaseStockInTransfer(tx *goqu.TxDatabase, transferReq stocks.RemoveStockItemFromTransferRequest) error {
+	updateResult, err := tx.Update("non_serialized_transfers").
+		Set(goqu.Record{"quantity": goqu.L("quantity - ?", transferReq.Quantity)}).
+		Where(goqu.Ex{
+			"transfer_id":      transferReq.TransferID,
+			"item_category_id": transferReq.CategoryID,
+		}).
+		Where(goqu.C("quantity").Gte(transferReq.Quantity)).
+		Executor().
+		Exec()
+	if err != nil {
+		return fmt.Errorf("failed to lower stock from transfer %d: %w", transferReq.TransferID, err)
+	}
+
+	rowsAffected, err := updateResult.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("insufficient stock for item_category_id %d at location %d", transferReq.CategoryID, transferReq.LocationID)
 	}
 
 	return nil

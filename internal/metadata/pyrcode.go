@@ -1,4 +1,4 @@
-package pyrcode
+package metadata
 
 import (
 	"strconv"
@@ -32,7 +32,7 @@ func NewPyrCode(asset *models.Asset) PyrCode {
 
 func getAccessoriesCode(accessories []models.AssetAccessories) string {
 	code := ""
-	for _, _ = range accessories {
+	for range accessories {
 		code += "1"
 	}
 

@@ -1,10 +1,8 @@
 package users
 
 import (
-	"database/sql"
 	"log"
 	"net/http"
-	"warehouse/internal/repository/user"
 	"warehouse/pkg/models"
 	"warehouse/pkg/security"
 
@@ -13,14 +11,18 @@ import (
 )
 
 type UsersHandler struct {
-	Repository *user.UserRepository
+	Repository *UserRepository
 }
 
-func RegisterRoutes(router *gin.RouterGroup, db *sql.DB, r *user.UserRepository) {
-	handler := UsersHandler{Repository: r}
+func NewHandler(r *UserRepository) *UsersHandler {
+	return &UsersHandler{
+		Repository: r,
+	}
+}
 
-	router.POST("/users", security.Authorize("admin"), handler.RegisterUser)
-	router.GET("/users", security.Authorize("moderator"), handler.GetUserList)
+func (h *UsersHandler) RegisterRoutes(router *gin.RouterGroup) {
+	router.POST("/users", security.Authorize("admin"), h.RegisterUser)
+	router.GET("/users", security.Authorize("moderator"), h.GetUserList)
 }
 
 func (h *UsersHandler) RegisterUser(c *gin.Context) {

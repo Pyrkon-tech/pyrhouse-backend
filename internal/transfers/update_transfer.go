@@ -48,13 +48,7 @@ func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
 
 func (h *TransferHandler) confirmTransfer(transferID int) error {
 	var err error
-	status := "completed" // to I need this?
-	// TODO that's not needed at all
-	// stockItems, stockErr := h.Repository.GetStockItemsByTransfer(transferID)
-	// if stockErr != nil || err != nil {
-	// 	return fmt.Errorf("unable to obtain transfer equipment: %s", err.Error())
-	// }
-
+	status := "completed" // Do I need this?
 	// TODO get only ids?
 	assets, err := h.Repository.GetTransferAssets(transferID)
 	assetIDs := func(assets []models.Asset) []int {
@@ -70,7 +64,7 @@ func (h *TransferHandler) confirmTransfer(transferID int) error {
 			return fmt.Errorf("unable to update assets err: %w", err)
 		}
 
-		err = h.Repository.ConfirmTransfer(transferID, status)
+		err = h.TransferRepository.ConfirmTransfer(transferID, status)
 		if err != nil {
 			return err
 		}

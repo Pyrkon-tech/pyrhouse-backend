@@ -3,7 +3,7 @@ package auditlog
 import (
 	"log"
 
-	"warehouse/internal/repository/auditlog"
+	"warehouse/internal/auditlog"
 	"warehouse/pkg/models"
 )
 
@@ -12,7 +12,7 @@ type Persister interface {
 }
 
 type Auditlog struct {
-	r *auditlog.AuditLogRepository
+	r Persister
 }
 
 type Auditable interface {
