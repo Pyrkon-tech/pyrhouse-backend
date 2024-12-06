@@ -1,8 +1,9 @@
-package repository
+package locations
 
 import (
 	"fmt"
 	"log"
+	"warehouse/internal/repository"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
@@ -10,14 +11,22 @@ import (
 	"github.com/lib/pq"
 )
 
+type LocationRepository struct {
+	Repository *repository.Repository
+}
+
 type LocationEquipment struct {
 	Items              []models.Asset
 	NonSerializedItems []models.StockItem
 }
 
-func (r *Repository) GetLocations() (*[]models.Location, error) {
+func NewLocationRepository(r *repository.Repository) *LocationRepository {
+	return &LocationRepository{Repository: r}
+}
+
+func (r *LocationRepository) GetLocations() (*[]models.Location, error) {
 	var locations []models.Location
-	query := r.GoquDBWrapper.Select("id", "name").From("locations")
+	query := r.Repository.GoquDBWrapper.Select("id", "name").From("locations")
 	if err := query.Executor().ScanStructs(&locations); err != nil {
 		return nil, fmt.Errorf("unable to execute SQL: %w", err)
 	}
@@ -25,7 +34,7 @@ func (r *Repository) GetLocations() (*[]models.Location, error) {
 	return &locations, nil
 }
 
-func (r *Repository) GetLocationEquipment(locationID string) (*models.LocationEquipment, error) {
+func (r *LocationRepository) GetLocationEquipment(locationID string) (*models.LocationEquipment, error) {
 	var locationEquipment models.LocationEquipment
 	var err error
 	// TODO error handling
@@ -41,8 +50,8 @@ func (r *Repository) GetLocationEquipment(locationID string) (*models.LocationEq
 	return &locationEquipment, nil
 }
 
-func (r *Repository) PersistLocation(location *models.Location) error {
-	query := r.GoquDBWrapper.Insert("locations").
+func (r *LocationRepository) PersistLocation(location *models.Location) error {
+	query := r.Repository.GoquDBWrapper.Insert("locations").
 		Rows(goqu.Record{
 			"name": location.Name,
 		}).
@@ -61,8 +70,8 @@ func (r *Repository) PersistLocation(location *models.Location) error {
 	return nil
 }
 
-func (r *Repository) RemoveLocation(locationID string) error {
-	result, err := r.GoquDBWrapper.Delete("locations").Where(goqu.Ex{"id": locationID}).Executor().Exec()
+func (r *LocationRepository) RemoveLocation(locationID string) error {
+	result, err := r.Repository.GoquDBWrapper.Delete("locations").Where(goqu.Ex{"id": locationID}).Executor().Exec()
 
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
@@ -84,8 +93,8 @@ func (r *Repository) RemoveLocation(locationID string) error {
 	return nil
 }
 
-func (r *Repository) getLocationAssets(locationID string) ([]models.Asset, error) {
-	query := r.GoquDBWrapper.
+func (r *LocationRepository) getLocationAssets(locationID string) ([]models.Asset, error) {
+	query := r.Repository.GoquDBWrapper.
 		From(goqu.T("items").As("i")).
 		Select(
 			"i.id",
@@ -121,8 +130,8 @@ func (r *Repository) getLocationAssets(locationID string) ([]models.Asset, error
 	return assets, nil
 }
 
-func (r *Repository) getLocationStock(locationID string) ([]models.StockItem, error) {
-	query := r.GoquDBWrapper.
+func (r *LocationRepository) getLocationStock(locationID string) ([]models.StockItem, error) {
+	query := r.Repository.GoquDBWrapper.
 		From(goqu.T("non_serialized_items").As("i")).
 		Select(
 			"i.id",
@@ -156,7 +165,7 @@ func (r *Repository) getLocationStock(locationID string) ([]models.StockItem, er
 	return stockItems, nil
 }
 
-func (r *Repository) prepareQueryConditions(query *goqu.SelectDataset, locationID string) *goqu.SelectDataset {
+func (r *LocationRepository) prepareQueryConditions(query *goqu.SelectDataset, locationID string) *goqu.SelectDataset {
 	return query.
 		LeftJoin(
 			goqu.T("item_category").As("c"),

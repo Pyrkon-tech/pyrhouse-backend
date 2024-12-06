@@ -3,7 +3,6 @@ package locations
 import (
 	"log"
 	"net/http"
-	"warehouse/internal/repository"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
@@ -11,10 +10,10 @@ import (
 )
 
 type LocationHandler struct {
-	Repository *repository.Repository
+	Repository *LocationRepository
 }
 
-func NewLocationHandler(r *repository.Repository) *LocationHandler {
+func NewLocationHandler(r *LocationRepository) *LocationHandler {
 	return &LocationHandler{Repository: r}
 }
 
@@ -50,10 +49,6 @@ func (h *LocationHandler) CreateLocation(c *gin.Context) {
 		return
 	} else if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not insert location"})
-		return
-	}
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
 	}
 

@@ -11,8 +11,8 @@ const (
 	OriginDrugaEra Origin = "druga-era"
 	OriginProbis   Origin = "probis"
 	OriginTargi    Origin = "targowe"
-	OriginPersonal string = "personal"
-	OriginOther    string = "other"
+	OriginPersonal Origin = "personal"
+	OriginOther    Origin = "other"
 )
 
 func (o Origin) IsValid() bool {
@@ -25,9 +25,9 @@ func (o Origin) IsValid() bool {
 }
 
 func (o Origin) isPredefined() bool {
-	if o.ContainsKeyword(OriginPersonal) {
+	if o.ContainsKeyword(string(OriginPersonal)) {
 		return true
-	} else if o.ContainsKeyword(OriginOther) {
+	} else if o.ContainsKeyword(string(OriginOther)) {
 		return true
 	}
 	return false
@@ -38,8 +38,8 @@ func NewOrigin(value string) (Origin, error) {
 	origin := Origin(normalized)
 	if !origin.IsValid() && !origin.isPredefined() {
 		return origin, fmt.Errorf(
-			"value not valid, only valid values are: %s, %s, %s, %s",
-			OriginDrugaEra, OriginProbis, OriginPersonal, OriginOther,
+			"value not valid, only valid values are: %s, %s, %s, %s, %s",
+			OriginDrugaEra, OriginProbis, OriginTargi, OriginPersonal, OriginOther,
 		)
 	}
 
