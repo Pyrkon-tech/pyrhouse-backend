@@ -26,6 +26,8 @@ func NewStockHandler(r *repository.Repository, a *auditlog.Auditlog) *StockHandl
 
 func (h *StockHandler) RegisterRoutes(router *gin.Engine) {
 	router.POST("/stocks", h.CreateStock)
+	router.PATCH("/stocks", h.UpdateStock)
+	router.GET("/stocks", h.GetStocks)
 }
 
 func (h *StockHandler) CreateStock(c *gin.Context) {
@@ -42,7 +44,7 @@ func (h *StockHandler) CreateStock(c *gin.Context) {
 	stockItem, err := h.StockRepository.PersistStockItem(stockRequest)
 
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create stock item"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create stock item", "details": err.Error()})
 		return
 	}
 
@@ -57,4 +59,21 @@ func (h *StockHandler) CreateStock(c *gin.Context) {
 	)
 
 	c.JSON(http.StatusCreated, stockItem)
+}
+
+func (h *StockHandler) UpdateStock(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented"})
+}
+
+func (h *StockHandler) GetStocks(c *gin.Context) {
+	// TODO basic get, should allow rguments like location/category_id
+
+	stockItems, err := h.StockRepository.GetStockItems()
+
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create stock item"})
+		return
+	}
+
+	c.JSON(http.StatusOK, stockItems)
 }

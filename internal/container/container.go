@@ -35,8 +35,8 @@ func NewAppContainer(db *sql.DB) *Container {
 	stockHandler := stocks.NewStockHandler(repo, auditLog)
 	locationRepository := locations.NewLocationRepository(repo)
 	locationHandler := locations.NewLocationHandler(locationRepository)
-
-	transferHandler := transfers.NewHandler(repo, auditLog)
+	transferRepository := transfers.NewRepository(repo)
+	transferHandler := transfers.NewHandler(repo, transferRepository, auditLog)
 
 	return &Container{
 		Repository:      repo,

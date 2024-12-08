@@ -10,15 +10,26 @@ import (
 	"github.com/doug-martin/goqu/v9"
 )
 
-type TransferRepository struct {
+type TransferRepository interface {
+	CanTransferNonSerializedItems(assets []models.UnserializedItemRequest, locationID int) (map[int]bool, error)
+	ConfirmTransfer(transferID int, status string) error
+	GetTransferRow(transferID int) (*FlatTransfer, error)
+	InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error)
+	GetTransferLocationById(tx *goqu.TxDatabase, transferID int) (int, error)
+	InsertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error
+	MoveSerializedItems(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error
+	InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.UnserializedItemRequest) error
+}
+
+type transferRepository struct {
 	Repo *repository.Repository
 }
 
-func NewRepository(r *repository.Repository) *TransferRepository {
-	return &TransferRepository{Repo: r}
+func NewRepository(r *repository.Repository) *transferRepository {
+	return &transferRepository{Repo: r}
 }
 
-func (r *TransferRepository) CanTransferNonSerializedItems(assets []models.UnserializedItemRequest, locationID int) (map[int]bool, error) {
+func (r *transferRepository) CanTransferNonSerializedItems(assets []models.UnserializedItemRequest, locationID int) (map[int]bool, error) {
 	conditions := make([]goqu.Expression, 0, len(assets))
 	for _, asset := range assets {
 		conditions = append(conditions, goqu.And(
@@ -66,7 +77,7 @@ type FlatTransfer struct {
 }
 
 // TODO Service method
-func (r *TransferRepository) GetTransferRow(transferID int) (*FlatTransfer, error) {
+func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, error) {
 	var flatTransfer FlatTransfer
 
 	query := r.Repo.GoquDBWrapper.
@@ -98,7 +109,7 @@ func (r *TransferRepository) GetTransferRow(transferID int) (*FlatTransfer, erro
 	return &flatTransfer, nil
 }
 
-func (r *TransferRepository) ConfirmTransfer(transferID int, status string) error {
+func (r *transferRepository) ConfirmTransfer(transferID int, status string) error {
 	// TODO Transaction + remove transit status (do we really need this status?)
 	query := r.Repo.GoquDBWrapper.
 		Update("transfers").
@@ -116,7 +127,7 @@ func (r *TransferRepository) ConfirmTransfer(transferID int, status string) erro
 	return nil
 }
 
-func (r *TransferRepository) MoveSerializedItems(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error {
+func (r *transferRepository) MoveSerializedItems(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error {
 	locationCase := goqu.Case()
 	transitStatusCase := goqu.Case()
 
@@ -139,7 +150,7 @@ func (r *TransferRepository) MoveSerializedItems(tx *goqu.TxDatabase, assets []i
 	return nil
 }
 
-func (r *TransferRepository) InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error) {
+func (r *transferRepository) InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error) {
 	query := tx.Insert("transfers").
 		Rows(goqu.Record{
 			"from_location_id": req.FromLocationID,
@@ -156,7 +167,7 @@ func (r *TransferRepository) InsertTransferRecord(tx *goqu.TxDatabase, req model
 	return transferID, nil
 }
 
-func (r *TransferRepository) InsertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error {
+func (r *transferRepository) InsertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error {
 	var records []goqu.Record
 	for _, itemID := range assets {
 		records = append(records, goqu.Record{
@@ -175,7 +186,7 @@ func (r *TransferRepository) InsertSerializedItemTransferRecord(tx *goqu.TxDatab
 	return nil
 }
 
-func (r *TransferRepository) InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.UnserializedItemRequest) error {
+func (r *transferRepository) InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.UnserializedItemRequest) error {
 	var records []goqu.Record
 	for _, unserializedItem := range unserializedItems {
 		records = append(records, goqu.Record{
@@ -195,7 +206,7 @@ func (r *TransferRepository) InsertNonSerializedItemTransferRecord(tx *goqu.TxDa
 	return nil
 }
 
-func (r *TransferRepository) GetTransferLocationById(tx *goqu.TxDatabase, transferID int) (int, error) {
+func (r *transferRepository) GetTransferLocationById(tx *goqu.TxDatabase, transferID int) (int, error) {
 	var locationId int
 	_, err := tx.Select("to_location_id").
 		From("transfers").

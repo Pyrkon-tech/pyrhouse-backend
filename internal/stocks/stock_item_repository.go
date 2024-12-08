@@ -41,6 +41,55 @@ func (r *StockRepository) PersistStockItem(stockRequest StockItemRequest) (*mode
 	return &stockItem, nil
 }
 
+func (r *StockRepository) GetStockItems() (*[]models.StockItem, error) {
+	var flatStocks []models.FlatStockRecord
+	// Query to fetch flat stock data
+	query := r.repository.GoquDBWrapper.
+		Select(
+			goqu.I("s.id").As("stock_id"),
+			goqu.I("s.quantity").As("quantity"),
+			goqu.I("c.id").As("category_id"),
+			goqu.I("c.item_category").As("category_type"),
+			goqu.I("c.label").As("category_label"),
+			goqu.I("c.pyr_id").As("category_pyr_id"),
+			goqu.I("l.id").As("location_id"),
+			goqu.I("l.name").As("location_name"),
+		).
+		From(goqu.T("non_serialized_items").As("s")).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"s.item_category_id": goqu.I("c.id")}),
+		).
+		LeftJoin(
+			goqu.T("locations").As("l"),
+			goqu.On(goqu.Ex{"s.location_id": goqu.I("l.id")}),
+		)
+
+	err := query.Executor().ScanStructs(&flatStocks)
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to select stock items from database: %s", err.Error())
+	}
+	var stocks []models.StockItem
+	for _, flatStock := range flatStocks {
+		stocks = append(stocks, models.StockItem{
+			ID:       flatStock.ID,
+			Quantity: flatStock.Quantity,
+			Category: models.ItemCategory{
+				ID:    flatStock.CategoryID,
+				Type:  flatStock.CategoryType,
+				Label: flatStock.CategoryLabel,
+			},
+			Location: models.Location{
+				ID:   flatStock.LocationID,
+				Name: flatStock.LocationName,
+			},
+		})
+	}
+
+	return &stocks, nil
+}
+
 func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.StockItem, error) {
 	var flatStocks []models.StockItemFlat
 	// Query to fetch flat stock data

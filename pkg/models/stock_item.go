@@ -19,3 +19,14 @@ type StockItemFlat struct {
 	CategoryID int `db:"category_id"`
 	Quantity   int `db:"quantity"`
 }
+
+type FlatStockRecord struct {
+	ID            int    `db:"stock_id"`
+	Quantity      int    `db:"quantity"`
+	LocationID    int    `db:"location_id"`
+	LocationName  string `db:"location_name"`
+	CategoryID    int    `db:"category_id"`
+	CategoryType  string `db:"category_type"`
+	CategoryLabel string `db:"category_label"`
+	CategoryPyrId string `db:"category_pyr_id"`
+}

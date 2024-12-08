@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+type MockRepository struct {
+	mock.Mock
+}
+
 type MockTransferRepository struct {
 	mock.Mock
 }
@@ -39,12 +43,13 @@ func (m *MockStockRepository) MoveNonSerializedItems(tx *goqu.TxDatabase, assets
 }
 
 func TestPerformTransfer(t *testing.T) {
+	mockRepo := new(MockRepository)
 	mockTransferRepo := new(MockTransferRepository)
 	mockStockRepo := new(MockStockRepository)
 
 	transferService := TransferService{
-		r:         mockTransferRepo, // TODO should be interface
-		stockRepo: mockStockRepo,
+		r:  mockRepo,
+		tr: mockTransferRepo,
 	}
 
 	tx := new(goqu.TxDatabase) // Mock the transaction if needed

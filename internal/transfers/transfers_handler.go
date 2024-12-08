@@ -15,19 +15,18 @@ import (
 
 type TransferHandler struct {
 	Repository         *repository.Repository //TODO
-	TransferRepository *TransferRepository
+	TransferRepository TransferRepository
 	Service            *TransferService
 	AuditLog           *auditlog.Auditlog
 }
 
-func NewHandler(r *repository.Repository, a *auditlog.Auditlog) *TransferHandler {
-	transferRepo := &TransferRepository{Repo: r}
+func NewHandler(r *repository.Repository, tr TransferRepository, a *auditlog.Auditlog) *TransferHandler {
 	stockRepo := stocks.NewRepository(r)
 
 	return &TransferHandler{
 		Repository:         r,
-		TransferRepository: transferRepo,
-		Service:            &TransferService{transferRepo, stockRepo},
+		TransferRepository: tr,
+		Service:            &TransferService{r, tr, stockRepo},
 		AuditLog:           a,
 	}
 }

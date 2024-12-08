@@ -10,16 +10,17 @@ import (
 )
 
 type TransferService struct {
-	r         *TransferRepository
+	r         *repository.Repository
+	tr        TransferRepository
 	stockRepo *stocks.StockRepository
 }
 
 func (s *TransferService) PerformTransfer(req models.TransferRequest, transitStatus string) (int, error) {
 	var transferID int
 
-	err := repository.WithTransaction(s.r.Repo.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+	err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		var err error
-		if transferID, err = s.r.InsertTransferRecord(tx, req); err != nil {
+		if transferID, err = s.tr.InsertTransferRecord(tx, req); err != nil {
 			return fmt.Errorf("failed to insert transfer record: %w", err)
 		}
 
@@ -42,9 +43,9 @@ func (s *TransferService) PerformTransfer(req models.TransferRequest, transitSta
 }
 
 func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) {
-	flatTransfer, err := s.r.GetTransferRow(transferID)
+	flatTransfer, err := s.tr.GetTransferRow(transferID)
 
-	assets, err := s.r.Repo.GetTransferAssets(transferID)
+	assets, err := s.r.GetTransferAssets(transferID)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +74,7 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 }
 
 func (s *TransferService) RemoveStockItemFromTransfer(transferReq stocks.RemoveStockItemFromTransferRequest) error {
-	return repository.WithTransaction(s.r.Repo.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+	return repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		if err := decreaseStockInTransfer(tx, transferReq); err != nil {
 			return err
 		}
@@ -82,7 +83,7 @@ func (s *TransferService) RemoveStockItemFromTransfer(transferReq stocks.RemoveS
 			return err
 		}
 
-		previousLocation, err := s.r.GetTransferLocationById(tx, transferReq.TransferID)
+		previousLocation, err := s.tr.GetTransferLocationById(tx, transferReq.TransferID)
 		if err != nil {
 			return err
 		}
@@ -100,11 +101,11 @@ func (s *TransferService) handleSerializedItems(tx *goqu.TxDatabase, transferID 
 		return nil
 	}
 
-	if err := s.r.InsertSerializedItemTransferRecord(tx, transferID, assets); err != nil {
+	if err := s.tr.InsertSerializedItemTransferRecord(tx, transferID, assets); err != nil {
 		return fmt.Errorf("failed to insert serialized asset transfer record: %w", err)
 	}
 
-	if err := s.r.MoveSerializedItems(tx, assets, locationID, transitStatus); err != nil {
+	if err := s.tr.MoveSerializedItems(tx, assets, locationID, transitStatus); err != nil {
 		return fmt.Errorf("failed to move serialized assets: %w", err)
 	}
 
@@ -116,7 +117,7 @@ func (s *TransferService) handleNonSerializedItems(tx *goqu.TxDatabase, transfer
 		return nil
 	}
 
-	if err := s.r.InsertNonSerializedItemTransferRecord(tx, transferID, assets); err != nil {
+	if err := s.tr.InsertNonSerializedItemTransferRecord(tx, transferID, assets); err != nil {
 		return fmt.Errorf("failed to insert non-serialized asset transfer record: %w", err)
 	}
 
