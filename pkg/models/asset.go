@@ -2,8 +2,6 @@ package models
 
 import (
 	"database/sql"
-	"encoding/json"
-	"fmt"
 )
 
 const (
@@ -41,18 +39,12 @@ type FlatAssetRecord struct {
 	CategoryPyrId string         `db:"category_pyr_id"`
 }
 
-func (fa *FlatAssetRecord) TransformToAsset() (Asset, error) {
-	var accessories []AssetAccessories
-	if err := json.Unmarshal(fa.Accessories, &accessories); err != nil {
-		return Asset{}, fmt.Errorf("failed to unmarshal accessories: %w", err)
-	}
-
+func (fa *FlatAssetRecord) TransformToAsset() Asset {
 	return Asset{
-		ID:          fa.ID,
-		Serial:      fa.Serial,
-		Status:      fa.Status,
-		PyrCode:     fa.PyrCode.String,
-		Accessories: accessories,
+		ID:      fa.ID,
+		Serial:  fa.Serial,
+		Status:  fa.Status,
+		PyrCode: fa.PyrCode.String,
 		Location: Location{
 			ID:   fa.LocationId,
 			Name: fa.LocationName,
@@ -63,7 +55,7 @@ func (fa *FlatAssetRecord) TransformToAsset() (Asset, error) {
 			Label: fa.CategoryLabel,
 			PyrID: fa.CategoryPyrId,
 		},
-	}, nil
+	}
 }
 
 func (a *Asset) CreateLogView() AuditLog {

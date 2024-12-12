@@ -6,17 +6,16 @@ import (
 )
 
 type PyrCode struct {
-	init      string
-	category  string
-	id        string
-	accessory string
+	init     string
+	category string
+	id       string
 }
 
 const Init string = "PYR"
 
 func (pyr *PyrCode) GeneratePyrCode() string {
 
-	return pyr.init + "-" + pyr.category + pyr.id + pyr.accessory
+	return pyr.init + "-" + pyr.category + pyr.id
 }
 
 func NewPyrCode(asset *models.Asset) PyrCode {
@@ -25,16 +24,6 @@ func NewPyrCode(asset *models.Asset) PyrCode {
 	code.init = Init
 	code.category = asset.Category.PyrID
 	code.id = strconv.Itoa(asset.ID)
-	code.accessory = getAccessoriesCode(asset.Accessories)
-
-	return code
-}
-
-func getAccessoriesCode(accessories []models.AssetAccessories) string {
-	code := ""
-	for range accessories {
-		code += "1"
-	}
 
 	return code
 }

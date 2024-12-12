@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"warehouse/internal/assets"
 	auditLogRepo "warehouse/internal/auditlog"
+	"warehouse/internal/items"
 	"warehouse/internal/locations"
 	"warehouse/internal/repository"
 	"warehouse/internal/stocks"
@@ -22,6 +23,7 @@ type Container struct {
 	LocationHandler *locations.LocationHandler
 	TransferHandler *transfers.TransferHandler
 	UserHandler     *users.UsersHandler
+	ItemHandler     *items.ItemHandler
 }
 
 func NewAppContainer(db *sql.DB) *Container {
@@ -32,11 +34,13 @@ func NewAppContainer(db *sql.DB) *Container {
 	userHandler := users.NewHandler(userRepo)
 	loginHandler := security.NewLoginHandler(repo)
 	assetHandler := assets.NewAssetHandler(repo, auditLog)
-	stockHandler := stocks.NewStockHandler(repo, auditLog)
+	stockRepo := stocks.NewRepository(repo)
+	stockHandler := stocks.NewStockHandler(repo, stockRepo, auditLog)
 	locationRepository := locations.NewLocationRepository(repo)
 	locationHandler := locations.NewLocationHandler(locationRepository)
 	transferRepository := transfers.NewRepository(repo)
 	transferHandler := transfers.NewHandler(repo, transferRepository, auditLog)
+	itemsHandler := items.NewItemHandler(repo, stockRepo)
 
 	return &Container{
 		Repository:      repo,
@@ -47,5 +51,6 @@ func NewAppContainer(db *sql.DB) *Container {
 		LocationHandler: locationHandler,
 		TransferHandler: transferHandler,
 		UserHandler:     userHandler,
+		ItemHandler:     itemsHandler,
 	}
 }

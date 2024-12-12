@@ -16,6 +16,7 @@ func RegisterPublicRoutes(router *gin.Engine, container *container.Container) {
 	container.StockHandler.RegisterRoutes(router)
 	container.TransferHandler.RegisterRoutes(router)
 	container.LocationHandler.RegisterRoutes(router)
+	container.ItemHandler.RegisterRoutes(router)
 }
 
 func RegisterProtectedRoutes(router *gin.Engine, container *container.Container) {

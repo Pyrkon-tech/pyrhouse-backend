@@ -14,12 +14,11 @@ type StockHandler struct {
 	AuditLog        *auditlog.Auditlog
 }
 
-func NewStockHandler(r *repository.Repository, a *auditlog.Auditlog) *StockHandler {
-	stockRepo := NewRepository(r)
+func NewStockHandler(r *repository.Repository, sr *StockRepository, a *auditlog.Auditlog) *StockHandler {
 
 	return &StockHandler{
 		Repository:      r,
-		StockRepository: stockRepo,
+		StockRepository: sr,
 		AuditLog:        a,
 	}
 }

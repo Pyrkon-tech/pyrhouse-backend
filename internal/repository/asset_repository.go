@@ -19,7 +19,7 @@ func (r *Repository) GetItem(id int) (*models.Asset, error) {
 	return r.fetchFlatAssetByCondition(goqu.Ex{"i.id": id})
 }
 
-func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*models.Asset, error) {
+func (r *Repository) GetAssets() (*[]models.Asset, error) {
 	query := r.GoquDBWrapper.Select(
 		goqu.I("i.id").As("asset_id"),
 		"i.status",
@@ -41,22 +41,22 @@ func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*mode
 		LeftJoin(
 			goqu.T("locations").As("l"),
 			goqu.On(goqu.Ex{"i.location_id": goqu.I("l.id")}),
-		).
-		Where(condition)
+		)
 
-	var flatAsset models.FlatAssetRecord
-	_, err := query.Executor().ScanStruct(&flatAsset)
-
-	if err != nil {
-		return nil, fmt.Errorf("unable to select asset from database: %s", err.Error())
-	}
-	asset, err := flatAsset.TransformToAsset()
+	var flatAssets []models.FlatAssetRecord
+	err := query.Executor().ScanStructs(&flatAssets)
 
 	if err != nil {
-		return nil, fmt.Errorf("unable to fetch asset accessories from database: %s", err.Error())
+		return nil, fmt.Errorf("unable to select assets from database: %s", err.Error())
 	}
 
-	return &asset, nil
+	var assets []models.Asset
+	for _, flatAsset := range flatAssets {
+		asset := flatAsset.TransformToAsset()
+		assets = append(assets, asset)
+	}
+
+	return &assets, nil
 }
 
 func (r *Repository) HasRelatedItems(categoryID string) bool {
@@ -255,4 +255,40 @@ func (r *Repository) GetTransferAssets(transferID int) (*[]models.Asset, error) 
 	}
 
 	return &assets, nil
+}
+
+func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*models.Asset, error) {
+	query := r.GoquDBWrapper.Select(
+		goqu.I("i.id").As("asset_id"),
+		"i.status",
+		goqu.I("i.item_serial").As("item_serial"),
+		goqu.I("i.accessories").As("accessories"),
+		goqu.I("i.pyr_code").As("pyr_code"),
+		goqu.I("c.id").As("category_id"),
+		goqu.I("c.item_category").As("category_type"),
+		goqu.I("c.label").As("category_label"),
+		goqu.I("c.pyr_id").As("category_pyr_id"),
+		goqu.I("l.id").As("location_id"),
+		goqu.I("l.name").As("location_name"),
+	).
+		From(goqu.T("items").As("i")).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),
+		).
+		LeftJoin(
+			goqu.T("locations").As("l"),
+			goqu.On(goqu.Ex{"i.location_id": goqu.I("l.id")}),
+		).
+		Where(condition)
+
+	var flatAsset models.FlatAssetRecord
+	_, err := query.Executor().ScanStruct(&flatAsset)
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to select asset from database: %s", err.Error())
+	}
+	asset := flatAsset.TransformToAsset()
+
+	return &asset, nil
 }
