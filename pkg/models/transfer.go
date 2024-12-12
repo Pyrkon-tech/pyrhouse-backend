@@ -5,13 +5,14 @@ import (
 )
 
 type Transfer struct {
-	ID                   int         `json:"id"`
-	FromLocation         Location    `json:"from_location"`
-	ToLocation           Location    `json:"to_location"`
-	AssetsCollection     []Asset     `json:"assets"`
-	StockItemsCollection []StockItem `json:"stock_items"`
-	TransferDate         time.Time   `json:"transfer_date"`
-	Status               string      `json:"status"`
+	ID                   int           `json:"id"`
+	FromLocation         Location      `json:"from_location"`
+	ToLocation           Location      `json:"to_location"`
+	ItemCollection       []interface{} `json:"items"`
+	AssetsCollection     []Asset
+	StockItemsCollection []StockItem
+	TransferDate         time.Time `json:"transfer_date"`
+	Status               string    `json:"status"`
 }
 
 func (t *Transfer) CreateLogView() AuditLog {

@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	custom_error "warehouse/pkg/errors"
@@ -15,33 +14,12 @@ func (r *Repository) FindItemByPyrCode(pyrCode string) (*models.Asset, error) {
 	return r.fetchFlatAssetByCondition(goqu.Ex{"i.pyr_code": pyrCode})
 }
 
-func (r *Repository) GetItem(id int) (*models.Asset, error) {
+func (r *Repository) GetAsset(id int) (*models.Asset, error) {
 	return r.fetchFlatAssetByCondition(goqu.Ex{"i.id": id})
 }
 
 func (r *Repository) GetAssets() (*[]models.Asset, error) {
-	query := r.GoquDBWrapper.Select(
-		goqu.I("i.id").As("asset_id"),
-		"i.status",
-		goqu.I("i.item_serial").As("item_serial"),
-		goqu.I("i.accessories").As("accessories"),
-		goqu.I("i.pyr_code").As("pyr_code"),
-		goqu.I("c.id").As("category_id"),
-		goqu.I("c.item_category").As("category_type"),
-		goqu.I("c.label").As("category_label"),
-		goqu.I("c.pyr_id").As("category_pyr_id"),
-		goqu.I("l.id").As("location_id"),
-		goqu.I("l.name").As("location_name"),
-	).
-		From(goqu.T("items").As("i")).
-		LeftJoin(
-			goqu.T("item_category").As("c"),
-			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),
-		).
-		LeftJoin(
-			goqu.T("locations").As("l"),
-			goqu.On(goqu.Ex{"i.location_id": goqu.I("l.id")}),
-		)
+	query := r.getAssetQuery()
 
 	var flatAssets []models.FlatAssetRecord
 	err := query.Executor().ScanStructs(&flatAssets)
@@ -91,11 +69,6 @@ func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool
 }
 
 func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset, error) {
-	accessoriesJSON, err := json.Marshal(itemRequest.Accessories)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal accessories: %w", err)
-	}
-
 	var assetID int
 
 	query := r.GoquDBWrapper.Insert("items").
@@ -104,7 +77,6 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset,
 			"location_id":      itemRequest.LocationId,
 			"item_category_id": itemRequest.CategoryId,
 			"status":           itemRequest.Status,
-			"accessories":      accessoriesJSON,
 		}).
 		Returning("id")
 
@@ -115,7 +87,7 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset,
 		return nil, fmt.Errorf("failed to insert asset record: %w", err)
 	}
 
-	asset, err := r.GetItem(assetID)
+	asset, err := r.GetAsset(assetID)
 
 	if err != nil {
 		return nil, err
@@ -144,17 +116,6 @@ func (r *Repository) UpdatePyrCode(assetID int, pyrCode string) error {
 	}
 
 	return nil
-}
-
-func (r *Repository) updateAsset(record goqu.Record, condition goqu.Expression) error {
-	query := r.GoquDBWrapper.
-		Update("items").
-		Set(record).
-		Where(condition)
-
-	_, err := query.Executor().Exec()
-
-	return err
 }
 
 func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
@@ -235,34 +196,82 @@ func (r *Repository) RemoveAsset(assetID int) (string, error) {
 }
 
 func (r *Repository) GetTransferAssets(transferID int) (*[]models.Asset, error) {
-	var assets []models.Asset
-
 	query := r.GoquDBWrapper.
 		Select(
 			goqu.I("a.id").As("asset_id"),
 			goqu.I("a.item_serial").As("item_serial"),
+			"a.status",
+			goqu.I("a.pyr_code").As("pyr_code"),
+			goqu.I("c.id").As("category_id"),
+			goqu.I("c.item_category").As("category_type"),
+			goqu.I("c.label").As("category_label"),
+			goqu.I("c.pyr_id").As("category_pyr_id"),
+			goqu.I("l.id").As("location_id"),
+			goqu.I("l.name").As("location_name"),
 		).
 		From(goqu.T("serialized_transfers").As("ta")).
 		LeftJoin(
 			goqu.T("items").As("a"),
 			goqu.On(goqu.Ex{"ta.item_id": goqu.I("a.id")}),
 		).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"a.item_category_id": goqu.I("c.id")}),
+		).
+		LeftJoin(
+			goqu.T("locations").As("l"),
+			goqu.On(goqu.Ex{"a.location_id": goqu.I("l.id")}),
+		).
 		Where(goqu.Ex{"ta.transfer_id": transferID})
-	err := query.Executor().ScanStructs(&assets)
+
+	var flatAssets []models.FlatAssetRecord
+
+	err := query.Executor().ScanStructs(&flatAssets)
 
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement for assets: %w", err)
+	}
+
+	var assets []models.Asset
+	for _, flatAsset := range flatAssets {
+		asset := flatAsset.TransformToAsset()
+		assets = append(assets, asset)
 	}
 
 	return &assets, nil
 }
 
 func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*models.Asset, error) {
-	query := r.GoquDBWrapper.Select(
+	query := r.getAssetQuery()
+	query.Where(condition)
+
+	var flatAsset models.FlatAssetRecord
+	_, err := query.Executor().ScanStruct(&flatAsset)
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to select asset from database: %s", err.Error())
+	}
+	asset := flatAsset.TransformToAsset()
+
+	return &asset, nil
+}
+
+func (r *Repository) updateAsset(record goqu.Record, condition goqu.Expression) error {
+	query := r.GoquDBWrapper.
+		Update("items").
+		Set(record).
+		Where(condition)
+
+	_, err := query.Executor().Exec()
+
+	return err
+}
+
+func (r *Repository) getAssetQuery() *goqu.SelectDataset {
+	return r.GoquDBWrapper.Select(
 		goqu.I("i.id").As("asset_id"),
 		"i.status",
 		goqu.I("i.item_serial").As("item_serial"),
-		goqu.I("i.accessories").As("accessories"),
 		goqu.I("i.pyr_code").As("pyr_code"),
 		goqu.I("c.id").As("category_id"),
 		goqu.I("c.item_category").As("category_type"),
@@ -279,16 +288,5 @@ func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*mode
 		LeftJoin(
 			goqu.T("locations").As("l"),
 			goqu.On(goqu.Ex{"i.location_id": goqu.I("l.id")}),
-		).
-		Where(condition)
-
-	var flatAsset models.FlatAssetRecord
-	_, err := query.Executor().ScanStruct(&flatAsset)
-
-	if err != nil {
-		return nil, fmt.Errorf("unable to select asset from database: %s", err.Error())
-	}
-	asset := flatAsset.TransformToAsset()
-
-	return &asset, nil
+		)
 }

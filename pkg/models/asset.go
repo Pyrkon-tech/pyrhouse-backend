@@ -11,18 +11,12 @@ const (
 )
 
 type Asset struct {
-	ID          int                `json:"id" db:"asset_id"`
-	Serial      string             `json:"serial" db:"item_serial"`
-	Location    Location           `json:"location,omitempty"`
-	Category    ItemCategory       `json:"category"`
-	Status      string             `json:"status"`
-	PyrCode     string             `json:"pyrcode"`
-	Accessories []AssetAccessories `json:"accessories" db:"accessories"`
-}
-
-type AssetAccessories struct {
-	Name  string `json:"name"`
-	Label string `json:"label"`
+	ID       int          `json:"id" db:"asset_id"`
+	Serial   string       `json:"serial" db:"item_serial"`
+	Location Location     `json:"location,omitempty"`
+	Category ItemCategory `json:"category"`
+	Status   string       `json:"status"`
+	PyrCode  string       `json:"pyrcode"`
 }
 
 type FlatAssetRecord struct {
@@ -30,7 +24,6 @@ type FlatAssetRecord struct {
 	Serial        string         `db:"item_serial"`
 	Status        string         `db:"status"`
 	PyrCode       sql.NullString `db:"pyr_code"`
-	Accessories   []byte         `db:"accessories"`
 	LocationId    int            `db:"location_id"`
 	LocationName  string         `db:"location_name"`
 	CategoryId    int            `db:"category_id"`

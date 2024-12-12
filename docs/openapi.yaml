@@ -68,6 +68,20 @@ paths:
                 properties:
                   token:
                     type: string
+  /items:
+    get:
+      tags:
+        - items
+      description: Returns array of items both with serial and with quantity
+      parameters:
+        - name: status
+          in: query
+          description: Status values that need to be considered for filter
+          required: true
+          explode: true
+          schema:
+            type: array
+            
   /assets:
     post:
       tags:
@@ -84,38 +98,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Item"
           description: created
-    get:
-      tags:
-        - asset
-      summary: NOT IMPLEMENTED YET
-      description: ...
-      operationId: findPetsByStatus
-      parameters:
-        - name: status
-          in: query
-          description: Status values that need to be considered for filter
-          required: true
-          explode: true
-          schema:
-            type: array
-            assets:
-              type: string
-              enum:
-                - available
-                - pending
-                - sold
-              default: available
-      responses:
-        "200":
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Item"
-        "400":
-          description: Invalid status value 
   /assets/{serial}:
     get:
       tags: 
@@ -541,16 +523,6 @@ components:
                   - targowe
                   - personal-{}
                   - other-{}
-              accessories:
-                required: false
-                type: array
-                items:
-                  type: object
-                  properties:
-                    name:
-                      type: string
-                    label:
-                      type: string
 
     TransferRequest:
       content:
@@ -567,16 +539,18 @@ components:
                 example: 1
                 required: true
                 description: desired location, invalid name-to fix
-              serialized_item_collection:
+              items:
                 type: array
                 items:
-                  type: integer
-                  format: int64
-                  example: [1, 2, 3]
-              unserialized_item_collection:
-                type: array
-                items:
-                  $ref: "#/components/schemas/StockItem"
+                  type: object
+                  properties:
+                    id:
+                      required: true
+                      type: integer
+                      format: int64
+                    quantity:
+                      type: integer
+                      format: int32
 
     UserCreateRequest:
       content:
@@ -656,8 +630,7 @@ components:
           $ref: "#/components/schemas/Location"
         category:
           $ref: "#/components/schemas/ItemCategory"
-        accessories:
-          type: array
+
     Stock:
       type: object
       properties:

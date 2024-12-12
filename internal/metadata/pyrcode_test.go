@@ -14,42 +14,14 @@ func TestNewPyrCode(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Basic Case - No Accessories",
+			name: "Basic Case",
 			asset: models.Asset{
 				ID: 123,
 				Category: models.ItemCategory{
 					PyrID: "LT",
 				},
-				Accessories: []models.AssetAccessories{},
 			},
 			expected: "PYR-LT123",
-		},
-		{
-			name: "With Accessories",
-			asset: models.Asset{
-				ID: 456,
-				Category: models.ItemCategory{
-					PyrID: "PC",
-				},
-				Accessories: []models.AssetAccessories{
-					{Name: "Mouse", Label: "Mouse"},
-					{Name: "Keyboard", Label: "Keyboard"},
-				},
-			},
-			expected: "PYR-PC45611", // Accessories represented by "11"
-		},
-		{
-			name: "With One Accessory",
-			asset: models.Asset{
-				ID: 789,
-				Category: models.ItemCategory{
-					PyrID: "MT",
-				},
-				Accessories: []models.AssetAccessories{
-					{Name: "Microphone", Label: "Mic"},
-				},
-			},
-			expected: "PYR-MT7891", // Accessories represented by "1"
 		},
 	}
 

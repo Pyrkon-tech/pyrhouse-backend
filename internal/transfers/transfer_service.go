@@ -24,11 +24,11 @@ func (s *TransferService) PerformTransfer(req models.TransferRequest, transitSta
 			return fmt.Errorf("failed to insert transfer record: %w", err)
 		}
 
-		if err = s.handleSerializedItems(tx, transferID, req.SerialziedItemCollection, req.LocationID, transitStatus); err != nil {
+		if err = s.handleSerializedItems(tx, transferID, req.AssetItemCollection, req.LocationID, transitStatus); err != nil {
 			return err
 		}
 
-		if err = s.handleNonSerializedItems(tx, transferID, req.UnserializedItemCollection, req.LocationID, req.FromLocationID); err != nil {
+		if err = s.handleNonSerializedItems(tx, transferID, req.StockItemCollection, req.LocationID, req.FromLocationID); err != nil {
 			return err
 		}
 
@@ -64,11 +64,20 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 			ID:   flatTransfer.ToLocationID,
 			Name: flatTransfer.ToLocationName,
 		},
-		TransferDate:         flatTransfer.TransferDate,
-		Status:               flatTransfer.Status,
-		AssetsCollection:     *assets,
-		StockItemsCollection: *stockItems,
+		TransferDate: flatTransfer.TransferDate,
+		Status:       flatTransfer.Status,
 	}
+
+	var combinedItems []interface{}
+
+	for _, asset := range *assets {
+		combinedItems = append(combinedItems, asset)
+	}
+	for _, stock := range *stockItems {
+		combinedItems = append(combinedItems, stock)
+	}
+
+	transfer.ItemCollection = combinedItems
 
 	return &transfer, nil
 }

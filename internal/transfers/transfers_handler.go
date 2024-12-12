@@ -67,9 +67,21 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 	}
 	itemTransitStatus := "in_transit"
 
-	if len(transferRequest.SerialziedItemCollection) == 0 && len(transferRequest.UnserializedItemCollection) == 0 {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Cannot create empty transport"})
+	if len(transferRequest.ItemCollection) == 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Cannot create empty transfer"})
 		return
+	}
+
+	for _, item := range transferRequest.ItemCollection {
+		switch {
+		case item.Quantity == 0:
+			transferRequest.AssetItemCollection = append(transferRequest.AssetItemCollection, item.ID)
+		default:
+			transferRequest.StockItemCollection = append(transferRequest.StockItemCollection, models.UnserializedItemRequest{
+				ItemCategoryID: item.ID,
+				Quantity:       item.Quantity,
+			})
+		}
 	}
 
 	var err error
@@ -102,6 +114,17 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 	log.Println("transfer ID: ", transferID)
 
 	go h.createTransferAuditLogEntry("in_transfer", transfer)
+
+	var combinedItems []interface{}
+
+	for _, asset := range transfer.AssetsCollection {
+		combinedItems = append(combinedItems, asset)
+	}
+	for _, stock := range transfer.StockItemsCollection {
+		combinedItems = append(combinedItems, stock)
+	}
+
+	transfer.ItemCollection = combinedItems
 
 	c.JSON(http.StatusCreated, transfer)
 }
@@ -225,8 +248,8 @@ type ValidationError struct {
 func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) ([]ValidationError, error) {
 	var validationState []ValidationError
 
-	if len(transferRequest.SerialziedItemCollection) > 0 {
-		hasItemsOnStock, err := h.Repository.HasItemsInLocation(transferRequest.SerialziedItemCollection, transferRequest.FromLocationID)
+	if len(transferRequest.AssetItemCollection) > 0 {
+		hasItemsOnStock, err := h.Repository.HasItemsInLocation(transferRequest.AssetItemCollection, transferRequest.FromLocationID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to validate serialized assets: %w", err)
 		}
@@ -238,13 +261,13 @@ func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) 
 		}
 	}
 
-	if len(transferRequest.UnserializedItemCollection) > 0 {
-		hasEnoughQuantity, err := h.TransferRepository.CanTransferNonSerializedItems(transferRequest.UnserializedItemCollection, transferRequest.FromLocationID)
+	if len(transferRequest.StockItemCollection) > 0 {
+		hasEnoughQuantity, err := h.TransferRepository.CanTransferNonSerializedItems(transferRequest.StockItemCollection, transferRequest.FromLocationID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to validate non-serialized assets: %w", err)
 		}
 
-		if len(hasEnoughQuantity) != len(transferRequest.UnserializedItemCollection) {
+		if len(hasEnoughQuantity) != len(transferRequest.StockItemCollection) {
 			validationState = append(validationState, ValidationError{
 				Message:  "Non-serialized assets are not present in location",
 				Property: "unserialized_item_collection",
