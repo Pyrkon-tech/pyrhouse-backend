@@ -73,14 +73,18 @@ paths:
       tags:
         - items
       description: Returns array of items both with serial and with quantity
-      parameters:
-        - name: status
-          in: query
-          description: Status values that need to be considered for filter
-          required: true
-          explode: true
-          schema:
-            type: array
+      responses:
+        "200":
+          description: List of combined stock items and assets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Item"
             
   /assets:
     post:
@@ -98,6 +102,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Item"
           description: created
+
   /assets/{serial}:
     get:
       tags: 

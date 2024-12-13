@@ -186,6 +186,7 @@ func (r *transferRepository) InsertSerializedItemTransferRecord(tx *goqu.TxDatab
 	return nil
 }
 
+// TODO remodel to stock_id
 func (r *transferRepository) InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.UnserializedItemRequest) error {
 	var records []goqu.Record
 	for _, unserializedItem := range unserializedItems {

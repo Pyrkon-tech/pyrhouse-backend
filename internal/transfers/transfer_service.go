@@ -121,16 +121,16 @@ func (s *TransferService) handleSerializedItems(tx *goqu.TxDatabase, transferID 
 	return nil
 }
 
-func (s *TransferService) handleNonSerializedItems(tx *goqu.TxDatabase, transferID int, assets []models.UnserializedItemRequest, locationID, fromLocationID int) error {
-	if len(assets) == 0 {
+func (s *TransferService) handleNonSerializedItems(tx *goqu.TxDatabase, transferID int, stocks []models.UnserializedItemRequest, locationID, fromLocationID int) error {
+	if len(stocks) == 0 {
 		return nil
 	}
 
-	if err := s.tr.InsertNonSerializedItemTransferRecord(tx, transferID, assets); err != nil {
+	if err := s.tr.InsertNonSerializedItemTransferRecord(tx, transferID, stocks); err != nil {
 		return fmt.Errorf("failed to insert non-serialized asset transfer record: %w", err)
 	}
 
-	if err := s.stockRepo.MoveNonSerializedItems(tx, assets, locationID, fromLocationID); err != nil {
+	if err := s.stockRepo.MoveNonSerializedItems(tx, stocks, locationID, fromLocationID); err != nil {
 		return fmt.Errorf("failed to move non-serialized assets: %w", err)
 	}
 
