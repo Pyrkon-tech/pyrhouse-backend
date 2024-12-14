@@ -26,7 +26,7 @@ func NewAssetHandler(r *repository.Repository, a *auditlog.Auditlog) *ItemHandle
 }
 
 func (h *ItemHandler) RegisterRoutes(router *gin.Engine) {
-	router.GET("/assets/serial/:serial", h.GetItemByPyrCode)
+	router.GET("/assets/pyrcode/:serial", h.GetItemByPyrCode)
 
 	// move to main when appropriate
 	protectedRoutes := router.Group("")

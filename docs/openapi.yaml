@@ -103,18 +103,18 @@ paths:
                 $ref: "#/components/schemas/Item"
           description: created
 
-  /assets/{serial}:
+  /assets/pyrcode/{pyrcode}:
     get:
       tags: 
         - asset
       deprecated: false
       parameters:
         - in: path
-          name: assetID
+          name: pyrcode
           schema:
-            type: integer
+            type: string
           required: true
-          description: Numeric ID of the asset
+          description: Barcode value of item
       responses:
         "200":
             description: successful operation

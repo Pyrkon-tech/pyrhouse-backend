@@ -242,8 +242,7 @@ func (r *Repository) GetTransferAssets(transferID int) (*[]models.Asset, error) 
 }
 
 func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*models.Asset, error) {
-	query := r.getAssetQuery()
-	query.Where(condition)
+	query := r.getAssetQuery().Where(condition)
 
 	var flatAsset models.FlatAssetRecord
 	_, err := query.Executor().ScanStruct(&flatAsset)
