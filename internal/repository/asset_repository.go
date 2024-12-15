@@ -38,7 +38,7 @@ func (r *Repository) GetAssets() (*[]models.Asset, error) {
 }
 
 func (r *Repository) HasRelatedItems(categoryID string) bool {
-	query := `SELECT COUNT(*) FROM assets WHERE item_category_id = $1`
+	query := `SELECT COUNT(*) FROM items WHERE item_category_id = $1`
 	var count int
 	err := r.DB.QueryRow(query, categoryID).Scan(&count)
 	if err != nil {
