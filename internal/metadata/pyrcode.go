@@ -2,7 +2,6 @@ package metadata
 
 import (
 	"strconv"
-	"warehouse/pkg/models"
 )
 
 type PyrCode struct {
@@ -18,12 +17,12 @@ func (pyr *PyrCode) GeneratePyrCode() string {
 	return pyr.init + "-" + pyr.category + pyr.id
 }
 
-func NewPyrCode(asset *models.Asset) PyrCode {
+func NewPyrCode(pyrID string, assetID int) PyrCode {
 	var code PyrCode
 
 	code.init = Init
-	code.category = asset.Category.PyrID
-	code.id = strconv.Itoa(asset.ID)
+	code.category = pyrID
+	code.id = strconv.Itoa(assetID)
 
 	return code
 }

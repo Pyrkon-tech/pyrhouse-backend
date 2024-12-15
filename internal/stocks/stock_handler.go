@@ -2,6 +2,7 @@ package stocks
 
 import (
 	"net/http"
+	"warehouse/internal/metadata"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
 
@@ -39,6 +40,15 @@ func (h *StockHandler) CreateStock(c *gin.Context) {
 	if stockRequest.LocationID == 0 {
 		stockRequest.LocationID = 1 // setting up default location if other is not provided
 	}
+	origin, err := metadata.NewOrigin(stockRequest.Origin)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid asset origin",
+			"details": err.Error(),
+		})
+		return
+	}
+	stockRequest.Origin = origin.String()
 
 	stockItem, err := h.StockRepository.PersistStockItem(stockRequest)
 

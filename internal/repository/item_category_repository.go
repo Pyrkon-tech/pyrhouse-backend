@@ -15,6 +15,7 @@ func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
 	query := r.GoquDBWrapper.Select(
 		goqu.I("id").As("category_id"),
 		goqu.I("item_category").As("type"),
+		goqu.I("category_type").As("category_type"),
 		goqu.I("label"),
 		goqu.I("pyr_id"),
 	).
@@ -32,9 +33,10 @@ func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
 func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*models.ItemCategory, error) {
 	query := r.GoquDBWrapper.Insert("item_category").
 		Rows(goqu.Record{
-			"item_category": itemCategory.Type,
+			"item_category": itemCategory.Name,
 			"label":         itemCategory.Label,
 			"pyr_id":        itemCategory.PyrID,
+			"category_type": itemCategory.Type,
 		}).
 		Returning("id")
 
@@ -68,4 +70,19 @@ func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
 	}
 
 	return nil
+}
+
+func (r *Repository) GetCategoryType(ID int) (string, error) {
+	var categoryType string
+	query := r.GoquDBWrapper.Select(goqu.I("category_type").As("category_type")).
+		From("item_category").
+		Where(goqu.Ex{"id": ID})
+
+	_, err := query.Executor().ScanVal(&categoryType)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to query categories: %w", err)
+	}
+
+	return categoryType, err
 }

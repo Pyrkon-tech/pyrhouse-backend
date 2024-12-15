@@ -81,6 +81,18 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 		return
 	}
 	req.Origin = origin.String()
+
+	categoryType, err := h.Repository.GetCategoryType(req.CategoryId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Unable to check category type", "details": err.Error()})
+		return
+	}
+
+	if categoryType != "asset" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid category type", "details": "Category must be an asset"})
+		return
+	}
+
 	asset, err := h.Repository.PersistItem(req)
 
 	if err != nil {
@@ -94,7 +106,7 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 		}
 	}
 
-	pyrCode := metadata.NewPyrCode(asset)
+	pyrCode := metadata.NewPyrCode(asset.Category.PyrID, asset.ID)
 	asset.PyrCode = pyrCode.GeneratePyrCode()
 	go h.Repository.UpdatePyrCode(asset.ID, asset.PyrCode)
 	go h.AuditLog.Log(

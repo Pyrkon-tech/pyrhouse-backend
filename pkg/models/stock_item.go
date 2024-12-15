@@ -5,6 +5,7 @@ type StockItem struct { // Non-Serializied Item
 	Category ItemCategory `json:"category" db:"category"`
 	Location Location     `json:"location,omitempty"`
 	Quantity int          `json:"quantity" db:"quantity"`
+	Origin   string       `json:"origin"`
 }
 
 func (a StockItem) CreateLogView() AuditLog {
@@ -29,4 +30,5 @@ type FlatStockRecord struct {
 	CategoryType  string `db:"category_type"`
 	CategoryLabel string `db:"category_label"`
 	CategoryPyrId string `db:"category_pyr_id"`
+	Origin        string `db:"origin"`
 }

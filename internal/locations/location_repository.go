@@ -119,7 +119,7 @@ func (r *LocationRepository) getLocationAssets(locationID string) ([]models.Asse
 			&asset.Serial,
 			&asset.Status,
 			&asset.Category.ID,
-			&asset.Category.Type,
+			&asset.Category.Name,
 			&asset.Category.Label,
 		); err != nil {
 			return nil, fmt.Errorf("unable fetch data: %w", err)
@@ -154,7 +154,7 @@ func (r *LocationRepository) getLocationStock(locationID string) ([]models.Stock
 			&item.ID,
 			&item.Quantity,
 			&item.Category.ID,
-			&item.Category.Type,
+			&item.Category.Name,
 			&item.Category.Label,
 		); err != nil {
 			return nil, fmt.Errorf("unable fetch data: %w", err)

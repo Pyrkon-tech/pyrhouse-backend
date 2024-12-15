@@ -77,6 +77,7 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset,
 			"location_id":      itemRequest.LocationId,
 			"item_category_id": itemRequest.CategoryId,
 			"status":           itemRequest.Status,
+			"origin":           itemRequest.Origin,
 		}).
 		Returning("id")
 
@@ -272,6 +273,7 @@ func (r *Repository) getAssetQuery() *goqu.SelectDataset {
 		"i.status",
 		goqu.I("i.item_serial").As("item_serial"),
 		goqu.I("i.pyr_code").As("pyr_code"),
+		goqu.I("i.origin").As("origin"),
 		goqu.I("c.id").As("category_id"),
 		goqu.I("c.item_category").As("category_type"),
 		goqu.I("c.label").As("category_label"),

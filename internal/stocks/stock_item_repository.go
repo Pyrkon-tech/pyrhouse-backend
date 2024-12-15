@@ -48,6 +48,7 @@ func (r *StockRepository) GetStockItems() (*[]models.StockItem, error) {
 		Select(
 			goqu.I("s.id").As("stock_id"),
 			goqu.I("s.quantity").As("quantity"),
+			goqu.I("s.origin").As("origin"),
 			goqu.I("c.id").As("category_id"),
 			goqu.I("c.item_category").As("category_type"),
 			goqu.I("c.label").As("category_label"),
@@ -77,7 +78,7 @@ func (r *StockRepository) GetStockItems() (*[]models.StockItem, error) {
 			Quantity: flatStock.Quantity,
 			Category: models.ItemCategory{
 				ID:    flatStock.CategoryID,
-				Type:  flatStock.CategoryType,
+				Name:  flatStock.CategoryType,
 				Label: flatStock.CategoryLabel,
 			},
 			Location: models.Location{

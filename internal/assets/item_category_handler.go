@@ -30,7 +30,7 @@ func (h *ItemHandler) CreateItemCategory(c *gin.Context) {
 	}
 
 	if req.PyrID == "" {
-		str := req.Type
+		str := req.Name
 		str = str[:3]
 		req.PyrID = strings.ToUpper(str)
 	}
