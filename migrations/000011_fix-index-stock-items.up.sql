@@ -1,0 +1,4 @@
+BEGIN;
+ALTER TABLE non_serialized_items DROP CONSTRAINT non_serialized_items_item_category_id_location_id_key;
+ALTER TABLE non_serialized_items ADD CONSTRAINT non_serialized_items_unique_constraint UNIQUE (item_category_id, location_id, origin);
+COMMIT;
