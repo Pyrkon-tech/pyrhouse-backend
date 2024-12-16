@@ -83,6 +83,7 @@ func (r *StockRepository) GetStockItems() (*[]models.StockItem, error) {
 		stocks = append(stocks, models.StockItem{
 			ID:       flatStock.ID,
 			Quantity: flatStock.Quantity,
+			Origin:   flatStock.Origin,
 			Category: models.ItemCategory{
 				ID:    flatStock.CategoryID,
 				Name:  flatStock.CategoryType,
