@@ -44,7 +44,9 @@ func (s *TransferService) PerformTransfer(req models.TransferRequest, transitSta
 
 func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) {
 	flatTransfer, err := s.tr.GetTransferRow(transferID)
-
+	if err != nil {
+		return nil, err
+	}
 	assets, err := s.r.GetTransferAssets(transferID)
 	if err != nil {
 		return nil, err
@@ -64,24 +66,53 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 			ID:   flatTransfer.ToLocationID,
 			Name: flatTransfer.ToLocationName,
 		},
-		TransferDate: flatTransfer.TransferDate,
-		Status:       flatTransfer.Status,
+		AssetsCollection:     *assets,
+		StockItemsCollection: *stockItems,
+		TransferDate:         flatTransfer.TransferDate,
+		Status:               flatTransfer.Status,
 	}
 
-	var combinedItems []interface{}
+	// var combinedItems []interface{}
 
-	for _, asset := range *assets {
-		combinedItems = append(combinedItems, asset)
-	}
-	for _, stock := range *stockItems {
-		combinedItems = append(combinedItems, stock)
-	}
+	// for _, asset := range *assets {
+	// 	combinedItems = append(combinedItems, asset)
+	// }
+	// for _, stock := range *stockItems {
+	// 	combinedItems = append(combinedItems, stock)
+	// }
 
-	transfer.ItemCollection = combinedItems
+	// transfer.ItemCollection = combinedItems
 
 	return &transfer, nil
 }
 
+func (s *TransferService) GetTransfers() (*[]models.Transfer, error) {
+	flatTransfers, err := s.tr.GetTransferRows()
+	if err != nil {
+		return nil, err
+	}
+
+	var transfers []models.Transfer
+
+	for _, flatTransfer := range *flatTransfers {
+
+		transfers = append(transfers, models.Transfer{
+			ID: flatTransfer.ID,
+			FromLocation: models.Location{
+				ID:   flatTransfer.FromLocationID,
+				Name: flatTransfer.FromLocationName,
+			},
+			ToLocation: models.Location{
+				ID:   flatTransfer.ToLocationID,
+				Name: flatTransfer.ToLocationName,
+			},
+			TransferDate: flatTransfer.TransferDate,
+			Status:       flatTransfer.Status,
+		})
+
+	}
+	return &transfers, nil
+}
 func (s *TransferService) RemoveStockItemFromTransfer(transferReq stocks.RemoveStockItemFromTransferRequest) error {
 	return repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		if err := decreaseStockInTransfer(tx, transferReq); err != nil {

@@ -33,6 +33,7 @@ func NewHandler(r *repository.Repository, tr TransferRepository, a *auditlog.Aud
 
 func (h *TransferHandler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/transfers/:id", h.GetTransfer)
+	router.GET("/transfers", h.GetTransfers)
 	router.POST("/transfers", h.CreateTransfer)
 	router.PATCH("/transfers/:id/confirm", h.UpdateTransfer)
 	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", h.RemoveAssetFromTransfer)
@@ -55,6 +56,18 @@ func (h *TransferHandler) GetTransfer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, transfer)
+}
+
+func (h *TransferHandler) GetTransfers(c *gin.Context) {
+
+	transfers, err := h.Service.GetTransfers()
+	if err != nil {
+		log.Println("Error executing SQL statement: ", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to get transfer", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, transfers)
 }
 
 func (h *TransferHandler) CreateTransfer(c *gin.Context) {

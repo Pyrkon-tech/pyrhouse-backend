@@ -14,6 +14,7 @@ type TransferRepository interface {
 	CanTransferNonSerializedItems(assets []models.StockItemRequest, locationID int) (map[int]bool, error)
 	ConfirmTransfer(transferID int, status string) error
 	GetTransferRow(transferID int) (*FlatTransfer, error)
+	GetTransferRows() (*[]FlatTransfer, error)
 	InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error)
 	GetTransferLocationById(tx *goqu.TxDatabase, transferID int) (int, error)
 	InsertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error
@@ -107,6 +108,38 @@ func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, erro
 	}
 
 	return &flatTransfer, nil
+}
+
+func (r *transferRepository) GetTransferRows() (*[]FlatTransfer, error) {
+	var flatTransfers []FlatTransfer
+
+	query := r.Repo.GoquDBWrapper.
+		Select(
+			goqu.I("t.id").As("transfer_id"),
+			goqu.I("l1.id").As("from_location_id"),
+			goqu.I("l1.name").As("from_location_name"),
+			goqu.I("l2.id").As("to_location_id"),
+			goqu.I("l2.name").As("to_location_name"),
+			goqu.I("t.status").As("transfer_status"),
+			goqu.I("t.transfer_date").As("transfer_date"),
+			//TODO goqu.I("t.receiver").As("transfer_receiver"),
+		).
+		From(goqu.T("transfers").As("t")).
+		LeftJoin(
+			goqu.T("locations").As("l1"),
+			goqu.On(goqu.Ex{"t.from_location_id": goqu.I("l1.id")}),
+		).
+		LeftJoin(
+			goqu.T("locations").As("l2"),
+			goqu.On(goqu.Ex{"t.to_location_id": goqu.I("l2.id")}),
+		)
+	err := query.Executor().ScanStructs(&flatTransfers)
+
+	if err != nil {
+		return nil, fmt.Errorf("error executing SQL statement: %w", err)
+	}
+
+	return &flatTransfers, nil
 }
 
 func (r *transferRepository) ConfirmTransfer(transferID int, status string) error {
