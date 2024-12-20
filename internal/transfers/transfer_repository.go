@@ -11,14 +11,14 @@ import (
 )
 
 type TransferRepository interface {
-	CanTransferNonSerializedItems(assets []models.UnserializedItemRequest, locationID int) (map[int]bool, error)
+	CanTransferNonSerializedItems(assets []models.StockItemRequest, locationID int) (map[int]bool, error)
 	ConfirmTransfer(transferID int, status string) error
 	GetTransferRow(transferID int) (*FlatTransfer, error)
 	InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error)
 	GetTransferLocationById(tx *goqu.TxDatabase, transferID int) (int, error)
 	InsertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error
 	MoveSerializedItems(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error
-	InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.UnserializedItemRequest) error
+	InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.StockItemRequest) error
 }
 
 type transferRepository struct {
@@ -29,18 +29,18 @@ func NewRepository(r *repository.Repository) *transferRepository {
 	return &transferRepository{Repo: r}
 }
 
-func (r *transferRepository) CanTransferNonSerializedItems(assets []models.UnserializedItemRequest, locationID int) (map[int]bool, error) {
-	conditions := make([]goqu.Expression, 0, len(assets))
-	for _, asset := range assets {
+func (r *transferRepository) CanTransferNonSerializedItems(stocks []models.StockItemRequest, locationID int) (map[int]bool, error) {
+	conditions := make([]goqu.Expression, 0, len(stocks))
+	for _, stockItem := range stocks {
 		conditions = append(conditions, goqu.And(
-			goqu.C("item_category_id").Eq(asset.ItemCategoryID),
+			goqu.C("id").Eq(stockItem.ID),
 			goqu.C("location_id").Eq(locationID),
-			goqu.C("quantity").Gte(asset.Quantity),
+			goqu.C("quantity").Gte(stockItem.Quantity),
 		))
 	}
 
 	sql, args, err := r.Repo.GoquDBWrapper.From("non_serialized_items").
-		Select("item_category_id").
+		Select("id").
 		Where(goqu.Or(conditions...)).
 		ToSQL()
 
@@ -187,13 +187,14 @@ func (r *transferRepository) InsertSerializedItemTransferRecord(tx *goqu.TxDatab
 }
 
 // TODO remodel to stock_id
-func (r *transferRepository) InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.UnserializedItemRequest) error {
+func (r *transferRepository) InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, stocks []models.StockItemRequest) error {
 	var records []goqu.Record
-	for _, unserializedItem := range unserializedItems {
+	for _, stockItem := range stocks {
 		records = append(records, goqu.Record{
 			"transfer_id":      transferID,
-			"item_category_id": unserializedItem.ItemCategoryID,
-			"quantity":         unserializedItem.Quantity,
+			"item_category_id": goqu.L("(SELECT item_category_id FROM non_serialized_items WHERE id = ?)", stockItem.ID),
+			"stock_id":         stockItem.ID,
+			"quantity":         stockItem.Quantity,
 		})
 	}
 

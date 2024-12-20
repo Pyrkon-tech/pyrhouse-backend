@@ -105,23 +105,24 @@ func (s *TransferService) RemoveStockItemFromTransfer(transferReq stocks.RemoveS
 	})
 }
 
-func (s *TransferService) handleSerializedItems(tx *goqu.TxDatabase, transferID int, assets []int, locationID int, transitStatus string) error {
+func (s *TransferService) handleSerializedItems(tx *goqu.TxDatabase, transferID int, assets []models.AssetItemRequest, locationID int, transitStatus string) error {
 	if len(assets) == 0 {
 		return nil
 	}
+	idList := mapToIDArray(assets)
 
-	if err := s.tr.InsertSerializedItemTransferRecord(tx, transferID, assets); err != nil {
+	if err := s.tr.InsertSerializedItemTransferRecord(tx, transferID, idList); err != nil {
 		return fmt.Errorf("failed to insert serialized asset transfer record: %w", err)
 	}
 
-	if err := s.tr.MoveSerializedItems(tx, assets, locationID, transitStatus); err != nil {
+	if err := s.tr.MoveSerializedItems(tx, idList, locationID, transitStatus); err != nil {
 		return fmt.Errorf("failed to move serialized assets: %w", err)
 	}
 
 	return nil
 }
 
-func (s *TransferService) handleNonSerializedItems(tx *goqu.TxDatabase, transferID int, stocks []models.UnserializedItemRequest, locationID, fromLocationID int) error {
+func (s *TransferService) handleNonSerializedItems(tx *goqu.TxDatabase, transferID int, stocks []models.StockItemRequest, locationID, fromLocationID int) error {
 	if len(stocks) == 0 {
 		return nil
 	}
@@ -135,4 +136,52 @@ func (s *TransferService) handleNonSerializedItems(tx *goqu.TxDatabase, transfer
 	}
 
 	return nil
+}
+
+type ValidationError struct {
+	Message  string `json:"message"`
+	Property string `json:"property"`
+}
+
+func (s *TransferService) ValidateStock(transferRequest models.TransferRequest) ([]ValidationError, error) {
+	var validationState []ValidationError
+
+	if len(transferRequest.AssetItemCollection) > 0 {
+		assetIDs := mapToIDArray(transferRequest.AssetItemCollection)
+		hasItemsOnStock, err := s.r.HasItemsInLocation(assetIDs, transferRequest.FromLocationID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate serialized assets: %w", err)
+		}
+		if !hasItemsOnStock {
+			validationState = append(validationState, ValidationError{
+				Message:  "Serialized assets are not present in location",
+				Property: "assets",
+			})
+		}
+	}
+
+	if len(transferRequest.StockItemCollection) > 0 {
+		hasEnoughQuantity, err := s.tr.CanTransferNonSerializedItems(transferRequest.StockItemCollection, transferRequest.FromLocationID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate Stocks assets: %w", err)
+		}
+
+		if len(hasEnoughQuantity) != len(transferRequest.StockItemCollection) {
+			validationState = append(validationState, ValidationError{
+				Message:  "Non-serialized stocks are not present in location",
+				Property: "stocks",
+			})
+		}
+	}
+
+	return validationState, nil
+}
+
+// Move to repo
+func mapToIDArray(assetsReq []models.AssetItemRequest) []int {
+	ids := make([]int, len(assetsReq))
+	for i, item := range assetsReq {
+		ids[i] = item.ID
+	}
+	return ids
 }

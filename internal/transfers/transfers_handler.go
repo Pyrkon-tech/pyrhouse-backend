@@ -58,35 +58,23 @@ func (h *TransferHandler) GetTransfer(c *gin.Context) {
 }
 
 func (h *TransferHandler) CreateTransfer(c *gin.Context) {
-	var transferRequest models.TransferRequest
+	var req models.TransferRequest
 
-	if err := c.ShouldBindJSON(&transferRequest); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		log.Fatal(err)
 		return
 	}
 	itemTransitStatus := "in_transit"
 
-	if len(transferRequest.ItemCollection) == 0 {
+	if len(req.AssetItemCollection) == 0 && len(req.StockItemCollection) == 0 {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Cannot create empty transfer"})
 		return
 	}
 
-	for _, item := range transferRequest.ItemCollection {
-		switch {
-		case item.Quantity == 0:
-			transferRequest.AssetItemCollection = append(transferRequest.AssetItemCollection, item.ID)
-		default:
-			transferRequest.StockItemCollection = append(transferRequest.StockItemCollection, models.UnserializedItemRequest{
-				ItemCategoryID: item.ID,
-				Quantity:       item.Quantity,
-			})
-		}
-	}
-
 	var err error
 
-	validationErrors, err := h.ValidateStock(transferRequest)
+	validationErrors, err := h.Service.ValidateStock(req)
 
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to verify stock"})
@@ -99,32 +87,22 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 		return
 	}
 
-	transferID, err := h.Service.PerformTransfer(transferRequest, itemTransitStatus)
+	transferID, err := h.Service.PerformTransfer(req, itemTransitStatus)
 
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to transfer Serialized Items", "path": "serialized_item_collection"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to transfer items", "details": err.Error()})
 		return
 	}
 	transfer, err := h.Service.GetTransfer(transferID)
 
 	if err != nil {
-		c.JSON(http.StatusAccepted, gin.H{"message": "Transfer created successfully but unable to generate full object now", "id": transferID})
+		c.AbortWithStatusJSON(http.StatusAccepted, gin.H{"message": "Transfer created successfully but unable to generate full object now", "id": transferID, "details": err.Error()})
+		return
 	}
 
 	log.Println("transfer ID: ", transferID)
 
 	go h.createTransferAuditLogEntry("in_transfer", transfer)
-
-	var combinedItems []interface{}
-
-	for _, asset := range transfer.AssetsCollection {
-		combinedItems = append(combinedItems, asset)
-	}
-	for _, stock := range transfer.StockItemsCollection {
-		combinedItems = append(combinedItems, stock)
-	}
-
-	transfer.ItemCollection = combinedItems
 
 	c.JSON(http.StatusCreated, transfer)
 }
@@ -238,42 +216,4 @@ func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Stock item removed from transfer successfully"})
-}
-
-type ValidationError struct {
-	Message  string `json:"message"`
-	Property string `json:"property"`
-}
-
-func (h *TransferHandler) ValidateStock(transferRequest models.TransferRequest) ([]ValidationError, error) {
-	var validationState []ValidationError
-
-	if len(transferRequest.AssetItemCollection) > 0 {
-		hasItemsOnStock, err := h.Repository.HasItemsInLocation(transferRequest.AssetItemCollection, transferRequest.FromLocationID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to validate serialized assets: %w", err)
-		}
-		if !hasItemsOnStock {
-			validationState = append(validationState, ValidationError{
-				Message:  "Serialized assets are not present in location",
-				Property: "serialized_item_collection",
-			})
-		}
-	}
-
-	if len(transferRequest.StockItemCollection) > 0 {
-		hasEnoughQuantity, err := h.TransferRepository.CanTransferNonSerializedItems(transferRequest.StockItemCollection, transferRequest.FromLocationID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to validate non-serialized assets: %w", err)
-		}
-
-		if len(hasEnoughQuantity) != len(transferRequest.StockItemCollection) {
-			validationState = append(validationState, ValidationError{
-				Message:  "Non-serialized assets are not present in location",
-				Property: "unserialized_item_collection",
-			})
-		}
-	}
-
-	return validationState, nil
 }

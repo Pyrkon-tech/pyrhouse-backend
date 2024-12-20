@@ -49,10 +49,10 @@ func (r *Repository) HasRelatedItems(categoryID string) bool {
 	return count > 0
 }
 
-func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool, error) {
+func (r *Repository) HasItemsInLocation(assetIDs []int, fromLocationId int) (bool, error) {
 	sql, args, err := r.GoquDBWrapper.Select(goqu.COUNT("id")).From("items").Where(goqu.Ex{
 		"location_id": fromLocationId,
-		"id":          itemIDs,
+		"id":          assetIDs,
 	}).ToSQL()
 
 	if err != nil {
@@ -65,7 +65,7 @@ func (r *Repository) HasItemsInLocation(itemIDs []int, fromLocationId int) (bool
 		return false, fmt.Errorf("failed to execute query: %w", err)
 	}
 
-	return count == len(itemIDs), nil
+	return count == len(assetIDs), nil
 }
 
 func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset, error) {
