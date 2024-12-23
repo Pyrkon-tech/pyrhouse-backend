@@ -9,14 +9,15 @@ import (
 )
 
 type ItemHandler struct {
-	Repository      *repository.Repository
-	StockRepository *stocks.StockRepository
+	service *ItemService
 }
 
 func NewItemHandler(r *repository.Repository, sr *stocks.StockRepository) *ItemHandler {
 	return &ItemHandler{
-		Repository:      r,
-		StockRepository: sr,
+		service: &ItemService{
+			r:  r,
+			sr: sr,
+		},
 	}
 }
 
@@ -25,28 +26,19 @@ func (h *ItemHandler) RegisterRoutes(router *gin.Engine) {
 }
 
 func (h *ItemHandler) GetItems(c *gin.Context) {
-	var combinedItems []interface{}
+	var fetchItemsQuery fetchItemsQuery
 
-	assets, err := h.Repository.GetAssets()
-
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Unable to retrieve asset items", "details": err.Error()})
+	if err := c.ShouldBindQuery(&fetchItemsQuery); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	stocks, err := h.StockRepository.GetStockItems()
+	items, err := h.service.fetchItems(fetchItemsQuery)
 
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Unable to retrieve stock items", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to retrieve items", "details": err.Error()})
 		return
 	}
 
-	for _, asset := range *assets {
-		combinedItems = append(combinedItems, asset)
-	}
-	for _, stock := range *stocks {
-		combinedItems = append(combinedItems, stock)
-	}
-
-	c.JSON(http.StatusOK, combinedItems)
+	c.JSON(http.StatusOK, items)
 }

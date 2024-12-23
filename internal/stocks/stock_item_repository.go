@@ -50,28 +50,46 @@ func (r *StockRepository) PersistStockItem(stockRequest StockItemRequest) (*mode
 
 func (r *StockRepository) GetStockItems() (*[]models.StockItem, error) {
 	var flatStocks []models.FlatStockRecord
-	query := r.repository.GoquDBWrapper.
-		Select(
-			goqu.I("s.id").As("stock_id"),
-			goqu.I("s.quantity").As("quantity"),
-			goqu.I("s.origin").As("origin"),
-			goqu.I("c.id").As("category_id"),
-			goqu.I("c.item_category").As("category_type"),
-			goqu.I("c.label").As("category_label"),
-			goqu.I("c.pyr_id").As("category_pyr_id"),
-			goqu.I("l.id").As("location_id"),
-			goqu.I("l.name").As("location_name"),
-		).
-		From(goqu.T("non_serialized_items").As("s")).
-		LeftJoin(
-			goqu.T("item_category").As("c"),
-			goqu.On(goqu.Ex{"s.item_category_id": goqu.I("c.id")}),
-		).
-		LeftJoin(
-			goqu.T("locations").As("l"),
-			goqu.On(goqu.Ex{"s.location_id": goqu.I("l.id")}),
-		)
+	query := r.getStockItemQuery()
 
+	err := query.Executor().ScanStructs(&flatStocks)
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to select stock items from database: %s", err.Error())
+	}
+	var stocks []models.StockItem
+	for _, flatStock := range flatStocks {
+		stocks = append(stocks, models.StockItem{
+			ID:       flatStock.ID,
+			Quantity: flatStock.Quantity,
+			Origin:   flatStock.Origin,
+			Category: models.ItemCategory{
+				ID:    flatStock.CategoryID,
+				Name:  flatStock.CategoryType,
+				Label: flatStock.CategoryLabel,
+			},
+			Location: models.Location{
+				ID:   flatStock.LocationID,
+				Name: flatStock.LocationName,
+			},
+		})
+	}
+
+	return &stocks, nil
+}
+
+func (r *StockRepository) GetStockItemsBy(conditions repository.QueryBuilder) (*[]models.StockItem, error) {
+
+	aliases := map[string]string{
+		"location_id":    "s.location_id",
+		"category_id":    "s.item_category_id",
+		"category_label": "c.label",
+	}
+
+	query := r.getStockItemQuery()
+	query = query.Where(conditions.BuildConditions(aliases))
+
+	var flatStocks []models.FlatStockRecord
 	err := query.Executor().ScanStructs(&flatStocks)
 
 	if err != nil {
@@ -338,6 +356,30 @@ func RestoreStockToLocation(tx *goqu.TxDatabase, transferReq RemoveStockItemFrom
 	}
 
 	return nil
+}
+
+func (r *StockRepository) getStockItemQuery() *goqu.SelectDataset {
+	return r.repository.GoquDBWrapper.
+		Select(
+			goqu.I("s.id").As("stock_id"),
+			goqu.I("s.quantity").As("quantity"),
+			goqu.I("s.origin").As("origin"),
+			goqu.I("c.id").As("category_id"),
+			goqu.I("c.item_category").As("category_type"),
+			goqu.I("c.label").As("category_label"),
+			goqu.I("c.pyr_id").As("category_pyr_id"),
+			goqu.I("l.id").As("location_id"),
+			goqu.I("l.name").As("location_name"),
+		).
+		From(goqu.T("non_serialized_items").As("s")).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"s.item_category_id": goqu.I("c.id")}),
+		).
+		LeftJoin(
+			goqu.T("locations").As("l"),
+			goqu.On(goqu.Ex{"s.location_id": goqu.I("l.id")}),
+		)
 }
 
 func buildUpdateFields(stockRequest *PatchStockItemRequest) (goqu.Record, error) {

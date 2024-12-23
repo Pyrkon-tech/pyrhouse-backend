@@ -37,6 +37,32 @@ func (r *Repository) GetAssets() (*[]models.Asset, error) {
 	return &assets, nil
 }
 
+func (r *Repository) GetAssetsBy(conditions QueryBuilder) (*[]models.Asset, error) {
+	aliases := map[string]string{
+		"location_id":    "i.location_id",
+		"category_id":    "i.item_category_id",
+		"category_label": "c.label",
+	}
+
+	query := r.getAssetQuery()
+	query = query.Where(conditions.BuildConditions(aliases))
+
+	var flatAssets []models.FlatAssetRecord
+	err := query.Executor().ScanStructs(&flatAssets)
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to select assets from database: %s", err.Error())
+	}
+
+	var assets []models.Asset
+	for _, flatAsset := range flatAssets {
+		asset := flatAsset.TransformToAsset()
+		assets = append(assets, asset)
+	}
+
+	return &assets, nil
+}
+
 func (r *Repository) HasRelatedItems(categoryID string) bool {
 	query := `SELECT COUNT(*) FROM items WHERE item_category_id = $1`
 	var count int
