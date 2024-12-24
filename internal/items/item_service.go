@@ -3,7 +3,6 @@ package items
 import (
 	"warehouse/internal/repository"
 	"warehouse/internal/stocks"
-	"warehouse/pkg/models"
 )
 
 type ItemService struct {
@@ -11,82 +10,95 @@ type ItemService struct {
 	sr *stocks.StockRepository
 }
 
-func (s *ItemService) fetchItems(conditions fetchItemsQuery) (*[]interface{}, error) {
+func (s *ItemService) fetchItems(conditions fetchItemsQuery) ([]interface{}, error) {
 	switch conditions.CategoryType {
 	case "asset":
-		assets, err := s.r.GetAssetsBy(&conditions)
-		if err != nil {
-			return nil, err
-		}
-		return s.combinedItems(assets, nil), nil
+		return s.fetchByCategory(conditions, "asset")
 	case "stock":
-		stocks, err := s.sr.GetStockItemsBy(&conditions)
-
-		if err != nil {
-			return nil, err
-		}
-		return s.combinedItems(nil, stocks), nil
+		return s.fetchByCategory(conditions, "stock")
 	default:
 		return s.fetchCombinedItems(conditions)
 	}
 }
 
-func (s *ItemService) fetchCombinedItems(conditions fetchItemsQuery) (*[]interface{}, error) {
-	assetChannel := make(chan *[]models.Asset, 1)
-	stockChannel := make(chan *[]models.StockItem, 1)
-	errChannel := make(chan error, 2)
+func (s *ItemService) fetchByCategory(conditions fetchItemsQuery, category string) ([]interface{}, error) {
+	var items []interface{}
+	var err error
 
-	go func() {
-		assets, err := s.r.GetAssetsBy(&conditions)
-
-		if err != nil {
-			errChannel <- err
-			return
+	switch category {
+	case "asset":
+		assets, fetchErr := s.r.GetAssetsBy(&conditions)
+		err = fetchErr
+		for _, asset := range *assets {
+			items = append(items, asset)
 		}
-		assetChannel <- assets
-	}()
-
-	go func() {
-		stocks, err := s.sr.GetStockItemsBy(&conditions)
-
-		if err != nil {
-			errChannel <- err
-			return
-		}
-		stockChannel <- stocks
-	}()
-
-	var assets *[]models.Asset
-	var stocks *[]models.StockItem
-
-	for i := 0; i < 2; i++ {
-		select {
-		case result := <-assetChannel:
-			assets = result
-		case result := <-stockChannel:
-			stocks = result
-		case err := <-errChannel:
-			return nil, err
+	case "stock":
+		stocks, fetchErr := s.sr.GetStockItemsBy(&conditions)
+		err = fetchErr
+		for _, stock := range *stocks {
+			items = append(items, stock)
 		}
 	}
 
-	return s.combinedItems(assets, stocks), nil
+	if err != nil {
+		return nil, err
+	}
+
+	return items, nil
 }
 
-func (s *ItemService) combinedItems(assets *[]models.Asset, stocks *[]models.StockItem) *[]interface{} {
-	var combinedItems []interface{}
-
-	if assets != nil {
+func (s *ItemService) fetchCombinedItems(conditions fetchItemsQuery) ([]interface{}, error) {
+	assetFetcher := func() ([]interface{}, error) {
+		assets, err := s.r.GetAssetsBy(&conditions)
+		if err != nil {
+			return nil, err
+		}
+		var items []interface{}
 		for _, asset := range *assets {
-			combinedItems = append(combinedItems, asset)
+			items = append(items, asset)
 		}
+		return items, nil
 	}
 
-	if stocks != nil {
+	stockFetcher := func() ([]interface{}, error) {
+		stocks, err := s.sr.GetStockItemsBy(&conditions)
+		if err != nil {
+			return nil, err
+		}
+		var items []interface{}
 		for _, stock := range *stocks {
-			combinedItems = append(combinedItems, stock)
+			items = append(items, stock)
+		}
+		return items, nil
+	}
+
+	return parallelFetch(assetFetcher, stockFetcher)
+}
+
+func parallelFetch(fetchers ...func() ([]interface{}, error)) ([]interface{}, error) {
+	results := make(chan []interface{}, len(fetchers))
+	errors := make(chan error, len(fetchers))
+
+	for _, fetcher := range fetchers {
+		go func(f func() ([]interface{}, error)) {
+			res, err := f()
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- res
+		}(fetcher)
+	}
+
+	var combined []interface{}
+	for i := 0; i < len(fetchers); i++ {
+		select {
+		case err := <-errors:
+			return nil, err
+		case res := <-results:
+			combined = append(combined, res...)
 		}
 	}
 
-	return &combinedItems
+	return combined, nil
 }
