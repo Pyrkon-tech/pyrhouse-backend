@@ -39,7 +39,7 @@ func (r *Repository) GetAssets() (*[]models.Asset, error) {
 
 func (r *Repository) GetAssetsBy(conditions QueryBuilder) (*[]models.Asset, error) {
 	aliases := map[string]string{
-		"location_id":    "i.location_id",
+		"location_ids":   "i.location_id",
 		"category_id":    "i.item_category_id",
 		"category_label": "c.label",
 	}

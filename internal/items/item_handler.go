@@ -40,5 +40,10 @@ func (h *ItemHandler) GetItems(c *gin.Context) {
 		return
 	}
 
+	if len(items) == 0 {
+		c.JSON(http.StatusOK, []interface{}{})
+		return
+	}
+
 	c.JSON(http.StatusOK, items)
 }
