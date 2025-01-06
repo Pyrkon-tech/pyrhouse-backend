@@ -40,7 +40,7 @@ func (s *ItemService) fetchItem(query fetchItemQuery) (interface{}, error) {
 			return nil, err
 		}
 		item := map[string]interface{}{
-			"asset":     stock,
+			"stock":     stock,
 			"assetLogs": stockLogs,
 		}
 
