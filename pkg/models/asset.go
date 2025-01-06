@@ -22,17 +22,18 @@ type Asset struct {
 }
 
 type FlatAssetRecord struct {
-	ID            int            `db:"asset_id"`
-	Serial        string         `db:"item_serial"`
-	Status        string         `db:"status"`
-	Origin        string         `db:"origin"`
-	PyrCode       sql.NullString `db:"pyr_code"`
-	LocationId    int            `db:"location_id"`
-	LocationName  string         `db:"location_name"`
-	CategoryId    int            `db:"category_id"`
-	CategoryType  string         `db:"category_type"`
-	CategoryLabel string         `db:"category_label"`
-	CategoryPyrId string         `db:"category_pyr_id"`
+	ID                    int            `db:"asset_id"`
+	Serial                string         `db:"item_serial"`
+	Status                string         `db:"status"`
+	Origin                string         `db:"origin"`
+	PyrCode               sql.NullString `db:"pyr_code"`
+	LocationId            int            `db:"location_id"`
+	LocationName          string         `db:"location_name"`
+	CategoryId            int            `db:"category_id"`
+	CategoryType          string         `db:"category_type"`
+	CategoryLabel         string         `db:"category_label"`
+	CategoryPyrId         string         `db:"category_pyr_id"`
+	CategoryEquipmentType string         `db:"category_equipment_type"`
 }
 
 func (fa *FlatAssetRecord) TransformToAsset() Asset {
@@ -53,6 +54,7 @@ func (fa *FlatAssetRecord) TransformToAsset() Asset {
 			Name:  fa.CategoryType,
 			Label: fa.CategoryLabel,
 			PyrID: fa.CategoryPyrId,
+			Type:  fa.CategoryEquipmentType,
 		},
 	}
 }

@@ -105,6 +105,7 @@ func (r *StockRepository) GetStockItemsBy(conditions repository.QueryBuilder) (*
 				ID:    flatStock.CategoryID,
 				Name:  flatStock.CategoryType,
 				Label: flatStock.CategoryLabel,
+				Type:  flatStock.CategoryEquipmentType,
 			},
 			Location: models.Location{
 				ID:   flatStock.LocationID,
@@ -368,6 +369,7 @@ func (r *StockRepository) getStockItemQuery() *goqu.SelectDataset {
 			goqu.I("c.item_category").As("category_type"),
 			goqu.I("c.label").As("category_label"),
 			goqu.I("c.pyr_id").As("category_pyr_id"),
+			goqu.I("c.category_type").As("category_equipment_type"),
 			goqu.I("l.id").As("location_id"),
 			goqu.I("l.name").As("location_name"),
 		).

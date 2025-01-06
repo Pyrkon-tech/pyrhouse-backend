@@ -304,6 +304,7 @@ func (r *Repository) getAssetQuery() *goqu.SelectDataset {
 		goqu.I("c.item_category").As("category_type"),
 		goqu.I("c.label").As("category_label"),
 		goqu.I("c.pyr_id").As("category_pyr_id"),
+		goqu.I("c.category_type").As("category_equipment_type"),
 		goqu.I("l.id").As("location_id"),
 		goqu.I("l.name").As("location_name"),
 	).
