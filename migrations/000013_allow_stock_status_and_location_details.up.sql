@@ -1,0 +1,4 @@
+BEGIN;
+ALTER TABLE non_serialized_items ADD COLUMN status VARCHAR(50);
+ALTER TABLE locations ADD COLUMN details VARCHAR;
+COMMIT;

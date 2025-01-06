@@ -116,7 +116,7 @@ func (r *StockRepository) GetStockItemsBy(conditions repository.QueryBuilder) (*
 	return &stocks, nil
 }
 
-func (r *StockRepository) getStockItem(id int) (*models.StockItem, error) {
+func (r *StockRepository) GetStockItem(id int) (*models.StockItem, error) {
 	var flatStock models.FlatStockRecord
 	// Query to fetch flat stock data
 	query := r.repository.GoquDBWrapper.
@@ -189,7 +189,7 @@ func (r *StockRepository) UpdateStock(stockRequest *PatchStockItemRequest) (*mod
 		return nil, fmt.Errorf("no rows updated")
 	}
 
-	updatedStock, err := r.getStockItem(stockRequest.ID)
+	updatedStock, err := r.GetStockItem(stockRequest.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated stock item: %w", err)
 	}

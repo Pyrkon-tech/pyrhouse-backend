@@ -1,6 +1,8 @@
 package items
 
 import (
+	"fmt"
+	"warehouse/internal/auditlog"
 	"warehouse/internal/repository"
 	"warehouse/internal/stocks"
 )
@@ -8,6 +10,44 @@ import (
 type ItemService struct {
 	r  *repository.Repository
 	sr *stocks.StockRepository
+	ar *auditlog.AuditLogRepository
+}
+
+func (s *ItemService) fetchItem(query fetchItemQuery) (interface{}, error) {
+	switch query.CategoryType {
+	case "asset":
+		asset, err := s.r.GetAsset(*query.ID)
+		if err != nil {
+			return nil, err
+		}
+		assetLogs, err := s.ar.GetResourceLog(*query.ID, query.CategoryType)
+		if err != nil {
+			return nil, err
+		}
+		item := map[string]interface{}{
+			"asset":     asset,
+			"assetLogs": assetLogs,
+		}
+
+		return item, nil
+	case "stock":
+		stock, err := s.sr.GetStockItem(*query.ID)
+		if err != nil {
+			return nil, err
+		}
+		stockLogs, err := s.ar.GetResourceLog(*query.ID, query.CategoryType)
+		if err != nil {
+			return nil, err
+		}
+		item := map[string]interface{}{
+			"asset":     stock,
+			"assetLogs": stockLogs,
+		}
+
+		return item, nil
+	default:
+		return nil, fmt.Errorf("Invalid item type provided")
+	}
 }
 
 func (s *ItemService) fetchItems(conditions fetchItemsQuery) ([]interface{}, error) {

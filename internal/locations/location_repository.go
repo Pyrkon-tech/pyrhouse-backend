@@ -25,8 +25,8 @@ func NewLocationRepository(r *repository.Repository) *LocationRepository {
 }
 
 func (r *LocationRepository) GetLocations() (*[]models.Location, error) {
-	var locations []models.Location
-	query := r.Repository.GoquDBWrapper.Select("id", "name").From("locations")
+	var locations = []models.Location{}
+	query := r.Repository.GoquDBWrapper.Select("id", "name", "details").From("locations")
 	if err := query.Executor().ScanStructs(&locations); err != nil {
 		return nil, fmt.Errorf("unable to execute SQL: %w", err)
 	}
@@ -53,7 +53,8 @@ func (r *LocationRepository) GetLocationEquipment(locationID string) (*models.Lo
 func (r *LocationRepository) PersistLocation(location *models.Location) error {
 	query := r.Repository.GoquDBWrapper.Insert("locations").
 		Rows(goqu.Record{
-			"name": location.Name,
+			"name":    location.Name,
+			"details": location.Details,
 		}).
 		Returning("id")
 
@@ -93,6 +94,7 @@ func (r *LocationRepository) RemoveLocation(locationID string) error {
 	return nil
 }
 
+// TODO maybe remove?
 func (r *LocationRepository) getLocationAssets(locationID string) ([]models.Asset, error) {
 	query := r.Repository.GoquDBWrapper.
 		From(goqu.T("items").As("i")).
