@@ -3,6 +3,7 @@ package items
 import (
 	"net/http"
 	"warehouse/internal/auditlog"
+	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
 
@@ -13,12 +14,13 @@ type ItemHandler struct {
 	service *ItemService
 }
 
-func NewItemHandler(r *repository.Repository, sr *stocks.StockRepository, ar *auditlog.AuditLogRepository) *ItemHandler {
+func NewItemHandler(r *repository.Repository, sr *stocks.StockRepository, ar *assets.AssetsRepository, auditLogRepo *auditlog.AuditLogRepository) *ItemHandler {
 	return &ItemHandler{
 		service: &ItemService{
 			r:                  r,
 			sr:                 sr,
-			auditlogRepository: ar,
+			ar:                 ar,
+			auditlogRepository: auditLogRepo,
 		},
 	}
 }

@@ -305,7 +305,7 @@ func (r *AssetsRepository) fetchFlatAssetByCondition(condition goqu.Expression) 
 }
 
 func (r *AssetsRepository) getAssetQuery() *goqu.SelectDataset {
-	return r.repository.GoquDBWrapper.Select(
+	query := r.repository.GoquDBWrapper.Select(
 		goqu.I("i.id").As("asset_id"),
 		"i.status",
 		goqu.I("i.item_serial").As("item_serial"),
@@ -328,4 +328,5 @@ func (r *AssetsRepository) getAssetQuery() *goqu.SelectDataset {
 			goqu.T("locations").As("l"),
 			goqu.On(goqu.Ex{"i.location_id": goqu.I("l.id")}),
 		)
+	return query
 }
