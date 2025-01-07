@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"warehouse/internal/container"
+	"warehouse/internal/core/container"
 	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"

@@ -1,8 +1,9 @@
-package repository
+package assets
 
 import (
 	"fmt"
 	"log"
+	"warehouse/internal/repository"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
@@ -10,15 +11,21 @@ import (
 	"github.com/lib/pq"
 )
 
-func (r *Repository) FindItemByPyrCode(pyrCode string) (*models.Asset, error) {
-	return r.fetchFlatAssetByCondition(goqu.Ex{"i.pyr_code": pyrCode})
+type AssetsRepository struct {
+	repository *repository.Repository
 }
 
-func (r *Repository) GetAsset(id int) (*models.Asset, error) {
+func NewRepository(r *repository.Repository) *AssetsRepository {
+	return &AssetsRepository{
+		repository: r,
+	}
+}
+
+func (r *AssetsRepository) GetAsset(id int) (*models.Asset, error) {
 	return r.fetchFlatAssetByCondition(goqu.Ex{"i.id": id})
 }
 
-func (r *Repository) GetAssets() (*[]models.Asset, error) {
+func (r *AssetsRepository) GetAssetList() (*[]models.Asset, error) {
 	query := r.getAssetQuery()
 
 	var flatAssets []models.FlatAssetRecord
@@ -37,7 +44,7 @@ func (r *Repository) GetAssets() (*[]models.Asset, error) {
 	return &assets, nil
 }
 
-func (r *Repository) GetAssetsBy(conditions QueryBuilder) (*[]models.Asset, error) {
+func (r *AssetsRepository) GetAssetsBy(conditions repository.QueryBuilder) (*[]models.Asset, error) {
 	aliases := map[string]string{
 		"location_ids":   "i.location_id",
 		"category_id":    "i.item_category_id",
@@ -63,10 +70,14 @@ func (r *Repository) GetAssetsBy(conditions QueryBuilder) (*[]models.Asset, erro
 	return &assets, nil
 }
 
-func (r *Repository) HasRelatedItems(categoryID string) bool {
+func (r *AssetsRepository) FindItemByPyrCode(pyrCode string) (*models.Asset, error) {
+	return r.fetchFlatAssetByCondition(goqu.Ex{"i.pyr_code": pyrCode})
+}
+
+func (r *AssetsRepository) HasRelatedItems(categoryID string) bool {
 	query := `SELECT COUNT(*) FROM items WHERE item_category_id = $1`
 	var count int
-	err := r.DB.QueryRow(query, categoryID).Scan(&count)
+	err := r.repository.DB.QueryRow(query, categoryID).Scan(&count)
 	if err != nil {
 		log.Fatal("failed to check related assets: ", err)
 
@@ -75,8 +86,8 @@ func (r *Repository) HasRelatedItems(categoryID string) bool {
 	return count > 0
 }
 
-func (r *Repository) HasItemsInLocation(assetIDs []int, fromLocationId int) (bool, error) {
-	sql, args, err := r.GoquDBWrapper.Select(goqu.COUNT("id")).From("items").Where(goqu.Ex{
+func (r *AssetsRepository) HasItemsInLocation(assetIDs []int, fromLocationId int) (bool, error) {
+	sql, args, err := r.repository.GoquDBWrapper.Select(goqu.COUNT("id")).From("items").Where(goqu.Ex{
 		"location_id": fromLocationId,
 		"id":          assetIDs,
 	}).ToSQL()
@@ -86,7 +97,7 @@ func (r *Repository) HasItemsInLocation(assetIDs []int, fromLocationId int) (boo
 	}
 
 	var count int
-	err = r.DB.QueryRow(sql, args...).Scan(&count)
+	err = r.repository.DB.QueryRow(sql, args...).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -94,10 +105,10 @@ func (r *Repository) HasItemsInLocation(assetIDs []int, fromLocationId int) (boo
 	return count == len(assetIDs), nil
 }
 
-func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset, error) {
+func (r *AssetsRepository) PersistItem(itemRequest models.ItemRequest) (*models.Asset, error) {
 	var assetID int
 
-	query := r.GoquDBWrapper.Insert("items").
+	query := r.repository.GoquDBWrapper.Insert("items").
 		Rows(goqu.Record{
 			"item_serial":      itemRequest.Serial,
 			"location_id":      itemRequest.LocationId,
@@ -123,30 +134,50 @@ func (r *Repository) PersistItem(itemRequest models.ItemRequest) (*models.Asset,
 	return asset, nil
 }
 
-func (r *Repository) UpdateItemStatus(assetIDs []int, status string) error {
-	record := goqu.Record{"status": status}
-	condition := goqu.Ex{"id": assetIDs}
-	err := r.updateAsset(record, condition)
+func (r *AssetsRepository) CanRemoveAsset(assetID int) (bool, error) {
+	var id int
+	query := r.repository.GoquDBWrapper.Select("i.id").
+		From(goqu.T("items").As("i")).
+		Where(goqu.Ex{
+			"i.id":          assetID,
+			"i.location_id": models.DefaultEquipmentLocationID,
+			"i.status":      models.AssetStatusInStock,
+		}).
+		Where(goqu.L("NOT EXISTS (?)",
+			r.repository.GoquDBWrapper.From(goqu.T("serialized_transfers").As("st")).
+				Select(goqu.L("1")).
+				Where(goqu.Ex{
+					"st.item_id": assetID,
+				}),
+		))
+	result, err := query.Executor().ScanVal(&id)
+
 	if err != nil {
-		return fmt.Errorf("failed to update asset status: %w", err)
+		return false, fmt.Errorf("unable to execute sql: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
 
-func (r *Repository) UpdatePyrCode(assetID int, pyrCode string) error {
-	record := goqu.Record{"pyr_code": pyrCode}
-	condition := goqu.Ex{"id": assetID}
-	err := r.updateAsset(record, condition)
+func (r *AssetsRepository) RemoveAsset(assetID int) (string, error) {
+	var assetSerial string
+	query := r.repository.GoquDBWrapper.
+		Delete("items").
+		Where(goqu.Ex{"id": assetID}).
+		Returning("item_serial")
+
+	_, err := query.Executor().ScanVal(&assetSerial)
+
 	if err != nil {
-		return fmt.Errorf("failed to update asset pyrcode: %w", err)
+		log.Fatal("failed to delete asset category: ", err)
+		return "", err
 	}
 
-	return nil
+	return assetSerial, nil
 }
 
-func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
-	err := WithTransaction(r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
+	err := repository.WithTransaction(r.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		var err error
 		_, err = tx.Delete("serialized_transfers").
 			Where(goqu.Ex{
@@ -180,50 +211,8 @@ func (r *Repository) RemoveAssetFromTransfer(transferID int, itemID int, locatio
 	return nil
 }
 
-func (r *Repository) CanRemoveAsset(assetID int) (bool, error) {
-	var id int
-	query := r.GoquDBWrapper.Select("i.id").
-		From(goqu.T("items").As("i")).
-		Where(goqu.Ex{
-			"i.id":          assetID,
-			"i.location_id": models.DefaultEquipmentLocationID,
-			"i.status":      models.AssetStatusInStock,
-		}).
-		Where(goqu.L("NOT EXISTS (?)",
-			r.GoquDBWrapper.From(goqu.T("serialized_transfers").As("st")).
-				Select(goqu.L("1")).
-				Where(goqu.Ex{
-					"st.item_id": assetID,
-				}),
-		))
-	result, err := query.Executor().ScanVal(&id)
-
-	if err != nil {
-		return false, fmt.Errorf("unable to execute sql: %w", err)
-	}
-
-	return result, nil
-}
-
-func (r *Repository) RemoveAsset(assetID int) (string, error) {
-	var assetSerial string
-	query := r.GoquDBWrapper.
-		Delete("items").
-		Where(goqu.Ex{"id": assetID}).
-		Returning("item_serial")
-
-	_, err := query.Executor().ScanVal(&assetSerial)
-
-	if err != nil {
-		log.Fatal("failed to delete asset category: ", err)
-		return "", err
-	}
-
-	return assetSerial, nil
-}
-
-func (r *Repository) GetTransferAssets(transferID int) (*[]models.Asset, error) {
-	query := r.GoquDBWrapper.
+func (r *AssetsRepository) GetTransferAssets(transferID int) (*[]models.Asset, error) {
+	query := r.repository.GoquDBWrapper.
 		Select(
 			goqu.I("a.id").As("asset_id"),
 			goqu.I("a.item_serial").As("item_serial"),
@@ -268,7 +257,40 @@ func (r *Repository) GetTransferAssets(transferID int) (*[]models.Asset, error) 
 	return &assets, nil
 }
 
-func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*models.Asset, error) {
+func (r *AssetsRepository) UpdatePyrCode(assetID int, pyrCode string) error {
+	record := goqu.Record{"pyr_code": pyrCode}
+	condition := goqu.Ex{"id": assetID}
+	err := r.updateAsset(record, condition)
+	if err != nil {
+		return fmt.Errorf("failed to update asset pyrcode: %w", err)
+	}
+
+	return nil
+}
+
+func (r *AssetsRepository) UpdateItemStatus(assetIDs []int, status string) error {
+	record := goqu.Record{"status": status}
+	condition := goqu.Ex{"id": assetIDs}
+	err := r.updateAsset(record, condition)
+	if err != nil {
+		return fmt.Errorf("failed to update asset status: %w", err)
+	}
+
+	return nil
+}
+
+func (r *AssetsRepository) updateAsset(record goqu.Record, condition goqu.Expression) error {
+	query := r.repository.GoquDBWrapper.
+		Update("items").
+		Set(record).
+		Where(condition)
+
+	_, err := query.Executor().Exec()
+
+	return err
+}
+
+func (r *AssetsRepository) fetchFlatAssetByCondition(condition goqu.Expression) (*models.Asset, error) {
 	query := r.getAssetQuery().Where(condition)
 
 	var flatAsset models.FlatAssetRecord
@@ -282,19 +304,8 @@ func (r *Repository) fetchFlatAssetByCondition(condition goqu.Expression) (*mode
 	return &asset, nil
 }
 
-func (r *Repository) updateAsset(record goqu.Record, condition goqu.Expression) error {
-	query := r.GoquDBWrapper.
-		Update("items").
-		Set(record).
-		Where(condition)
-
-	_, err := query.Executor().Exec()
-
-	return err
-}
-
-func (r *Repository) getAssetQuery() *goqu.SelectDataset {
-	return r.GoquDBWrapper.Select(
+func (r *AssetsRepository) getAssetQuery() *goqu.SelectDataset {
+	return r.repository.GoquDBWrapper.Select(
 		goqu.I("i.id").As("asset_id"),
 		"i.status",
 		goqu.I("i.item_serial").As("item_serial"),

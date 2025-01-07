@@ -59,20 +59,7 @@ func (r *StockRepository) GetStockItems() (*[]models.StockItem, error) {
 	}
 	var stocks []models.StockItem
 	for _, flatStock := range flatStocks {
-		stocks = append(stocks, models.StockItem{
-			ID:       flatStock.ID,
-			Quantity: flatStock.Quantity,
-			Origin:   flatStock.Origin,
-			Category: models.ItemCategory{
-				ID:    flatStock.CategoryID,
-				Name:  flatStock.CategoryType,
-				Label: flatStock.CategoryLabel,
-			},
-			Location: models.Location{
-				ID:   flatStock.LocationID,
-				Name: flatStock.LocationName,
-			},
-		})
+		stocks = append(stocks, transformToStockItem(flatStock))
 	}
 
 	return &stocks, nil
@@ -97,21 +84,7 @@ func (r *StockRepository) GetStockItemsBy(conditions repository.QueryBuilder) (*
 	}
 	var stocks []models.StockItem
 	for _, flatStock := range flatStocks {
-		stocks = append(stocks, models.StockItem{
-			ID:       flatStock.ID,
-			Quantity: flatStock.Quantity,
-			Origin:   flatStock.Origin,
-			Category: models.ItemCategory{
-				ID:    flatStock.CategoryID,
-				Name:  flatStock.CategoryType,
-				Label: flatStock.CategoryLabel,
-				Type:  flatStock.CategoryEquipmentType,
-			},
-			Location: models.Location{
-				ID:   flatStock.LocationID,
-				Name: flatStock.LocationName,
-			},
-		})
+		stocks = append(stocks, transformToStockItem(flatStock))
 	}
 
 	return &stocks, nil
@@ -148,20 +121,7 @@ func (r *StockRepository) GetStockItem(id int) (*models.StockItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to select stock items from database: %s", err.Error())
 	}
-	stock := models.StockItem{
-		ID:       flatStock.ID,
-		Quantity: flatStock.Quantity,
-		Origin:   flatStock.Origin,
-		Category: models.ItemCategory{
-			ID:    flatStock.CategoryID,
-			Name:  flatStock.CategoryType,
-			Label: flatStock.CategoryLabel,
-		},
-		Location: models.Location{
-			ID:   flatStock.LocationID,
-			Name: flatStock.LocationName,
-		},
-	}
+	stock := transformToStockItem(flatStock)
 
 	return &stock, nil
 }
@@ -382,6 +342,24 @@ func (r *StockRepository) getStockItemQuery() *goqu.SelectDataset {
 			goqu.T("locations").As("l"),
 			goqu.On(goqu.Ex{"s.location_id": goqu.I("l.id")}),
 		)
+}
+
+func transformToStockItem(flatStock models.FlatStockRecord) models.StockItem {
+	return models.StockItem{
+		ID:       flatStock.ID,
+		Quantity: flatStock.Quantity,
+		Origin:   flatStock.Origin,
+		Category: models.ItemCategory{
+			ID:    flatStock.CategoryID,
+			Name:  flatStock.CategoryType,
+			Label: flatStock.CategoryLabel,
+			Type:  flatStock.CategoryEquipmentType,
+		},
+		Location: models.Location{
+			ID:   flatStock.LocationID,
+			Name: flatStock.LocationName,
+		},
+	}
 }
 
 func buildUpdateFields(stockRequest *PatchStockItemRequest) (goqu.Record, error) {

@@ -5,8 +5,9 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"warehouse/internal/inventory/assets"
+	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
-	"warehouse/internal/stocks"
 	"warehouse/pkg/auditlog"
 	"warehouse/pkg/models"
 
@@ -17,23 +18,25 @@ type TransferHandler struct {
 	Repository         *repository.Repository //TODO
 	TransferRepository TransferRepository
 	Service            *TransferService
+	AssetRepo          *assets.AssetsRepository
 	AuditLog           *auditlog.Auditlog
 }
 
-func NewHandler(r *repository.Repository, tr TransferRepository, a *auditlog.Auditlog) *TransferHandler {
+func NewHandler(r *repository.Repository, tr TransferRepository, ar *assets.AssetsRepository, a *auditlog.Auditlog) *TransferHandler {
 	stockRepo := stocks.NewRepository(r)
 
 	return &TransferHandler{
 		Repository:         r,
 		TransferRepository: tr,
-		Service:            &TransferService{r, tr, stockRepo},
+		Service:            &TransferService{r, tr, ar, stockRepo},
+		AssetRepo:          ar,
 		AuditLog:           a,
 	}
 }
 
 func (h *TransferHandler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/transfers/:id", h.GetTransfer)
-	router.GET("/transfers", h.GetTransfers)
+	router.GET("/transfers", h.RetrieveTransferList)
 	router.POST("/transfers", h.CreateTransfer)
 	router.PATCH("/transfers/:id/confirm", h.UpdateTransfer)
 	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", h.RemoveAssetFromTransfer)
@@ -58,7 +61,7 @@ func (h *TransferHandler) GetTransfer(c *gin.Context) {
 	c.JSON(http.StatusOK, transfer)
 }
 
-func (h *TransferHandler) GetTransfers(c *gin.Context) {
+func (h *TransferHandler) RetrieveTransferList(c *gin.Context) {
 
 	transfers, err := h.Service.GetTransfers()
 	if err != nil {
@@ -178,7 +181,7 @@ func (h *TransferHandler) RemoveAssetFromTransfer(c *gin.Context) {
 		return
 	}
 
-	err := h.Repository.RemoveAssetFromTransfer(req.ID, req.ItemID, req.LocationID)
+	err := h.AssetRepo.RemoveAssetFromTransfer(req.ID, req.ItemID, req.LocationID)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

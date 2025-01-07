@@ -2,8 +2,9 @@ package transfers
 
 import (
 	"fmt"
+	"warehouse/internal/inventory/assets"
+	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
-	"warehouse/internal/stocks"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
@@ -12,6 +13,7 @@ import (
 type TransferService struct {
 	r         *repository.Repository
 	tr        TransferRepository
+	ar        *assets.AssetsRepository
 	stockRepo *stocks.StockRepository
 }
 
@@ -47,7 +49,7 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 	if err != nil {
 		return nil, err
 	}
-	assets, err := s.r.GetTransferAssets(transferID)
+	assets, err := s.ar.GetTransferAssets(transferID)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +181,7 @@ func (s *TransferService) ValidateStock(transferRequest models.TransferRequest) 
 
 	if len(transferRequest.AssetItemCollection) > 0 {
 		assetIDs := mapToIDArray(transferRequest.AssetItemCollection)
-		hasItemsOnStock, err := s.r.HasItemsInLocation(assetIDs, transferRequest.FromLocationID)
+		hasItemsOnStock, err := s.ar.HasItemsInLocation(assetIDs, transferRequest.FromLocationID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to validate serialized assets: %w", err)
 		}

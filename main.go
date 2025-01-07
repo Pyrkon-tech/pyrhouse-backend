@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"warehouse/cmd"
-	"warehouse/internal/container"
-	"warehouse/internal/routes"
+	"warehouse/internal/core/container"
+	"warehouse/internal/core/routes"
 
 	"warehouse/internal/database"
 

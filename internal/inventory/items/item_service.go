@@ -3,24 +3,26 @@ package items
 import (
 	"fmt"
 	"warehouse/internal/auditlog"
+	"warehouse/internal/inventory/assets"
+	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
-	"warehouse/internal/stocks"
 )
 
 type ItemService struct {
-	r  *repository.Repository
-	sr *stocks.StockRepository
-	ar *auditlog.AuditLogRepository
+	r                  *repository.Repository
+	sr                 *stocks.StockRepository
+	ar                 *assets.AssetsRepository
+	auditlogRepository *auditlog.AuditLogRepository
 }
 
-func (s *ItemService) fetchItem(query fetchItemQuery) (interface{}, error) {
+func (s *ItemService) fetchItem(query retrieveItemQuery) (interface{}, error) {
 	switch query.CategoryType {
 	case "asset":
-		asset, err := s.r.GetAsset(*query.ID)
+		asset, err := s.ar.GetAsset(*query.ID)
 		if err != nil {
 			return nil, err
 		}
-		assetLogs, err := s.ar.GetResourceLog(*query.ID, query.CategoryType)
+		assetLogs, err := s.auditlogRepository.GetResourceLog(*query.ID, query.CategoryType)
 		if err != nil {
 			return nil, err
 		}
@@ -35,7 +37,7 @@ func (s *ItemService) fetchItem(query fetchItemQuery) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		stockLogs, err := s.ar.GetResourceLog(*query.ID, query.CategoryType)
+		stockLogs, err := s.auditlogRepository.GetResourceLog(*query.ID, query.CategoryType)
 		if err != nil {
 			return nil, err
 		}
@@ -46,11 +48,11 @@ func (s *ItemService) fetchItem(query fetchItemQuery) (interface{}, error) {
 
 		return item, nil
 	default:
-		return nil, fmt.Errorf("Invalid item type provided")
+		return nil, fmt.Errorf("invalid item type provided")
 	}
 }
 
-func (s *ItemService) fetchItems(conditions fetchItemsQuery) ([]interface{}, error) {
+func (s *ItemService) fetchItemList(conditions retrieveItemListQuery) ([]interface{}, error) {
 	switch conditions.CategoryType {
 	case "asset":
 		return s.fetchByCategory(conditions, "asset")
@@ -61,13 +63,13 @@ func (s *ItemService) fetchItems(conditions fetchItemsQuery) ([]interface{}, err
 	}
 }
 
-func (s *ItemService) fetchByCategory(conditions fetchItemsQuery, category string) ([]interface{}, error) {
+func (s *ItemService) fetchByCategory(conditions retrieveItemListQuery, category string) ([]interface{}, error) {
 	var items []interface{}
 	var err error
 
 	switch category {
 	case "asset":
-		assets, fetchErr := s.r.GetAssetsBy(&conditions)
+		assets, fetchErr := s.ar.GetAssetsBy(&conditions)
 		err = fetchErr
 		for _, asset := range *assets {
 			items = append(items, asset)
@@ -87,9 +89,9 @@ func (s *ItemService) fetchByCategory(conditions fetchItemsQuery, category strin
 	return items, nil
 }
 
-func (s *ItemService) fetchCombinedItems(conditions fetchItemsQuery) ([]interface{}, error) {
+func (s *ItemService) fetchCombinedItems(conditions retrieveItemListQuery) ([]interface{}, error) {
 	assetFetcher := func() ([]interface{}, error) {
-		assets, err := s.r.GetAssetsBy(&conditions)
+		assets, err := s.ar.GetAssetsBy(&conditions)
 		if err != nil {
 			return nil, err
 		}

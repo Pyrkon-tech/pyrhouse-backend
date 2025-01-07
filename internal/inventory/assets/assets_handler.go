@@ -14,13 +14,15 @@ import (
 )
 
 type ItemHandler struct {
-	Repository *repository.Repository
+	r          *AssetsRepository
+	repository *repository.Repository
 	AuditLog   *auditlog.Auditlog
 }
 
-func NewAssetHandler(r *repository.Repository, a *auditlog.Auditlog) *ItemHandler {
+func NewAssetHandler(r *repository.Repository, ar *AssetsRepository, a *auditlog.Auditlog) *ItemHandler {
 	return &ItemHandler{
-		Repository: r,
+		r:          ar,
+		repository: r,
 		AuditLog:   a,
 	}
 }
@@ -48,7 +50,7 @@ func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {
 		return
 	}
 
-	asset, err := h.Repository.FindItemByPyrCode(serial)
+	asset, err := h.r.FindItemByPyrCode(serial)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to get asset", "details": err.Error()})
@@ -82,7 +84,7 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 	}
 	req.Origin = origin.String()
 
-	categoryType, err := h.Repository.GetCategoryType(req.CategoryId)
+	categoryType, err := h.repository.GetCategoryType(req.CategoryId)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Unable to check category type", "details": err.Error()})
 		return
@@ -93,7 +95,7 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 		return
 	}
 
-	asset, err := h.Repository.PersistItem(req)
+	asset, err := h.r.PersistItem(req)
 
 	if err != nil {
 		switch err.(type) {
@@ -108,14 +110,14 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 
 	pyrCode := metadata.NewPyrCode(asset.Category.PyrID, asset.ID)
 	asset.PyrCode = pyrCode.GeneratePyrCode()
-	go h.Repository.UpdatePyrCode(asset.ID, asset.PyrCode)
+	go h.r.UpdatePyrCode(asset.ID, asset.PyrCode)
 	go h.AuditLog.Log(
-		"remove",
+		"create",
 		map[string]interface{}{
 			"serial":      asset.Serial,
 			"pyr_code":    asset.PyrCode,
 			"location_id": asset.Location.ID,
-			"msg":         "Remove asset from warehouse",
+			"msg":         "Asset created successfully",
 		},
 		asset,
 	)
@@ -132,7 +134,7 @@ func (h *ItemHandler) RemoveAsset(c *gin.Context) {
 		return
 	}
 
-	res, err := h.Repository.CanRemoveAsset(asset.ID)
+	res, err := h.r.CanRemoveAsset(asset.ID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error":   "Unable to validate asset",
@@ -147,7 +149,7 @@ func (h *ItemHandler) RemoveAsset(c *gin.Context) {
 		return
 	}
 
-	asset.Serial, err = h.Repository.RemoveAsset(asset.ID)
+	asset.Serial, err = h.r.RemoveAsset(asset.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete asset category", "details": err.Error()})
 		return

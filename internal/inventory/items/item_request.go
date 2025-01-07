@@ -4,14 +4,19 @@ import (
 	"github.com/doug-martin/goqu/v9"
 )
 
-type fetchItemsQuery struct {
+type retrieveItemQuery struct {
+	ID           *int   `uri:"id" binding:"required,number"`
+	CategoryType string `uri:"category" binding:"required"`
+}
+
+type retrieveItemListQuery struct {
 	LocationIDs   []int  `form:"location_ids" binding:"omitempty"`
 	CategoryID    *int   `form:"category_id" binding:"omitempty,number"`
 	CategoryType  string `form:"category_type"`
 	CategoryLabel string `form:"category_label"`
 }
 
-func (q *fetchItemsQuery) BuildConditions(aliases map[string]string) goqu.Ex {
+func (q *retrieveItemListQuery) BuildConditions(aliases map[string]string) goqu.Ex {
 	conditions := goqu.Ex{}
 
 	if q.LocationIDs != nil {

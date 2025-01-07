@@ -3,8 +3,8 @@ package transfers
 import (
 	"fmt"
 	"time"
+	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
-	"warehouse/internal/stocks"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"

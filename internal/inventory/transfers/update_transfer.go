@@ -50,7 +50,7 @@ func (h *TransferHandler) confirmTransfer(transferID int) error {
 	var err error
 	status := "completed" // Do I need this?
 	// TODO get only ids?
-	assets, err := h.Repository.GetTransferAssets(transferID)
+	assets, err := h.AssetRepo.GetTransferAssets(transferID)
 	assetIDs := func(assets []models.Asset) []int {
 		var ids []int
 		for _, asset := range assets {
@@ -60,7 +60,7 @@ func (h *TransferHandler) confirmTransfer(transferID int) error {
 	}(*assets)
 
 	repository.WithTransaction(h.Repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		if err := h.Repository.UpdateItemStatus(assetIDs, "delivered"); err != nil {
+		if err := h.AssetRepo.UpdateItemStatus(assetIDs, "delivered"); err != nil {
 			return fmt.Errorf("unable to update assets err: %w", err)
 		}
 
@@ -71,6 +71,20 @@ func (h *TransferHandler) confirmTransfer(transferID int) error {
 
 		return nil
 	})
+	h.updateTransferAuditLog("deliver", transferID, *assets)
 
 	return nil
+}
+
+func (h *TransferHandler) updateTransferAuditLog(action string, transferID int, assets []models.Asset) {
+	for _, asset := range assets {
+		go h.AuditLog.Log(
+			action,
+			map[string]interface{}{
+				"tranfer_id": transferID,
+				"msg":        "Asset arrived in transfer location",
+			},
+			&asset,
+		)
+	}
 }
