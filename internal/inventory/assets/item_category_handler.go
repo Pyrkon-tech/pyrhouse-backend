@@ -4,7 +4,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -28,13 +27,8 @@ func (h *ItemHandler) CreateItemCategory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	if req.PyrID == "" {
-		str := req.Name
-		str = str[:3]
-		req.PyrID = strings.ToUpper(str)
-	}
-
+	req.GenerateNameFromLabel()
+	req.GeneratePyrID()
 	itemCategory, err := h.repository.PersistItemCategory(req)
 
 	if err != nil {
