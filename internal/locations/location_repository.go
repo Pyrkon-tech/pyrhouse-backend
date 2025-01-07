@@ -71,6 +71,35 @@ func (r *LocationRepository) PersistLocation(location *models.Location) error {
 	return nil
 }
 
+func (r *LocationRepository) UpdateLocation(locationID string, req UpdateLocationRequest) (models.Location, error) {
+	updates := make(map[string]interface{})
+
+	if req.Name != nil {
+		updates["name"] = *req.Name
+	}
+	if req.Details != nil {
+		updates["details"] = *req.Details
+	}
+	if len(updates) == 0 {
+		return models.Location{}, fmt.Errorf("no fields to update")
+	}
+
+	query := r.Repository.GoquDBWrapper.
+		Update("locations").
+		Set(updates).
+		Where(goqu.Ex{"id": locationID}).
+		Returning("id", "name", "details")
+
+	var loc models.Location
+
+	_, err := query.Executor().ScanStruct(&loc)
+	if err != nil {
+		return models.Location{}, fmt.Errorf("failed to update location: %w", err)
+	}
+
+	return loc, nil
+}
+
 func (r *LocationRepository) RemoveLocation(locationID string) error {
 	result, err := r.Repository.GoquDBWrapper.Delete("locations").Where(goqu.Ex{"id": locationID}).Executor().Exec()
 

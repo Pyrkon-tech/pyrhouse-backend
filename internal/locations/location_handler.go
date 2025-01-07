@@ -19,6 +19,7 @@ func NewLocationHandler(r *LocationRepository) *LocationHandler {
 
 func (h *LocationHandler) RegisterRoutes(router *gin.Engine) {
 	router.POST("/locations", h.CreateLocation)
+	router.PATCH("/locations/:id", h.UpdateLocation)
 	router.GET("/locations", h.GetLocations)
 	router.GET("/locations/:id/assets", h.GetLocationItems)
 	router.DELETE("/locations/:id", h.RemoveLocation)
@@ -32,6 +33,37 @@ func (h *LocationHandler) GetLocations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, locations)
+}
+
+func (h *LocationHandler) UpdateLocation(c *gin.Context) {
+	var req UpdateLocationRequest
+
+	id := c.Param("id")
+	if id == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Missing location ID"})
+		return
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
+		return
+	}
+
+	if req.Details == nil && req.Name == nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload, no fields to update"})
+		return
+	}
+
+	loc, err := h.Repository.UpdateLocation(id, req)
+
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error":   "Unable to update location, critical error",
+			"details": err.Error(),
+		})
+	}
+
+	c.JSON(http.StatusOK, loc)
 }
 
 func (h *LocationHandler) CreateLocation(c *gin.Context) {
