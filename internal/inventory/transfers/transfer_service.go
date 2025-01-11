@@ -2,7 +2,9 @@ package transfers
 
 import (
 	"fmt"
+	"log"
 	"warehouse/internal/inventory/assets"
+	inventorylog "warehouse/internal/inventory/inventoryLog"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
 	"warehouse/pkg/models"
@@ -15,9 +17,15 @@ type TransferService struct {
 	tr        TransferRepository
 	ar        *assets.AssetsRepository
 	stockRepo *stocks.StockRepository
+	il        *inventorylog.InventoryLog
 }
 
-func (s *TransferService) PerformTransfer(req models.TransferRequest, transitStatus string) (int, error) {
+type ValidationError struct {
+	Message  string `json:"message"`
+	Property string `json:"property"`
+}
+
+func (s *TransferService) InitTransfer(req models.TransferRequest, transitStatus string) (int, error) {
 	var transferID int
 
 	err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
@@ -26,11 +34,11 @@ func (s *TransferService) PerformTransfer(req models.TransferRequest, transitSta
 			return fmt.Errorf("failed to insert transfer record: %w", err)
 		}
 
-		if err = s.handleSerializedItems(tx, transferID, req.AssetItemCollection, req.LocationID, transitStatus); err != nil {
+		if err = s.startAssetsTransfer(tx, transferID, req.AssetItemCollection, req.LocationID, transitStatus); err != nil {
 			return err
 		}
 
-		if err = s.handleNonSerializedItems(tx, transferID, req.StockItemCollection, req.LocationID, req.FromLocationID); err != nil {
+		if err = s.startStockItemsTransfer(tx, transferID, req.StockItemCollection, req.FromLocationID); err != nil {
 			return err
 		}
 
@@ -40,6 +48,8 @@ func (s *TransferService) PerformTransfer(req models.TransferRequest, transitSta
 	if err != nil {
 		return 0, err
 	}
+
+	go s.createInventoryLog("in_transfer", transferID)
 
 	return transferID, nil
 }
@@ -74,17 +84,6 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 		Status:               flatTransfer.Status,
 	}
 
-	// var combinedItems []interface{}
-
-	// for _, asset := range *assets {
-	// 	combinedItems = append(combinedItems, asset)
-	// }
-	// for _, stock := range *stockItems {
-	// 	combinedItems = append(combinedItems, stock)
-	// }
-
-	// transfer.ItemCollection = combinedItems
-
 	return &transfer, nil
 }
 
@@ -115,6 +114,7 @@ func (s *TransferService) GetTransfers() (*[]models.Transfer, error) {
 	}
 	return &transfers, nil
 }
+
 func (s *TransferService) RemoveStockItemFromTransfer(transferReq stocks.RemoveStockItemFromTransferRequest) error {
 	return repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		if err := decreaseStockInTransfer(tx, transferReq); err != nil {
@@ -136,44 +136,6 @@ func (s *TransferService) RemoveStockItemFromTransfer(transferReq stocks.RemoveS
 
 		return nil
 	})
-}
-
-func (s *TransferService) handleSerializedItems(tx *goqu.TxDatabase, transferID int, assets []models.AssetItemRequest, locationID int, transitStatus string) error {
-	if len(assets) == 0 {
-		return nil
-	}
-	idList := mapToIDArray(assets)
-
-	if err := s.tr.InsertSerializedItemTransferRecord(tx, transferID, idList); err != nil {
-		return fmt.Errorf("failed to insert serialized asset transfer record: %w", err)
-	}
-
-	if err := s.tr.MoveSerializedItems(tx, idList, locationID, transitStatus); err != nil {
-		return fmt.Errorf("failed to move serialized assets: %w", err)
-	}
-
-	return nil
-}
-
-func (s *TransferService) handleNonSerializedItems(tx *goqu.TxDatabase, transferID int, stocks []models.StockItemRequest, locationID, fromLocationID int) error {
-	if len(stocks) == 0 {
-		return nil
-	}
-
-	if err := s.tr.InsertNonSerializedItemTransferRecord(tx, transferID, stocks); err != nil {
-		return fmt.Errorf("failed to insert non-serialized asset transfer record: %w", err)
-	}
-
-	if err := s.stockRepo.MoveNonSerializedItems(tx, stocks, locationID, fromLocationID); err != nil {
-		return fmt.Errorf("failed to move non-serialized assets: %w", err)
-	}
-
-	return nil
-}
-
-type ValidationError struct {
-	Message  string `json:"message"`
-	Property string `json:"property"`
 }
 
 func (s *TransferService) ValidateStock(transferRequest models.TransferRequest) ([]ValidationError, error) {
@@ -210,7 +172,114 @@ func (s *TransferService) ValidateStock(transferRequest models.TransferRequest) 
 	return validationState, nil
 }
 
-// Move to repo
+func (s *TransferService) completeStockItemsTransfer(tx *goqu.TxDatabase, transferID int) error {
+
+	HasStockItems, err := s.tr.HasStockItemsInTransfer(tx, transferID)
+	if err != nil {
+		return err
+	}
+
+	if !HasStockItems {
+		return nil
+	}
+
+	if err := s.stockRepo.IncreaseStockAtDestination(tx, transferID); err != nil {
+		return fmt.Errorf("failed to increase stock items at destination: %w", err)
+	}
+
+	if err := s.tr.RemoveStockItemsTransferRecords(tx, transferID); err != nil {
+		return fmt.Errorf("failed remove stock items transfer entry: %w", err)
+	}
+
+	return nil
+}
+
+func (s *TransferService) startAssetsTransfer(tx *goqu.TxDatabase, transferID int, assets []models.AssetItemRequest, locationID int, transitStatus string) error {
+	if len(assets) == 0 {
+		return nil
+	}
+	idList := mapToIDArray(assets)
+
+	if err := s.tr.InsertAssetsTransferRecord(tx, transferID, idList); err != nil {
+		return fmt.Errorf("failed to insert serialized asset transfer record: %w", err)
+	}
+
+	if err := s.tr.MoveAssets(tx, idList, locationID, transitStatus); err != nil {
+		return fmt.Errorf("failed to move serialized assets: %w", err)
+	}
+
+	return nil
+}
+
+func (s *TransferService) startStockItemsTransfer(tx *goqu.TxDatabase, transferID int, stocks []models.StockItemRequest, fromLocationID int) error {
+	if len(stocks) == 0 {
+		return nil
+	}
+
+	if err := s.tr.InsertStockItemsTransferRecord(tx, transferID, stocks); err != nil {
+		return fmt.Errorf("failed to insert non-serialized asset transfer record: %w", err)
+	}
+
+	if err := s.stockRepo.DecreaseStockItemsQuantity(tx, stocks, fromLocationID); err != nil {
+		return fmt.Errorf("failed to move non-serialized assets: %w", err)
+	}
+
+	return nil
+}
+
+func (s *TransferService) confirmTransfer(transferID int, status string) error {
+	var err error
+	// TODO get only ids?
+	assets, err := s.ar.GetTransferAssets(transferID)
+	assetIDs := func(assets []models.Asset) []int {
+		var ids []int
+		for _, asset := range assets {
+			ids = append(ids, asset.ID)
+		}
+		return ids
+	}(*assets)
+
+	err = repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		// TODO To coś chujowo to jest rozbite (albo nie jest bo Confirm transfer uzupełnia asset transfer record a nie tutaj) (unify & move to service)
+		if len(assetIDs) > 0 {
+			if err := s.ar.UpdateItemStatus(assetIDs, "delivered"); err != nil {
+				return fmt.Errorf("unable to update assets err: %w", err)
+			}
+		}
+
+		if err := s.completeStockItemsTransfer(tx, transferID); err != nil {
+			return fmt.Errorf("unable to update stock items err: %w", err)
+		}
+
+		err = s.tr.ConfirmTransfer(transferID, status)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	go s.createInventoryLog("delivered", transferID)
+
+	return nil
+}
+
+func (s *TransferService) createInventoryLog(action string, transferID int) {
+
+	transfer, err := s.GetTransfer(transferID)
+
+	if err != nil {
+		log.Printf("Unable to get transfer id: %d for auditlog error: %s", transferID, err.Error())
+	}
+
+	s.il.CreateTransferAuditLogEntry(action, transfer)
+}
+
+// TODO decide if move to repo
 func mapToIDArray(assetsReq []models.AssetItemRequest) []int {
 	ids := make([]int, len(assetsReq))
 	for i, item := range assetsReq {

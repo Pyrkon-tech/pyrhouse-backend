@@ -21,7 +21,6 @@ func NewRepository(db *sql.DB) *Repository {
 	}
 }
 
-// TODO ogarnij transakcje to allow public
 func WithTransaction(db *goqu.Database, fn func(tx *goqu.TxDatabase) error) (err error) {
 	rawTx, err := db.Begin()
 	if err != nil {

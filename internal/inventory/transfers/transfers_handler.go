@@ -6,31 +6,30 @@ import (
 	"net/http"
 	"strconv"
 	"warehouse/internal/inventory/assets"
+	inventorylog "warehouse/internal/inventory/inventoryLog"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
+	"warehouse/pkg/metadata"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
 )
 
 type TransferHandler struct {
-	Repository         *repository.Repository //TODO
 	TransferRepository TransferRepository
 	Service            *TransferService
 	AssetRepo          *assets.AssetsRepository
-	AuditLog           *auditlog.Auditlog
 }
 
 func NewHandler(r *repository.Repository, tr TransferRepository, ar *assets.AssetsRepository, a *auditlog.Auditlog) *TransferHandler {
 	stockRepo := stocks.NewRepository(r)
+	inventorylog := inventorylog.NewInventoryLog(a)
 
 	return &TransferHandler{
-		Repository:         r,
 		TransferRepository: tr,
-		Service:            &TransferService{r, tr, ar, stockRepo},
+		Service:            &TransferService{r, tr, ar, stockRepo, inventorylog},
 		AssetRepo:          ar,
-		AuditLog:           a,
 	}
 }
 
@@ -103,7 +102,7 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 		return
 	}
 
-	transferID, err := h.Service.PerformTransfer(req, itemTransitStatus)
+	transferID, err := h.Service.InitTransfer(req, itemTransitStatus)
 
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to transfer items", "details": err.Error()})
@@ -116,52 +115,7 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 		return
 	}
 
-	log.Println("transfer ID: ", transferID)
-
-	go h.createTransferAuditLogEntry("in_transfer", transfer)
-
 	c.JSON(http.StatusCreated, transfer)
-}
-
-func (h *TransferHandler) createTransferAuditLogEntry(action string, ts *models.Transfer) {
-	go h.AuditLog.Log(
-		action,
-		map[string]interface{}{
-			"tranfer_id":       ts.ID,
-			"from_location_id": ts.FromLocation.ID,
-			"to_location_id":   ts.ToLocation.ID,
-			"msg":              "Transfer register",
-		},
-		ts,
-	)
-
-	for _, asset := range ts.AssetsCollection {
-		go h.AuditLog.Log(
-			action,
-			map[string]interface{}{
-				"tranfer_id":       ts.ID,
-				"from_location_id": ts.FromLocation.ID,
-				"to_location_id":   ts.ToLocation.ID,
-				"msg":              "Asset moved in transfer",
-			},
-			&asset,
-		)
-	}
-
-	for _, s := range ts.StockItemsCollection {
-		// stockItem.Category.ID = s.Category.ID
-		go h.AuditLog.Log(
-			action,
-			map[string]interface{}{
-				"tranfer_id":       ts.ID,
-				"from_location_id": ts.FromLocation.ID,
-				"to_location_id":   ts.ToLocation.ID,
-				"quantity":         s.Quantity,
-				"msg":              "Stock moved in transfer",
-			},
-			s,
-		)
-	}
 }
 
 func (h *TransferHandler) RemoveAssetFromTransfer(c *gin.Context) {
@@ -191,6 +145,7 @@ func (h *TransferHandler) RemoveAssetFromTransfer(c *gin.Context) {
 	c.JSON(200, gin.H{"transfer_id": req.ID})
 }
 
+// TODO check if that works or need a fix
 func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
 	var req stocks.RemoveStockItemFromTransferRequest
 
@@ -232,4 +187,42 @@ func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Stock item removed from transfer successfully"})
+}
+
+func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
+	transferID, err := strconv.Atoi(c.Param("id"))
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid transfer ID parameter, must be an integer"})
+		return
+	}
+
+	// TODO "in_transit" to "completed" or "confirmed"  do something with that
+	var req struct {
+		Status string `json:"status" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	status, _ := metadata.NewStatus(req.Status)
+
+	switch status {
+	case "completed":
+		err := h.Service.confirmTransfer(transferID, string(status))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to update transfer status", "details": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":     "Transfer confirmed successfully",
+			"transfer_id": transferID,
+			"status":      req.Status,
+		})
+	default:
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": "unsupported transfer status method:"})
+	}
 }

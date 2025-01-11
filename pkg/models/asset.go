@@ -2,7 +2,7 @@ package models
 
 import (
 	"database/sql"
-	"warehouse/internal/metadata"
+	"warehouse/pkg/metadata"
 )
 
 const (
@@ -16,7 +16,7 @@ type Asset struct {
 	Serial   string          `json:"serial" db:"item_serial"`
 	Location Location        `json:"location,omitempty"`
 	Category ItemCategory    `json:"category"`
-	Status   string          `json:"status"`
+	Status   metadata.Status `json:"status"`
 	PyrCode  string          `json:"pyrcode"`
 	Origin   metadata.Origin `json:"origin"`
 }
@@ -37,12 +37,13 @@ type FlatAssetRecord struct {
 }
 
 func (fa *FlatAssetRecord) TransformToAsset() Asset {
+	status, _ := metadata.NewStatus(fa.Status)
 	origin, _ := metadata.NewOrigin(fa.Origin)
 
 	return Asset{
 		ID:      fa.ID,
 		Serial:  fa.Serial,
-		Status:  fa.Status,
+		Status:  status,
 		PyrCode: fa.PyrCode.String,
 		Origin:  origin,
 		Location: Location{

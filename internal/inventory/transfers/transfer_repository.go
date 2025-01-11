@@ -17,9 +17,11 @@ type TransferRepository interface {
 	GetTransferRows() (*[]FlatTransfer, error)
 	InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error)
 	GetTransferLocationById(tx *goqu.TxDatabase, transferID int) (int, error)
-	InsertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error
-	MoveSerializedItems(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error
-	InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.StockItemRequest) error
+	InsertAssetsTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error
+	MoveAssets(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error
+	InsertStockItemsTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.StockItemRequest) error
+	RemoveStockItemsTransferRecords(tx *goqu.TxDatabase, transferID int) error
+	HasStockItemsInTransfer(tx *goqu.TxDatabase, transferID int) (bool, error)
 }
 
 type transferRepository struct {
@@ -160,7 +162,7 @@ func (r *transferRepository) ConfirmTransfer(transferID int, status string) erro
 	return nil
 }
 
-func (r *transferRepository) MoveSerializedItems(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error {
+func (r *transferRepository) MoveAssets(tx *goqu.TxDatabase, assets []int, locationID int, transitStatus string) error {
 	locationCase := goqu.Case()
 	transitStatusCase := goqu.Case()
 
@@ -200,7 +202,7 @@ func (r *transferRepository) InsertTransferRecord(tx *goqu.TxDatabase, req model
 	return transferID, nil
 }
 
-func (r *transferRepository) InsertSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error {
+func (r *transferRepository) InsertAssetsTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error {
 	var records []goqu.Record
 	for _, itemID := range assets {
 		records = append(records, goqu.Record{
@@ -219,15 +221,29 @@ func (r *transferRepository) InsertSerializedItemTransferRecord(tx *goqu.TxDatab
 	return nil
 }
 
+func (r *transferRepository) HasStockItemsInTransfer(tx *goqu.TxDatabase, transferID int) (bool, error) {
+	var count int
+	query := tx.From("non_serialized_transfers").
+		Select(goqu.COUNT("id")).
+		Where(goqu.Ex{"transfer_id": transferID})
+
+	if _, err := query.Executor().ScanVal(&count); err != nil {
+		return false, fmt.Errorf("failed to check stock items in transfer: %w", err)
+	}
+
+	return count > 0, nil
+}
+
 // TODO remodel to stock_id
-func (r *transferRepository) InsertNonSerializedItemTransferRecord(tx *goqu.TxDatabase, transferID int, stocks []models.StockItemRequest) error {
+func (r *transferRepository) InsertStockItemsTransferRecord(tx *goqu.TxDatabase, transferID int, stocks []models.StockItemRequest) error {
 	var records []goqu.Record
 	for _, stockItem := range stocks {
 		records = append(records, goqu.Record{
 			"transfer_id":      transferID,
 			"item_category_id": goqu.L("(SELECT item_category_id FROM non_serialized_items WHERE id = ?)", stockItem.ID),
-			"stock_id":         stockItem.ID,
+			"origin":           goqu.L("(SELECT origin FROM non_serialized_items WHERE id = ?)", stockItem.ID),
 			"quantity":         stockItem.Quantity,
+			"stock_id":         stockItem.ID,
 		})
 	}
 
@@ -236,6 +252,20 @@ func (r *transferRepository) InsertNonSerializedItemTransferRecord(tx *goqu.TxDa
 	_, err := query.Executor().Exec()
 	if err != nil {
 		return fmt.Errorf("failed to insert serialized asset transfers: %w", err)
+	}
+
+	return nil
+}
+
+func (r *transferRepository) RemoveStockItemsTransferRecords(tx *goqu.TxDatabase, transferID int) error {
+	// Build the delete query
+	query := tx.Delete("non_serialized_transfers").
+		Where(goqu.Ex{"transfer_id": transferID})
+
+	// Execute the query
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to remove transfer records: %w", err)
 	}
 
 	return nil

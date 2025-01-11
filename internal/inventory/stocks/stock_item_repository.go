@@ -2,6 +2,7 @@ package stocks
 
 import (
 	"fmt"
+	"log"
 	"warehouse/internal/repository"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
@@ -224,29 +225,9 @@ func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.Sto
 	return &stocks, nil
 }
 
-func (r *StockRepository) MoveNonSerializedItems(tx *goqu.TxDatabase, stocks []models.StockItemRequest, toLocationID int, fromLocationID int) error {
+func (r *StockRepository) DecreaseStockItemsQuantity(tx *goqu.TxDatabase, stocks []models.StockItemRequest, fromLocationID int) error {
 	for _, stockItem := range stocks {
-		query := tx.Insert("non_serialized_items").
-			Rows(goqu.Record{
-				"item_category_id": goqu.L("(SELECT item_category_id FROM non_serialized_items WHERE id = ?)", stockItem.ID),
-				"location_id":      toLocationID,
-				"quantity":         stockItem.Quantity,
-				"origin":           goqu.L("(SELECT origin FROM non_serialized_items WHERE id = ?)", stockItem.ID),
-			}).
-			OnConflict(
-				goqu.DoUpdate(
-					"item_category_id, location_id, origin",
-					goqu.Record{
-						"quantity": goqu.L("non_serialized_items.quantity + EXCLUDED.quantity"),
-					},
-				),
-			)
-
-		if _, err := query.Executor().Exec(); err != nil {
-			return fmt.Errorf("failed to upsert non-serialized stock for id %d: %w", stockItem.ID, err)
-		}
-
-		// Step 2: Decrease the quantity from the source location
+		// Step 1: Decrease the quantity
 		updateQuery := tx.Update("non_serialized_items").
 			Set(goqu.Record{
 				"quantity": goqu.L("quantity - ?", stockItem.Quantity),
@@ -270,6 +251,94 @@ func (r *StockRepository) MoveNonSerializedItems(tx *goqu.TxDatabase, stocks []m
 		if rowsAffected == 0 {
 			return fmt.Errorf("insufficient quantity for category %d at location %d", stockItem.ID, fromLocationID)
 		}
+
+		if fromLocationID == 1 {
+			log.Println("cannot decrease quantity form main warehouse")
+			return nil
+		}
+		deleteQuery := tx.Delete("non_serialized_items").
+			Where(goqu.Ex{
+				"id":          stockItem.ID,
+				"location_id": fromLocationID,
+			}).
+			Where(goqu.C("quantity").Eq(0)) // Only delete records where quantity is now zero
+
+		if _, err := deleteQuery.Executor().Exec(); err != nil {
+			return fmt.Errorf("failed to remove stock item with zero quantity: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// func (r *StockRepository) MoveNonSerializedItems(tx *goqu.TxDatabase, stocks []models.StockItemRequest, toLocationID int, fromLocationID int) error {
+// 	for _, stockItem := range stocks {
+// 		query := tx.Insert("non_serialized_items").
+// 			Rows(goqu.Record{
+// 				"item_category_id": goqu.L("(SELECT item_category_id FROM non_serialized_items WHERE id = ?)", stockItem.ID),
+// 				"location_id":      toLocationID,
+// 				"quantity":         stockItem.Quantity,
+// 				"origin":           goqu.L("(SELECT origin FROM non_serialized_items WHERE id = ?)", stockItem.ID),
+// 			}).
+// 			OnConflict(
+// 				goqu.DoUpdate(
+// 					"item_category_id, location_id, origin",
+// 					goqu.Record{
+// 						"quantity": goqu.L("non_serialized_items.quantity + EXCLUDED.quantity"),
+// 					},
+// 				),
+// 			)
+
+// 		if _, err := query.Executor().Exec(); err != nil {
+// 			return fmt.Errorf("failed to upsert non-serialized stock for id %d: %w", stockItem.ID, err)
+// 		}
+
+// 		// Step 2: Decrease the quantity from the source location
+// 		updateQuery := tx.Update("non_serialized_items").
+// 			Set(goqu.Record{
+// 				"quantity": goqu.L("quantity - ?", stockItem.Quantity),
+// 			}).
+// 			Where(goqu.Ex{
+// 				"id":          stockItem.ID,
+// 				"location_id": fromLocationID,
+// 			}).
+// 			Where(goqu.C("quantity").Gte(stockItem.Quantity)) // Ensure sufficient quantity
+
+// 		result, err := updateQuery.Executor().Exec()
+// 		if err != nil {
+// 			return fmt.Errorf("failed to decrease quantity for category %d from location %d: %w", stockItem.ID, fromLocationID, err)
+// 		}
+
+// 		rowsAffected, err := result.RowsAffected()
+// 		if err != nil {
+// 			return fmt.Errorf("failed to check rows affected for category %d: %w", stockItem.ID, err)
+// 		}
+
+// 		if rowsAffected == 0 {
+// 			return fmt.Errorf("insufficient quantity for category %d at location %d", stockItem.ID, fromLocationID)
+// 		}
+// 	}
+
+// 	return nil
+// }
+
+func (r *StockRepository) IncreaseStockAtDestination(tx *goqu.TxDatabase, transferID int) error {
+	query := `
+		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin)
+		SELECT 
+			nst.item_category_id, 
+			t.to_location_id, 
+			nst.quantity, 
+			nst.origin
+		FROM non_serialized_transfers nst
+		INNER JOIN transfers t ON nst.transfer_id = t.id
+		WHERE t.id = $1
+		ON CONFLICT (item_category_id, location_id, origin)
+		DO UPDATE SET quantity = non_serialized_items.quantity + EXCLUDED.quantity;
+	`
+	_, err := tx.Exec(query, transferID)
+	if err != nil {
+		return fmt.Errorf("failed to increase stock at destination: %w", err)
 	}
 
 	return nil

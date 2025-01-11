@@ -14,8 +14,6 @@ type AuditLogRepository struct {
 }
 
 func (r *AuditLogRepository) PersistLog(auditlog models.AuditLog, auditLogData interface{}) error {
-	// all what is required resourceID int, resourceType, action string, data interface{}, userID *int
-
 	dataJSON, err := json.Marshal(auditLogData) // Convert data to JSON
 	if err != nil {
 		return fmt.Errorf("failed to marshal audit log data: %w", err)

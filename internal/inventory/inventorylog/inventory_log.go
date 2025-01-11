@@ -1,0 +1,75 @@
+package inventorylog
+
+import (
+	"warehouse/pkg/auditlog"
+	"warehouse/pkg/models"
+)
+
+type InventoryLog struct {
+	a *auditlog.Auditlog
+}
+
+func NewInventoryLog(a *auditlog.Auditlog) *InventoryLog {
+	return &InventoryLog{a: a}
+}
+
+func (s *InventoryLog) CreateTransferAuditLogEntry(action string, ts *models.Transfer) {
+	// Define log messages
+	logMessages := map[string]map[string]string{
+		"delivered": {
+			"transferMessage": "Transfer completed",
+			"assetsMessage":   "Asset moved to transfer locations",
+			"stocksMessage":   "Stock Items moved to transfer locations",
+		},
+		"in_transfer": {
+			"transferMessage": "Transfer registered",
+			"assetsMessage":   "Assets in transport",
+			"stocksMessage":   "Stock Items in transport",
+		},
+	}
+
+	messages, ok := logMessages[action]
+	if !ok {
+		return
+	}
+
+	s.a.Log(
+		action,
+		map[string]interface{}{
+			"transfer_id":      ts.ID,
+			"from_location_id": ts.FromLocation.ID,
+			"to_location_id":   ts.ToLocation.ID,
+			"msg":              messages["transferMessage"],
+		},
+		ts,
+	)
+
+	for _, asset := range ts.AssetsCollection {
+		asset := asset
+		s.a.Log(
+			action,
+			map[string]interface{}{
+				"transfer_id":      ts.ID,
+				"from_location_id": ts.FromLocation.ID,
+				"to_location_id":   ts.ToLocation.ID,
+				"msg":              messages["assetsMessage"],
+			},
+			&asset,
+		)
+	}
+
+	for _, stock := range ts.StockItemsCollection {
+		stock := stock
+		s.a.Log(
+			action,
+			map[string]interface{}{
+				"transfer_id":      ts.ID,
+				"from_location_id": ts.FromLocation.ID,
+				"to_location_id":   ts.ToLocation.ID,
+				"quantity":         stock.Quantity,
+				"msg":              messages["stocksMessage"],
+			},
+			stock,
+		)
+	}
+}

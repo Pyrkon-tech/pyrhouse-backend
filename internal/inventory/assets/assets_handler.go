@@ -3,10 +3,10 @@ package assets
 import (
 	"net/http"
 	"strconv"
-	"warehouse/internal/metadata"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
 	custom_error "warehouse/pkg/errors"
+	"warehouse/pkg/metadata"
 	"warehouse/pkg/models"
 	"warehouse/pkg/security"
 

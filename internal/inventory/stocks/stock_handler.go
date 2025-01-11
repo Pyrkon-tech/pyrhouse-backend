@@ -2,10 +2,10 @@ package stocks
 
 import (
 	"net/http"
-	"warehouse/internal/metadata"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
 	custom_error "warehouse/pkg/errors"
+	"warehouse/pkg/metadata"
 
 	"github.com/gin-gonic/gin"
 )
