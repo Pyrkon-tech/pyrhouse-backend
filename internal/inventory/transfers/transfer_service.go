@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"warehouse/internal/inventory/assets"
-	inventorylog "warehouse/internal/inventory/inventoryLog"
+	inventorylog "warehouse/internal/inventory/inventory_log"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
 	"warehouse/pkg/models"
