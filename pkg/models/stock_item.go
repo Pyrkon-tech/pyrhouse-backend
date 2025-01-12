@@ -32,4 +32,5 @@ type FlatStockRecord struct {
 	CategoryPyrId         string `db:"category_pyr_id"`
 	CategoryEquipmentType string `db:"category_equipment_type"`
 	Origin                string `db:"origin"`
+	TransferStockID       int    `db:"transfer_stock_id"`
 }

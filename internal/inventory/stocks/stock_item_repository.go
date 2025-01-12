@@ -165,15 +165,15 @@ func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.Sto
 	// TODO WRóć tu i zrób refactor zeby sie populowało
 	query := r.repository.GoquDBWrapper.
 		Select(
-			goqu.I("s.id").As("stock_id"),
 			goqu.I("nst.item_category_id").As("category_id"),
 			goqu.I("nst.quantity").As("quantity"),
-			goqu.I("s.origin"),
+			goqu.I("nst.origin"),
 			goqu.I("l.name").As("location_name"),
 			goqu.I("c.id").As("category_id"),
 			goqu.I("c.item_category").As("category_type"),
 			goqu.I("c.label").As("category_label"),
 			goqu.I("c.pyr_id").As("category_pyr_id"),
+			goqu.I("nst.stock_id").As("transfer_stock_id"),
 		).
 		From(goqu.T("non_serialized_transfers").As("nst")).
 		LeftJoin(
@@ -183,19 +183,12 @@ func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.Sto
 			}),
 		).
 		LeftJoin(
-			goqu.T("non_serialized_items").As("s"),
-			goqu.On(goqu.Ex{
-				"s.location_id":      goqu.I("t.to_location_id"),
-				"s.item_category_id": goqu.I("nst.item_category_id"),
-			}),
-		).
-		LeftJoin(
 			goqu.T("item_category").As("c"),
-			goqu.On(goqu.Ex{"s.item_category_id": goqu.I("c.id")}),
+			goqu.On(goqu.Ex{"nst.item_category_id": goqu.I("c.id")}),
 		).
 		LeftJoin(
 			goqu.T("locations").As("l"),
-			goqu.On(goqu.Ex{"s.location_id": goqu.I("l.id")}),
+			goqu.On(goqu.Ex{"t.to_location_id": goqu.I("l.id")}),
 		).
 		Where(goqu.Ex{"nst.transfer_id": transferID})
 	err := query.Executor().ScanStructs(&flatStocks)
@@ -206,7 +199,7 @@ func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.Sto
 	var stocks []models.StockItem
 	for _, flatStock := range flatStocks {
 		stocks = append(stocks, models.StockItem{
-			ID: flatStock.ID,
+			ID: flatStock.TransferStockID,
 			Category: models.ItemCategory{
 				ID:    flatStock.CategoryID,
 				Name:  flatStock.CategoryType,
@@ -270,57 +263,6 @@ func (r *StockRepository) DecreaseStockItemsQuantity(tx *goqu.TxDatabase, stocks
 
 	return nil
 }
-
-// func (r *StockRepository) MoveNonSerializedItems(tx *goqu.TxDatabase, stocks []models.StockItemRequest, toLocationID int, fromLocationID int) error {
-// 	for _, stockItem := range stocks {
-// 		query := tx.Insert("non_serialized_items").
-// 			Rows(goqu.Record{
-// 				"item_category_id": goqu.L("(SELECT item_category_id FROM non_serialized_items WHERE id = ?)", stockItem.ID),
-// 				"location_id":      toLocationID,
-// 				"quantity":         stockItem.Quantity,
-// 				"origin":           goqu.L("(SELECT origin FROM non_serialized_items WHERE id = ?)", stockItem.ID),
-// 			}).
-// 			OnConflict(
-// 				goqu.DoUpdate(
-// 					"item_category_id, location_id, origin",
-// 					goqu.Record{
-// 						"quantity": goqu.L("non_serialized_items.quantity + EXCLUDED.quantity"),
-// 					},
-// 				),
-// 			)
-
-// 		if _, err := query.Executor().Exec(); err != nil {
-// 			return fmt.Errorf("failed to upsert non-serialized stock for id %d: %w", stockItem.ID, err)
-// 		}
-
-// 		// Step 2: Decrease the quantity from the source location
-// 		updateQuery := tx.Update("non_serialized_items").
-// 			Set(goqu.Record{
-// 				"quantity": goqu.L("quantity - ?", stockItem.Quantity),
-// 			}).
-// 			Where(goqu.Ex{
-// 				"id":          stockItem.ID,
-// 				"location_id": fromLocationID,
-// 			}).
-// 			Where(goqu.C("quantity").Gte(stockItem.Quantity)) // Ensure sufficient quantity
-
-// 		result, err := updateQuery.Executor().Exec()
-// 		if err != nil {
-// 			return fmt.Errorf("failed to decrease quantity for category %d from location %d: %w", stockItem.ID, fromLocationID, err)
-// 		}
-
-// 		rowsAffected, err := result.RowsAffected()
-// 		if err != nil {
-// 			return fmt.Errorf("failed to check rows affected for category %d: %w", stockItem.ID, err)
-// 		}
-
-// 		if rowsAffected == 0 {
-// 			return fmt.Errorf("insufficient quantity for category %d at location %d", stockItem.ID, fromLocationID)
-// 		}
-// 	}
-
-// 	return nil
-// }
 
 func (r *StockRepository) IncreaseStockAtDestination(tx *goqu.TxDatabase, transferID int) error {
 	query := `
