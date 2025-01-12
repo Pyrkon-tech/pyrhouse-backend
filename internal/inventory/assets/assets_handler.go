@@ -67,7 +67,7 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 
 	req := models.ItemRequest{
 		LocationId: 1,
-		Status:     "in_stock",
+		Status:     "available",
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})

@@ -5,9 +5,10 @@ import "fmt"
 type Status string
 
 const (
+	StatusInStock     Status = "in_stock" // deprecated
 	StatusInTransit   Status = "in_transit"
+	StatusLocated     Status = "located"
 	StatusCompleted   Status = "completed"
-	StatusConfirmed   Status = "confirmed"
 	StatusAvailable   Status = "available"
 	StatusUnavailable Status = "unavailable"
 )
@@ -22,7 +23,7 @@ func NewStatus(value string) (Status, error) {
 
 func (s Status) isValid() bool {
 	switch s {
-	case StatusInTransit, StatusCompleted, StatusConfirmed, StatusAvailable, StatusUnavailable:
+	case StatusInTransit, StatusCompleted, StatusAvailable, StatusUnavailable, StatusInStock:
 		return true
 	default:
 		return false

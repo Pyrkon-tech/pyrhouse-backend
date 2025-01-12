@@ -5,6 +5,7 @@ import (
 	"log"
 	"warehouse/internal/repository"
 	custom_error "warehouse/pkg/errors"
+	"warehouse/pkg/metadata"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
@@ -268,8 +269,8 @@ func (r *AssetsRepository) UpdatePyrCode(assetID int, pyrCode string) error {
 	return nil
 }
 
-func (r *AssetsRepository) UpdateItemStatus(assetIDs []int, status string) error {
-	record := goqu.Record{"status": status}
+func (r *AssetsRepository) UpdateItemStatus(assetIDs []int, status metadata.Status) error {
+	record := goqu.Record{"status": string(status)}
 	condition := goqu.Ex{"id": assetIDs}
 	err := r.updateAsset(record, condition)
 	if err != nil {
