@@ -23,7 +23,7 @@ func NewStatus(value string) (Status, error) {
 
 func (s Status) isValid() bool {
 	switch s {
-	case StatusInTransit, StatusCompleted, StatusAvailable, StatusUnavailable, StatusInStock:
+	case StatusInStock, StatusInTransit, StatusLocated, StatusCompleted, StatusAvailable, StatusUnavailable:
 		return true
 	default:
 		return false
