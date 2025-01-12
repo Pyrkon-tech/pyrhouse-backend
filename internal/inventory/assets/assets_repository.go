@@ -142,8 +142,8 @@ func (r *AssetsRepository) CanRemoveAsset(assetID int) (bool, error) {
 		Where(goqu.Ex{
 			"i.id":          assetID,
 			"i.location_id": models.DefaultEquipmentLocationID,
-			"i.status":      models.AssetStatusInStock,
 		}).
+		Where(goqu.C("i.status").In(metadata.StatusInStock, metadata.StatusAvailable)).
 		Where(goqu.L("NOT EXISTS (?)",
 			r.repository.GoquDBWrapper.From(goqu.T("serialized_transfers").As("st")).
 				Select(goqu.L("1")).
