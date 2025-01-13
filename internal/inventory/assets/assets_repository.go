@@ -53,7 +53,9 @@ func (r *AssetsRepository) GetAssetsBy(conditions repository.QueryBuilder) (*[]m
 	}
 
 	query := r.getAssetQuery()
-	query = query.Where(conditions.BuildConditions(aliases))
+	query = query.
+		Where(conditions.BuildConditions(aliases)).
+		Order(goqu.I("i.id").Asc())
 
 	var flatAssets []models.FlatAssetRecord
 	err := query.Executor().ScanStructs(&flatAssets)

@@ -75,7 +75,9 @@ func (r *StockRepository) GetStockItemsBy(conditions repository.QueryBuilder) (*
 	}
 
 	query := r.getStockItemQuery()
-	query = query.Where(conditions.BuildConditions(aliases))
+	query = query.
+		Where(conditions.BuildConditions(aliases)).
+		Order(goqu.I("s.id").Asc())
 
 	var flatStocks []models.FlatStockRecord
 	err := query.Executor().ScanStructs(&flatStocks)
