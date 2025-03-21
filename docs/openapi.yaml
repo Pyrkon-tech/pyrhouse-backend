@@ -250,47 +250,169 @@ paths:
           content:
             application/json:
               schema:
-                type: object
                 properties:
                   message:
                     type: string
-                    example: Location deleted successfully
+                    example: "Location deleted successfully"
         "409":
-          $ref: "#/components/responses/DefaultError"
+          description: Conflict - Cannot delete location with existing items
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    type: string
+                    example: "Could not delete location"
+                  details:
+                    type: string
         "500":
           $ref: "#/components/responses/DefaultError"
 
-  /transfers:
-    post:
-      tags:
-        - transfer
-      summary: Register transfer
-      description: Create transfer of items
-      requestBody:
-        $ref: "#/components/requestBodies/TransferRequest"
-        required: true
-  
-  /transfers/{transferID}:
+  /locations/{locationID}/search:
     get:
       tags:
-        - transfer
-      summary: Returns collection of users
-      description: ...
+        - location
+      summary: Search items in location
+      description: Search for items in a specific location by serial number, category name, or category label
+      parameters:
+        - in: path
+          name: locationID
+          schema:
+            type: integer
+          required: true
+          description: Numeric ID of the location
+        - in: query
+          name: q
+          schema:
+            type: string
+          required: true
+          description: Search query (minimum 1 character)
       responses:
         "200":
-          description: List all users
+          description: successful operation
           content:
             application/json:
               schema:
                 type: array
                 items:
-                $ref: "#/components/schemas/Transfer"
+                  $ref: "#/components/schemas/Item"
+        "400":
+          description: Invalid search query
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    type: string
+                    example: "Search query must be at least 1 character long"
+        "500":
+          $ref: "#/components/responses/DefaultError"
 
-  /transfers/{transferId}/confirm:
+  /transfers:
+    get:
+      tags:
+        - transfer
+      summary: Pobierz listę wszystkich transferów
+      description: Zwraca listę wszystkich transferów w systemie
+      responses:
+        "200":
+          description: Lista wszystkich transferów
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transfer"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+    post:
+      tags:
+        - transfer
+      summary: Utwórz nowy transfer
+      description: Tworzy nowy transfer zasobów i pozycji magazynowych między lokalizacjami
+      requestBody:
+        $ref: "#/components/requestBodies/TransferRequest"
+        required: true
+      responses:
+        "201":
+          description: Transfer utworzony pomyślnie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transfer"
+        "400":
+          description: Nieprawidłowe żądanie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid request payload
+        "409":
+          description: Błąd walidacji magazynu
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Warehouse equipment validation failed
+                  reasons:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ValidationError"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+  
+  /transfers/{transferID}:
+    get:
+      tags:
+        - transfer
+      summary: Pobierz szczegóły transferu
+      description: Zwraca szczegółowe informacje o transferze na podstawie jego ID
+      parameters:
+        - in: path
+          name: transferID
+          schema:
+            type: integer
+          required: true
+          description: Identyfikator transferu
+      responses:
+        "200":
+          description: Szczegóły transferu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transfer"
+        "400":
+          description: Nieprawidłowy identyfikator transferu
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Transfer ID is required
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /transfers/{transferID}/confirm:
     patch:
       tags:
         - transfer
-      description: Update transfer status
+      summary: Potwierdź transfer
+      description: Aktualizuje status transferu
+      parameters:
+        - in: path
+          name: transferID
+          schema:
+            type: integer
+          required: true
+          description: Identyfikator transferu
       requestBody:
         content:
           application/json:
@@ -301,11 +423,11 @@ paths:
                     type: string
                     enum:
                       - completed
-                      - confirmed
-                      - in_transit
+                required:
+                  - status
       responses:
         "200":
-          description: successful operation
+          description: Transfer potwierdzony pomyślnie
           content:
             application/json:
               schema:
@@ -319,48 +441,49 @@ paths:
                     example: completed
                   message:
                     type: string
-                    example: happy message
-        "500":
-          description: Backend unable to update transfer status
-          $ref: "#/components/responses/DefaultError"
-
-  /transfers/{transferId}/assets/{itemId}/restore-to-location:
-    patch:
-      tags:
-        - transfer
-      description: Update transfer status
-      requestBody:
-        content:
-          application/json:
-            schema:
-                type: object
-                properties:
-                  location_id:
-                    type: integer
-                    example: 1
-                    description: id of location where to restore item
-      responses:
-        "200":
-          description: successful operation
+                    example: Transfer confirmed successfully
+        "400":
+          description: Nieprawidłowy status transferu
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                # TODO unify with STOCKs
-                  transfer_id:
-                    type: integer
-                    example: 3
-                    description: Location deleted successfully      
-        "400":
-          $ref: "#/components/responses/DefaultError"
+                  message:
+                    type: string
+                    example: Unsupported transfer status method
         "500":
-          $ref: "#/components/responses/DefaultError"
-  /transfers/{transferId}/categories/{categoryId}/restore-to-location:
+          description: Nie można zaktualizować statusu transferu
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Unable to update transfer status
+                  details:
+                    type: string
+
+  /transfers/{transferID}/assets/{itemID}/restore-to-location:
     patch:
       tags:
         - transfer
-      description: Update transfer status
+      summary: Usuń zasób z transferu
+      description: Usuwa zasób z transferu i przywraca go do wskazanej lokalizacji
+      parameters:
+        - in: path
+          name: transferID
+          schema:
+            type: integer
+          required: true
+          description: Identyfikator transferu
+        - in: path
+          name: itemID
+          schema:
+            type: integer
+          required: true
+          description: Identyfikator zasobu
       requestBody:
         content:
           application/json:
@@ -370,14 +493,71 @@ paths:
                   location_id:
                     type: integer
                     example: 1
-                    description: id of location where to restore item
+                    description: Identyfikator lokalizacji, do której należy przywrócić zasób
+                required:
+                  - location_id
+      responses:
+        "200":
+          description: Zasób usunięty z transferu pomyślnie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transfer_id:
+                    type: integer
+                    example: 3
+        "400":
+          description: Nieprawidłowe żądanie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Missing required json location_id
+        "500":
+          $ref: "#/components/responses/DefaultError"
+  /transfers/{transferID}/categories/{categoryID}/restore-to-location:
+    patch:
+      tags:
+        - transfer
+      summary: Usuń pozycję magazynową z transferu
+      description: Usuwa pozycję magazynową z transferu i przywraca ją do wskazanej lokalizacji
+      parameters:
+        - in: path
+          name: transferID
+          schema:
+            type: integer
+          required: true
+          description: Identyfikator transferu
+        - in: path
+          name: categoryID
+          schema:
+            type: integer
+          required: true
+          description: Identyfikator kategorii pozycji magazynowej
+      requestBody:
+        content:
+          application/json:
+            schema:
+                type: object
+                properties:
+                  location_id:
+                    type: integer
+                    example: 1
+                    description: Identyfikator lokalizacji, do której należy przywrócić pozycję magazynową
                   quantity:
                     type: integer
                     example: 32
-                    description: what amount should be moved from current location
+                    description: Ilość, która powinna zostać przywrócona
+                required:
+                  - location_id
+                  - quantity
       responses:
         "200":
-          description: successful operation
+          description: Pozycja magazynowa usunięta z transferu pomyślnie
           content:
             application/json:
               schema:
@@ -387,9 +567,26 @@ paths:
                     type: string
                     example: Stock item removed from transfer successfully      
         "400":
-          $ref: "#/components/responses/DefaultError"
+          description: Nieprawidłowe żądanie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
         "500":
-          $ref: "#/components/responses/DefaultError"
+          description: Błąd podczas usuwania pozycji magazynowej z transferu
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Failed to remove stock item from transfer
+                  details:
+                    type: string
   /items/categories:
     post:
       tags:
@@ -533,29 +730,43 @@ components:
       content:
         application/json:
           schema:
+            type: object
             properties:
               from_location_id:
-                type: string
+                type: integer
                 example: 1
-                required: true
-                description: origin location
+                description: Identyfikator lokalizacji źródłowej
               location_id:
-                type: string
-                example: 1
-                required: true
-                description: desired location, invalid name-to fix
-              items:
+                type: integer
+                example: 2
+                description: Identyfikator lokalizacji docelowej
+              asset_item_collection:
                 type: array
+                description: Kolekcja zasobów serializowanych do transferu
                 items:
                   type: object
                   properties:
                     id:
-                      required: true
                       type: integer
                       format: int64
+                      description: Identyfikator zasobu
+              stock_item_collection:
+                type: array
+                description: Kolekcja pozycji magazynowych do transferu
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      format: int64
+                      description: Identyfikator pozycji magazynowej
                     quantity:
                       type: integer
                       format: int32
+                      description: Ilość do transferu
+            required:
+              - from_location_id
+              - location_id
 
     UserCreateRequest:
       content:
@@ -584,6 +795,15 @@ components:
           schema:
             $ref: "#/components/schemas/ItemCategory"
   schemas:
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Serialized assets are not present in location
+        property:
+          type: string
+          example: assets
     Order:
       type: object
       properties:
@@ -674,22 +894,33 @@ components:
         id:
           type: integer
           format: int64
+          description: Identyfikator transferu
         from_location:
           $ref: "#/components/schemas/Location"
+          description: Lokalizacja źródłowa
         to_location:
           $ref: "#/components/schemas/Location"
-        assets:
+          description: Lokalizacja docelowa
+        assets_collection:
           type: array
+          description: Kolekcja zasobów w transferze
           items:
             $ref: "#/components/schemas/Item"
-        stock_items:
+        stock_items_collection:
           type: array
+          description: Kolekcja pozycji magazynowych w transferze
           items:
             $ref: "#/components/schemas/Stock"
         transfer_date:
-          type: date-time
+          type: string
+          format: date-time
+          description: Data transferu
         status:
           type: string
+          description: Status transferu
+          enum:
+            - in_transit
+            - completed
     User:
       type: object
       properties:

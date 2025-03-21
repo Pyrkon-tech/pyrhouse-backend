@@ -187,7 +187,7 @@ func (s *TransferService) completeStockItemsTransfer(tx *goqu.TxDatabase, transf
 	if err := s.stockRepo.IncreaseStockAtDestination(tx, transferID); err != nil {
 		return fmt.Errorf("failed to increase stock items at destination: %w", err)
 	}
-
+	// TODO Prevent remove or figure out a way to keep what was transfered
 	if err := s.tr.RemoveStockItemsTransferRecords(tx, transferID); err != nil {
 		return fmt.Errorf("failed remove stock items transfer entry: %w", err)
 	}
@@ -217,10 +217,10 @@ func (s *TransferService) startStockItemsTransfer(tx *goqu.TxDatabase, transferI
 		return nil
 	}
 
+	// TODO Prevent remove or figure out a way to keep what was transfered
 	if err := s.tr.InsertStockItemsTransferRecord(tx, transferID, stocks); err != nil {
 		return fmt.Errorf("failed to insert non-serialized asset transfer record: %w", err)
 	}
-
 	if err := s.stockRepo.DecreaseStockItemsQuantity(tx, stocks, fromLocationID); err != nil {
 		return fmt.Errorf("failed to move non-serialized assets: %w", err)
 	}

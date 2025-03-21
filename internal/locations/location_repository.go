@@ -204,3 +204,56 @@ func (r *LocationRepository) prepareQueryConditions(query *goqu.SelectDataset, l
 		).
 		Where(goqu.Ex{"i.location_id": locationID})
 }
+
+func (r *LocationRepository) SearchLocationItems(locationID string, searchQuery string) ([]models.Asset, error) {
+	query := r.Repository.GoquDBWrapper.
+		From(goqu.T("items").As("i")).
+		Select(
+			"i.id",
+			"i.item_serial",
+			"i.status",
+			"i.pyr_code",
+			"i.origin",
+			"i.item_category_id",
+			"c.item_category",
+			"c.label",
+		).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),
+		).
+		Where(goqu.Ex{
+			"i.location_id": locationID,
+		}).
+		Where(goqu.Or(
+			goqu.I("i.item_serial").ILike("%"+searchQuery+"%"),
+			goqu.I("c.item_category").ILike("%"+searchQuery+"%"),
+			goqu.I("c.label").ILike("%"+searchQuery+"%"),
+			goqu.I("i.pyr_code").ILike("%"+searchQuery+"%"),
+		))
+
+	rows, err := query.Executor().Query()
+	if err != nil {
+		return nil, fmt.Errorf("error executing SQL statement: %w", err)
+	}
+
+	var assets []models.Asset
+	for rows.Next() {
+		var asset models.Asset
+		if err := rows.Scan(
+			&asset.ID,
+			&asset.Serial,
+			&asset.Status,
+			&asset.PyrCode,
+			&asset.Origin,
+			&asset.Category.ID,
+			&asset.Category.Name,
+			&asset.Category.Label,
+		); err != nil {
+			return nil, fmt.Errorf("unable fetch data: %w", err)
+		}
+		assets = append(assets, asset)
+	}
+
+	return assets, nil
+}

@@ -22,6 +22,7 @@ func (h *LocationHandler) RegisterRoutes(router *gin.Engine) {
 	router.PATCH("/locations/:id", h.UpdateLocation)
 	router.GET("/locations", h.GetLocations)
 	router.GET("/locations/:id/assets", h.GetLocationItems)
+	router.GET("/locations/:id/search", h.SearchLocationItems)
 	router.DELETE("/locations/:id", h.RemoveLocation)
 }
 
@@ -33,6 +34,32 @@ func (h *LocationHandler) GetLocations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, locations)
+}
+
+func (h *LocationHandler) SearchLocationItems(c *gin.Context) {
+	locationID := c.Param("id")
+	searchQuery := c.Query("q")
+
+	if len(searchQuery) < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Search query must be at least 1 character long"})
+		return
+	}
+
+	items, err := h.Repository.SearchLocationItems(locationID, searchQuery)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Unable to search location items",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if len(items) == 0 {
+		c.JSON(http.StatusOK, []interface{}{})
+		return
+	}
+
+	c.JSON(http.StatusOK, items)
 }
 
 func (h *LocationHandler) UpdateLocation(c *gin.Context) {
