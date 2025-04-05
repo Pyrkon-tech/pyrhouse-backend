@@ -124,6 +124,67 @@ paths:
                   $ref: "#/components/schemas/Item"
         "404":
             description: not found
+
+  /assets/bulk:
+    post:
+      tags:
+        - asset
+      summary: Add multiple assets in bulk
+      description: Creates multiple assets with the same category, location and status
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serials:
+                  type: array
+                  items:
+                    type: string
+                  description: List of serial numbers for assets to create
+                location_id:
+                  type: integer
+                  description: Location ID where assets will be stored (defaults to 1 if not specified)
+                status:
+                  type: string
+                  description: Status of the assets (defaults to "available" if not specified)
+                category_id:
+                  type: integer
+                  required: true
+                  description: Category ID for the assets
+                origin:
+                  type: string
+                  required: true
+                  description: Origin of the assets (e.g. "purchase")
+      responses:
+        "201":
+          description: Assets created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Item"
+                  errors:
+                    type: array
+                    items:
+                      type: string
+                    description: List of errors that occurred during creation of specific assets
+        "400":
+          description: Invalid request payload or category type
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: string
+
   /assets/{assetID}:
     delete:
       tags: 
