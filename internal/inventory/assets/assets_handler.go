@@ -181,6 +181,11 @@ func (h *ItemHandler) CreateBulkAssets(c *gin.Context) {
 		req.LocationId = 1
 	}
 
+	// Set default status to "available" if not specified
+	if req.Status == "" {
+		req.Status = "available"
+	}
+
 	origin, err := metadata.NewOrigin(req.Origin)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
@@ -248,11 +253,6 @@ func (h *ItemHandler) CreateBulkAssets(c *gin.Context) {
 	}
 	if len(errors) > 0 {
 		response["errors"] = errors
-	}
-
-	if len(createdAssets) == 0 {
-		c.JSON(http.StatusBadRequest, response)
-		return
 	}
 
 	c.JSON(http.StatusCreated, response)
