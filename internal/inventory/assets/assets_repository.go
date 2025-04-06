@@ -139,13 +139,13 @@ func (r *AssetsRepository) PersistItem(itemRequest models.ItemRequest) (*models.
 
 func (r *AssetsRepository) CanRemoveAsset(assetID int) (bool, error) {
 	var id int
-	query := r.repository.GoquDBWrapper.Select("i.id").
-		From(goqu.T("items").As("i")).
+	query := r.repository.GoquDBWrapper.Select("items.id").
+		From(goqu.T("items")).
 		Where(goqu.Ex{
-			"i.id":          assetID,
-			"i.location_id": models.DefaultEquipmentLocationID,
+			"items.id":          assetID,
+			"items.location_id": models.DefaultEquipmentLocationID,
+			"items.status":      goqu.Op{"in": []string{string(metadata.StatusInStock), string(metadata.StatusAvailable)}},
 		}).
-		Where(goqu.C("i.status").In(metadata.StatusInStock, metadata.StatusAvailable)).
 		Where(goqu.L("NOT EXISTS (?)",
 			r.repository.GoquDBWrapper.From(goqu.T("serialized_transfers").As("st")).
 				Select(goqu.L("1")).
