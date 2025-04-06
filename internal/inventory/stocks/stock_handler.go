@@ -115,12 +115,32 @@ func (h *StockHandler) UpdateStock(c *gin.Context) {
 }
 
 func (h *StockHandler) GetStocks(c *gin.Context) {
-	// TODO basic get, should allow rguments like location/category_id
+	var query struct {
+		LocationID    *int   `form:"location_id"`
+		CategoryID    *int   `form:"category_id"`
+		CategoryLabel string `form:"category_label"`
+	}
 
-	stockItems, err := h.StockRepository.GetStockItems()
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid query parameters"})
+		return
+	}
 
+	conditions := repository.NewQueryBuilder()
+
+	if query.LocationID != nil {
+		conditions.AddCondition("location_ids", []int{*query.LocationID})
+	}
+	if query.CategoryID != nil {
+		conditions.AddCondition("category_id", *query.CategoryID)
+	}
+	if query.CategoryLabel != "" {
+		conditions.AddCondition("category_label", query.CategoryLabel)
+	}
+
+	stockItems, err := h.StockRepository.GetStockItemsBy(conditions)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create stock item"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch stock items"})
 		return
 	}
 

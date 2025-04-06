@@ -16,6 +16,23 @@ type retrieveItemListQuery struct {
 	CategoryLabel string `form:"category_label"`
 }
 
+func (q *retrieveItemListQuery) AddCondition(key string, value interface{}) {
+	switch key {
+	case "location_ids":
+		if ids, ok := value.([]int); ok {
+			q.LocationIDs = ids
+		}
+	case "category_id":
+		if id, ok := value.(int); ok {
+			q.CategoryID = &id
+		}
+	case "category_label":
+		if label, ok := value.(string); ok {
+			q.CategoryLabel = label
+		}
+	}
+}
+
 func (q *retrieveItemListQuery) BuildConditions(aliases map[string]string) goqu.Ex {
 	conditions := goqu.Ex{}
 

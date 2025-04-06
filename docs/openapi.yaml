@@ -73,18 +73,52 @@ paths:
       tags:
         - items
       description: Returns array of items both with serial and with quantity
+      parameters:
+        - in: query
+          name: location_ids
+          schema:
+            type: array
+            items:
+              type: integer
+          description: List of location IDs to filter items by
+        - in: query
+          name: category_id
+          schema:
+            type: integer
+          description: Category ID to filter items by
+        - in: query
+          name: category_type
+          schema:
+            type: string
+            enum: [asset, stock]
+          description: Type of items to retrieve (asset or stock)
+        - in: query
+          name: category_label
+          schema:
+            type: string
+          description: Category label to filter items by
       responses:
         "200":
           description: List of combined stock items and assets
           content:
             application/json:
               schema:
+                type: array
+                items:
+                  oneOf:
+                    - $ref: "#/components/schemas/Item"
+                    - $ref: "#/components/schemas/StockItem"
+        "400":
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
                 type: object
                 properties:
-                  assets:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Item"
+                  error:
+                    type: string
+        "500":
+          $ref: "#/components/responses/DefaultError"
             
   /assets:
     post:
