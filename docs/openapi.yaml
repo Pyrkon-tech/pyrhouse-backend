@@ -1039,9 +1039,7 @@ components:
                 type: string
                 example: John Doe
               role:
-                type: string
-                enum: [user, moderator, admin]
-                example: user
+                $ref: "#/components/schemas/Role"
     UserUpdateRequest:
       content:
         application/json:
@@ -1055,15 +1053,13 @@ components:
                 type: string
                 example: newpassword123
               role:
-                type: string
-                enum: [user, moderator, admin]
-                example: moderator
+                $ref: "#/components/schemas/Role"
     UserArray:
       content:
         application/json:
           schema:
             type: array
-            assets:
+            items:
               $ref: "#/components/schemas/User"
       description: List of user object
       required: true
@@ -1218,9 +1214,7 @@ components:
           type: string
           example: John Doe
         role:
-          type: string
-          enum: [user, moderator, admin]
-          example: user
+          $ref: "#/components/schemas/Role"
     StockItem:
       type: object
       properties:
@@ -1253,3 +1247,11 @@ components:
           type: string
         message:
           type: string
+    Role:
+      type: string
+      description: Poziom uprawnień użytkownika
+      enum:
+        - user
+        - moderator
+        - admin
+      example: user
