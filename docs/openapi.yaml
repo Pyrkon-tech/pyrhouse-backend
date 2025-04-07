@@ -128,7 +128,27 @@ paths:
       description: ""
       operationId: addItem
       requestBody:
-        $ref: "#/components/requestBodies/ItemRequest"
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serial:
+                  required: true
+                  type: string
+                category_id:
+                  required: true
+                  type: string
+                origin:
+                  required: true
+                  type: string
+                  description: Where is it from, default types are enum, but it allows to pass also personal & other, it just need to contain "keyword" to pass like druga-era-external
+                  enum:
+                    - druga-era
+                    - probis
+                    - targowe
+                    - personal-{}
+                    - other-{}
       responses:
         "201":
           content:
@@ -426,7 +446,46 @@ paths:
       summary: Utwórz nowy transfer
       description: Tworzy nowy transfer zasobów i pozycji magazynowych między lokalizacjami
       requestBody:
-        $ref: "#/components/requestBodies/TransferRequest"
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from_location_id:
+                  type: integer
+                  example: 1
+                  description: Identyfikator lokalizacji źródłowej
+                location_id:
+                  type: integer
+                  example: 2
+                  description: Identyfikator lokalizacji docelowej
+                asset_item_collection:
+                  type: array
+                  description: Kolekcja zasobów serializowanych do transferu
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        format: int64
+                        description: Identyfikator zasobu
+                stock_item_collection:
+                  type: array
+                  description: Kolekcja pozycji magazynowych do transferu
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        format: int64
+                        description: Identyfikator pozycji magazynowej
+                      quantity:
+                        type: integer
+                        format: int32
+                        description: Ilość do transferu
+              required:
+                - from_location_id
+                - location_id
         required: true
       responses:
         "201":
@@ -460,7 +519,11 @@ paths:
                     items:
                       $ref: "#/components/schemas/ValidationError"
         "500":
-          $ref: "#/components/responses/DefaultError"
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   
   /transfers/{transferID}:
     get:
@@ -709,7 +772,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ItemCategory"
         "400":
-          $ref: "#/components/responses/DefaultError"        
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     get:
       tags:
         - item category
@@ -723,7 +790,7 @@ paths:
               schema:
                 type: array
                 items:
-                $ref: "#/components/schemas/ItemCategory"
+                  $ref: "#/components/schemas/ItemCategory"
   /items/categories/{categoryID}:
     delete:
       tags: 
@@ -763,7 +830,26 @@ paths:
       security:
         - bearerAuth: []
       requestBody:
-        $ref: "#/components/requestBodies/UserCreateRequest"
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+                - role
+              properties:
+                username:
+                  type: string
+                  example: johndoe
+                password:
+                  type: string
+                  example: password123
+                fullname:
+                  type: string
+                  example: John Doe
+                role:
+                  $ref: "#/components/schemas/Role"
         description: Created user object
         required: true
       responses:
@@ -899,7 +985,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UserUpdateRequest"
+              type: object
+              properties:
+                fullname:
+                  type: string
+                  example: John Doe Updated
+                password:
+                  type: string
+                  example: newpassword123
+                role:
+                  $ref: "#/components/schemas/Role"
         description: Updated user object
         required: true
       responses:
@@ -959,6 +1054,7 @@ components:
       content:
         application/json:
           schema:
+            type: object
             properties:
               serial:
                 required: true
