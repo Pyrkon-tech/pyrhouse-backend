@@ -8,9 +8,15 @@ type User struct {
 	Role         string `json:"role" db:"role"`
 }
 
-type UserRequest struct {
+type CreateUserRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 	Fullname string `json:"fullname"`
 	Role     string `json:"role" binding:"required"`
+}
+
+type UpdateUserRequest struct {
+	Fullname *string `json:"fullname"`
+	Password *string `json:"password"`
+	Role     *string `json:"role"`
 }

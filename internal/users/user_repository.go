@@ -8,11 +8,17 @@ import (
 	"github.com/doug-martin/goqu/v9"
 )
 
-type UserRepository struct {
+type UserRepository interface {
+	PersistUser(req models.CreateUserRequest, hashedPassword []byte) error
+	GetUser(id int) (*models.User, error)
+	GetUsers() ([]models.User, error)
+}
+
+type userRepositoryImpl struct {
 	repository *repository.Repository
 }
 
-func (r *UserRepository) PersistUser(req models.UserRequest, hashedPassword []byte) error {
+func (r *userRepositoryImpl) PersistUser(req models.CreateUserRequest, hashedPassword []byte) error {
 	query := r.repository.GoquDBWrapper.Insert("users").
 		Rows(goqu.Record{
 			"password_hash": string(hashedPassword),
@@ -29,7 +35,7 @@ func (r *UserRepository) PersistUser(req models.UserRequest, hashedPassword []by
 	return nil
 }
 
-func (r *UserRepository) GetUsers() ([]models.User, error) {
+func (r *userRepositoryImpl) GetUsers() ([]models.User, error) {
 	var users []models.User
 	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "role").
 		From("users")
@@ -43,6 +49,20 @@ func (r *UserRepository) GetUsers() ([]models.User, error) {
 	return users, nil
 }
 
-func NewRepository(r *repository.Repository) *UserRepository {
-	return &UserRepository{repository: r}
+func (r *userRepositoryImpl) GetUser(id int) (*models.User, error) {
+	var user models.User
+	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "password_hash", "role").
+		From("users").
+		Where(goqu.Ex{"id": id})
+
+	_, err := query.Executor().ScanStruct(&user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}
+
+func NewRepository(r *repository.Repository) UserRepository {
+	return &userRepositoryImpl{repository: r}
 }

@@ -758,31 +758,187 @@ paths:
       tags:
         - users
       summary: Register user
-      description: This can only be done by the logged in user.
+      description: This can only be done by the logged in user with admin role.
       operationId: createUser
+      security:
+        - bearerAuth: []
       requestBody:
         $ref: "#/components/requestBodies/UserCreateRequest"
         description: Created user object
         required: true
       responses:
-        "201":
-          description: PROPER RESPONSE NOT IMPLEMENTED YET
+        "200":
+          description: User registered successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User registered successfully
+        "400":
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     get:
       tags:
         - users
       summary: Returns collection of users
-      description: ...
+      description: Returns a list of all users. Requires moderator role.
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: List all users
           content:
             application/json:
               schema:
+                type: array
+                items:
                   $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /users/{id}:
+    parameters:
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      tags:
+        - users
+      summary: Get user by ID
+      description: Returns a single user. Requires user role.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid user ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags:
+        - users
+      summary: Update user
+      description: Updates an existing user. Requires admin role.
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdateRequest"
+        description: Updated user object
+        required: true
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid request payload or user ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 servers:
   - url: pyrhouse-backend-f26ml.ondigitalocean.app/api
 components:
@@ -867,9 +1023,41 @@ components:
       content:
         application/json:
           schema:
-            type: array
-            assets:
-              $ref: "#/components/schemas/UserRequest"
+            type: object
+            required:
+              - username
+              - password
+              - role
+            properties:
+              username:
+                type: string
+                example: johndoe
+              password:
+                type: string
+                example: password123
+              fullname:
+                type: string
+                example: John Doe
+              role:
+                type: string
+                enum: [user, moderator, admin]
+                example: user
+    UserUpdateRequest:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              fullname:
+                type: string
+                example: John Doe Updated
+              password:
+                type: string
+                example: newpassword123
+              role:
+                type: string
+                enum: [user, moderator, admin]
+                example: moderator
     UserArray:
       content:
         application/json:
@@ -1022,14 +1210,17 @@ components:
         id:
           type: integer
           format: int64
+          example: 1
         username:
           type: string
+          example: johndoe
         fullname:
           type: string
-#         password:
-#           type: string
+          example: John Doe
         role:
           type: string
+          enum: [user, moderator, admin]
+          example: user
     StockItem:
       type: object
       properties:

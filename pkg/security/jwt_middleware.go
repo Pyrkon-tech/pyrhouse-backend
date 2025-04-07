@@ -58,14 +58,12 @@ func Authorize(requiredRole string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get("role")
 		if !exists {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
 			return
 		}
 		userRole, ok := role.(string)
 		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid role format"})
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid role format"})
 			return
 		}
 
@@ -73,11 +71,31 @@ func Authorize(requiredRole string) gin.HandlerFunc {
 		userRoleLevel, userExists := roleHierarchy[userRole]
 
 		if !requiredExists || !userExists || userRoleLevel < requiredRoleLevel {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
 			return
 		}
 
 		c.Next()
 	}
+}
+
+func IsAllowed(c *gin.Context, requiredRole string) bool {
+	role, exists := c.Get("role")
+	if !exists {
+		return false
+	}
+
+	userRole, ok := role.(string)
+	if !ok {
+		return false
+	}
+
+	requiredRoleLevel, requiredExists := roleHierarchy[requiredRole]
+	userRoleLevel, userExists := roleHierarchy[userRole]
+
+	if !requiredExists || !userExists || userRoleLevel < requiredRoleLevel {
+		return false
+	}
+
+	return true
 }
