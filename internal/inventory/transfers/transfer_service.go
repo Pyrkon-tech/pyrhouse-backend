@@ -127,21 +127,24 @@ func (s *TransferService) GetTransfers() (*[]models.Transfer, error) {
 }
 
 func (s *TransferService) RemoveStockItemFromTransfer(transferReq stocks.RemoveStockItemFromTransferRequest) error {
+	var err error
+
 	return repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		if err := decreaseStockInTransfer(tx, transferReq); err != nil {
+		if err = decreaseStockInTransfer(tx, transferReq); err != nil {
 			return err
 		}
 
-		if err := s.stockRepo.RemoveZeroQuantityStock(tx, transferReq); err != nil {
+		if err = s.stockRepo.RemoveZeroQuantityStock(tx, transferReq); err != nil {
 			return err
 		}
 
-		previousLocation, err := s.tr.GetTransferLocationById(tx, transferReq.TransferID)
-		if err != nil {
-			return err
+		if transferReq.ToLocationID == 0 {
+			transferReq.ToLocationID, err = s.tr.GetTransferLocationById(tx, transferReq.TransferID)
+			if err != nil {
+				return err
+			}
 		}
-
-		if err := s.stockRepo.RestoreStockToLocation(tx, transferReq, previousLocation); err != nil {
+		if err = s.stockRepo.RestoreStockToLocation(tx, transferReq); err != nil {
 			return err
 		}
 
@@ -332,10 +335,11 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 
 			for _, item := range *stockItems {
 				if err := s.stockRepo.RestoreStockToLocation(tx, stocks.RemoveStockItemFromTransferRequest{
-					CategoryID: item.Category.ID,
-					TransferID: transfer.ID,
-					Quantity:   item.Quantity,
-				}, transfer.FromLocation.ID); err != nil {
+					CategoryID:   item.Category.ID,
+					TransferID:   transfer.ID,
+					Quantity:     item.Quantity,
+					ToLocationID: transfer.FromLocation.ID,
+				}); err != nil {
 					return fmt.Errorf("failed to restore stock item %d to original location: %w", item.Category.ID, err)
 				}
 			}

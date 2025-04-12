@@ -303,12 +303,12 @@ func (r *StockRepository) RemoveZeroQuantityStock(tx *goqu.TxDatabase, transferR
 	return nil
 }
 
-func (r *StockRepository) RestoreStockToLocation(tx *goqu.TxDatabase, transferReq RemoveStockItemFromTransferRequest, previousLocation int) error {
+func (r *StockRepository) RestoreStockToLocation(tx *goqu.TxDatabase, transferReq RemoveStockItemFromTransferRequest) error {
 	_, err := tx.Update("non_serialized_items").
 		Set(goqu.Record{"quantity": goqu.L("quantity + ?", transferReq.Quantity)}).
 		Where(goqu.Ex{
 			"item_category_id": transferReq.CategoryID,
-			"location_id":      previousLocation,
+			"location_id":      transferReq.ToLocationID,
 		}).
 		Executor().
 		Exec()
