@@ -26,8 +26,11 @@ COPY . .
 # Build the application
 RUN go build -o main .
 
+# Make the start script executable
+RUN chmod +x start.sh
+
 # Expose port 8080 for the application
 EXPOSE 8080
 
-# Run the application
-CMD ["./main"]
+# Run the application using the start script
+CMD ["./start.sh"]

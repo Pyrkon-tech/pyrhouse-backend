@@ -45,6 +45,11 @@ func (m *MockUserRepository) AddUserPoints(id int, points int) error {
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) UpdateUser(id int, changes *models.UserChanges) error {
+	args := m.Called(id, changes)
+	return args.Error(0)
+}
+
 func setupTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -129,10 +134,23 @@ func TestUpdateUser(t *testing.T) {
 				Role:     rolesPtr(roles.Admin),
 			},
 			setupMock: func() {
+				// Mock dla GetUser
 				mockRepo.On("GetUser", 1).Return(&models.User{
 					ID:       1,
 					Username: "testuser",
 					Role:     "user",
+				}, nil)
+
+				// Mock dla UpdateUser
+				mockRepo.On("UpdateUser", 1, mock.MatchedBy(func(changes *models.UserChanges) bool {
+					return changes.Role != nil && *changes.Role == string(roles.Admin)
+				})).Return(nil)
+
+				// Mock dla drugiego GetUser po aktualizacji
+				mockRepo.On("GetUser", 1).Return(&models.User{
+					ID:       1,
+					Username: "testuser",
+					Role:     roles.Admin,
 				}, nil)
 			},
 			expectedStatus: http.StatusOK,
@@ -236,6 +254,11 @@ func TestAddUserPoints(t *testing.T) {
 			},
 			setupMock: func() {
 				mockRepo.On("AddUserPoints", 1, 10).Return(nil)
+				mockRepo.On("GetUser", 1).Return(&models.User{
+					ID:       1,
+					Username: "testuser",
+					Points:   10,
+				}, nil)
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -249,6 +272,11 @@ func TestAddUserPoints(t *testing.T) {
 			},
 			setupMock: func() {
 				mockRepo.On("AddUserPoints", 1, -5).Return(nil)
+				mockRepo.On("GetUser", 1).Return(&models.User{
+					ID:       1,
+					Username: "testuser",
+					Points:   5,
+				}, nil)
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -289,6 +317,120 @@ func TestAddUserPoints(t *testing.T) {
 			c.Params = []gin.Param{{Key: "id", Value: tt.userID}}
 
 			handler.AddUserPoints(c)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestUpdateUserPassword(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockRepo := new(MockUserRepository)
+	handler := NewHandler(mockRepo)
+
+	tests := []struct {
+		name           string
+		userID         string
+		payload        models.UpdateUserRequest
+		setupMock      func()
+		expectedStatus int
+	}{
+		{
+			name:   "successful password update",
+			userID: "1",
+			payload: models.UpdateUserRequest{
+				Password: stringPtr("newPassword123"),
+			},
+			setupMock: func() {
+				// Mock dla GetUser
+				mockRepo.On("GetUser", 1).Return(&models.User{
+					ID:           1,
+					Username:     "testuser",
+					PasswordHash: "oldHash",
+					Role:         "user",
+				}, nil)
+
+				// Mock dla UpdateUser
+				mockRepo.On("UpdateUser", 1, mock.MatchedBy(func(changes *models.UserChanges) bool {
+					return changes.PasswordHash != nil && *changes.PasswordHash != "oldHash"
+				})).Return(nil)
+
+				// Mock dla drugiego GetUser po aktualizacji
+				mockRepo.On("GetUser", 1).Return(&models.User{
+					ID:           1,
+					Username:     "testuser",
+					PasswordHash: "newHash",
+					Role:         "user",
+				}, nil)
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:   "password too short",
+			userID: "1",
+			payload: models.UpdateUserRequest{
+				Password: stringPtr("123"),
+			},
+			setupMock: func() {
+				// Mock dla GetUser
+				mockRepo.On("GetUser", 1).Return(&models.User{
+					ID:           1,
+					Username:     "testuser",
+					PasswordHash: "oldHash",
+					Role:         "user",
+				}, nil)
+
+				// Nie powinno być wywołania UpdateUser, ponieważ hasło jest za krótkie
+				// Nie dodajemy mocka dla UpdateUser
+			},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:   "user not found",
+			userID: "999",
+			payload: models.UpdateUserRequest{
+				Password: stringPtr("newPassword123"),
+			},
+			setupMock: func() {
+				// Mock dla GetUser zwracający błąd
+				mockRepo.On("GetUser", 999).Return(nil, errors.New("user not found"))
+			},
+			expectedStatus: http.StatusNotFound,
+		},
+		{
+			name:   "repository error on update",
+			userID: "1",
+			payload: models.UpdateUserRequest{
+				Password: stringPtr("newPassword123"),
+			},
+			setupMock: func() {
+				// Mock dla GetUser
+				mockRepo.On("GetUser", 1).Return(&models.User{
+					ID:           1,
+					Username:     "testuser",
+					PasswordHash: "oldHash",
+					Role:         "user",
+				}, nil)
+
+				// Mock dla UpdateUser zwracający błąd
+				mockRepo.On("UpdateUser", 1, mock.Anything).Return(errors.New("database error"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo.ExpectedCalls = nil
+			tt.setupMock()
+			c, w := setupTestContext()
+
+			body, _ := json.Marshal(tt.payload)
+			c.Request = httptest.NewRequest("PATCH", "/users/"+tt.userID, bytes.NewBuffer(body))
+			c.Params = []gin.Param{{Key: "id", Value: tt.userID}}
+
+			handler.UpdateUser(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			mockRepo.AssertExpectations(t)

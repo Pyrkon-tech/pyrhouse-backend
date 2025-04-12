@@ -83,24 +83,53 @@ func (h *UsersHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if req.Password != nil && *req.Password != "" && len(*req.Password) > 6 {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+	changes := &models.UserChanges{}
+
+	if req.Password != nil && *req.Password != "" {
+		if len(*req.Password) > 5 {
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+				return
+			}
+			passwordHash := string(hashedPassword)
+			changes.PasswordHash = &passwordHash
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters long"})
 			return
 		}
-		user.PasswordHash = string(hashedPassword)
 	}
 
 	if req.Role != nil && *req.Role != user.Role {
-		user.Role = *req.Role
+		role := string(*req.Role)
+		changes.Role = &role
 	}
 
 	if req.Points != nil {
-		user.Points = *req.Points
+		points := *req.Points
+		changes.Points = &points
 	}
 
-	c.JSON(http.StatusOK, user)
+	// Jeśli nie ma żadnych zmian, zwracamy sukces
+	if !changes.HasChanges() {
+		c.JSON(http.StatusOK, user)
+		return
+	}
+
+	// Aktualizujemy użytkownika tylko jeśli są zmiany
+	if err := h.Repository.UpdateUser(userID, changes); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user", "details": err.Error()})
+		return
+	}
+
+	// Pobieramy zaktualizowanego użytkownika
+	updatedUser, err := h.Repository.GetUser(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get updated user", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, updatedUser)
 }
 
 func (h *UsersHandler) AddUserPoints(c *gin.Context) {

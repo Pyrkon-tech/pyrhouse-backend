@@ -2,7 +2,6 @@ package metadata
 
 import (
 	"testing"
-	"warehouse/pkg/models"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -10,24 +9,27 @@ import (
 func TestNewPyrCode(t *testing.T) {
 	tests := []struct {
 		name     string
-		asset    models.Asset
+		pyrID    string
+		assetID  int
 		expected string
 	}{
 		{
-			name: "Basic Case",
-			asset: models.Asset{
-				ID: 123,
-				Category: models.ItemCategory{
-					PyrID: "LT",
-				},
-			},
+			name:     "Basic Case",
+			pyrID:    "LT",
+			assetID:  123,
 			expected: "PYR-LT123",
+		},
+		{
+			name:     "Different Category",
+			pyrID:    "KB",
+			assetID:  456,
+			expected: "PYR-KB456",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pyrCode := NewPyrCode(tt.asset.Category.PyrID, tt.asset.ID)
+			pyrCode := NewPyrCode(tt.pyrID, tt.assetID)
 			actual := pyrCode.GeneratePyrCode()
 			assert.Equal(t, tt.expected, actual)
 		})

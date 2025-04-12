@@ -7,20 +7,21 @@ import (
 // TestIsValid tests the IsValid method of the Origin type.
 func TestIsValid(t *testing.T) {
 	tests := []struct {
-		origin       Origin
-		expectedBool bool
+		name     string
+		origin   Origin
+		expected bool
 	}{
-		{OriginDrugaEra, true},
-		{OriginProbis, true},
-		{OriginTargi, true},
-		{OriginPersonal, false}, // Not predefined but handled with ContainsKeyword.
-		{Origin("unknown"), false},
+		{"druga-era origin", OriginDrugaEra, true},
+		{"probis origin", OriginProbis, true},
+		{"targi origin", OriginTargi, true},
+		{"personal origin", OriginPersonal, false},
+		{"unknown origin", Origin("unknown"), false},
 	}
 
 	for _, tt := range tests {
-		t.Run(string(tt.origin), func(t *testing.T) {
-			if isValid := tt.origin.IsValid(); isValid != tt.expectedBool {
-				t.Errorf("Expected %v for %s, got %v", tt.expectedBool, tt.origin, isValid)
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.origin.IsValid(); got != tt.expected {
+				t.Errorf("IsValid() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -28,24 +29,26 @@ func TestIsValid(t *testing.T) {
 
 func TestNewOrigin(t *testing.T) {
 	tests := []struct {
-		input         string
-		expectedError bool
+		name    string
+		input   string
+		wantErr bool
 	}{
-		{"druga-era", false},
-		{"PROBIS", false},      // Should be converted to lowercase.
-		{"unknown", true},      // Should fail as it's not predefined.
-		{"  personal ", false}, // Should trim spaces and normalize.
-		{"targowe", false},     // Valid value.
+		{"valid druga-era", "druga-era", false},
+		{"valid uppercase PROBIS", "PROBIS", false},
+		{"invalid unknown", "unknown", true},
+		{"valid personal with spaces", "  personal ", false},
+		{"valid targowe", "targowe", false},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			_, err := NewOrigin(tt.input)
-			if tt.expectedError && err == nil {
-				t.Errorf("Expected error for input %s, but got none", tt.input)
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewOrigin(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NewOrigin() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if !tt.expectedError && err != nil {
-				t.Errorf("Did not expect error for input %s, but got %v", tt.input, err)
+			if err == nil && !got.IsValid() && !got.isPredefined() {
+				t.Errorf("NewOrigin() = %v is neither valid nor predefined", got)
 			}
 		})
 	}
@@ -53,21 +56,22 @@ func TestNewOrigin(t *testing.T) {
 
 func TestContainsKeyword(t *testing.T) {
 	tests := []struct {
+		name     string
 		origin   Origin
 		keyword  string
 		expected bool
 	}{
-		{OriginDrugaEra, "druga", true},
-		{OriginProbis, "pro", true},
-		{OriginPersonal, "sonal", true},
-		{Origin("unknown"), "know", true},
-		{Origin("targowe"), "PROBIS", false}, // Should be case-sensitive.
+		{"druga-era contains druga", OriginDrugaEra, "druga", true},
+		{"probis contains pro", OriginProbis, "pro", true},
+		{"personal contains sonal", OriginPersonal, "sonal", true},
+		{"unknown contains know", Origin("unknown"), "know", true},
+		{"case sensitive match", Origin("targowe"), "PROBIS", false},
 	}
 
 	for _, tt := range tests {
-		t.Run(string(tt.origin), func(t *testing.T) {
-			if result := tt.origin.ContainsKeyword(tt.keyword); result != tt.expected {
-				t.Errorf("Expected %v for origin %s with keyword %s, got %v", tt.expected, tt.origin, tt.keyword, result)
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.origin.ContainsKeyword(tt.keyword); got != tt.expected {
+				t.Errorf("ContainsKeyword() = %v, want %v", got, tt.expected)
 			}
 		})
 	}

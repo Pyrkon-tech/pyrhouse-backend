@@ -13,6 +13,7 @@ type UserRepository interface {
 	GetUser(id int) (*models.User, error)
 	GetUsers() ([]models.User, error)
 	AddUserPoints(id int, points int) error
+	UpdateUser(id int, changes *models.UserChanges) error
 }
 
 type userRepositoryImpl struct {
@@ -73,6 +74,31 @@ func (r *userRepositoryImpl) AddUserPoints(id int, points int) error {
 	_, err := query.Executor().Exec()
 	if err != nil {
 		return fmt.Errorf("failed to add user points: %w", err)
+	}
+
+	return nil
+}
+
+func (r *userRepositoryImpl) UpdateUser(id int, changes *models.UserChanges) error {
+	updateFields := make(goqu.Record)
+
+	if changes.PasswordHash != nil {
+		updateFields["password_hash"] = *changes.PasswordHash
+	}
+	if changes.Role != nil {
+		updateFields["role"] = *changes.Role
+	}
+	if changes.Points != nil {
+		updateFields["points"] = *changes.Points
+	}
+
+	query := r.repository.GoquDBWrapper.Update("users").
+		Set(updateFields).
+		Where(goqu.Ex{"id": id})
+
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
 	}
 
 	return nil
