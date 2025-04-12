@@ -563,7 +563,7 @@ paths:
       tags:
         - transfer
       summary: Potwierdź transfer
-      description: Aktualizuje status transferu
+      description: Potwierdza transfer i aktualizuje lokalizację zasobów
       parameters:
         - in: path
           name: transferID
@@ -571,18 +571,6 @@ paths:
             type: integer
           required: true
           description: Identyfikator transferu
-      requestBody:
-        content:
-          application/json:
-            schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    enum:
-                      - completed
-                required:
-                  - status
       responses:
         "200":
           description: Transfer potwierdzony pomyślnie
@@ -600,18 +588,8 @@ paths:
                   message:
                     type: string
                     example: Transfer confirmed successfully
-        "400":
-          description: Nieprawidłowy status transferu
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Unsupported transfer status method
         "500":
-          description: Nie można zaktualizować statusu transferu
+          description: Nie można potwierdzić transferu
           content:
             application/json:
               schema:
@@ -619,7 +597,50 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: Unable to update transfer status
+                    example: Unable to confirm transfer
+                  details:
+                    type: string
+
+  /transfers/{transferID}/cancel:
+    patch:
+      tags:
+        - transfer
+      summary: Anuluj transfer
+      description: Anuluje transfer i przywraca wszystkie zasoby i pozycje magazynowe do oryginalnej lokalizacji
+      parameters:
+        - in: path
+          name: transferID
+          schema:
+            type: integer
+          required: true
+          description: Identyfikator transferu
+      responses:
+        "200":
+          description: Transfer anulowany pomyślnie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transfer_id:
+                    type: integer
+                    example: 3
+                  status:
+                    type: string
+                    example: cancelled
+                  message:
+                    type: string
+                    example: Transfer cancelled successfully
+        "500":
+          description: Nie można anulować transferu
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Unable to cancel transfer
                   details:
                     type: string
 

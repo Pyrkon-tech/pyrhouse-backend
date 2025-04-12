@@ -26,6 +26,16 @@ type ValidationError struct {
 	Property string `json:"property"`
 }
 
+func NewService(r *repository.Repository, tr TransferRepository, ar *assets.AssetsRepository, sr *stocks.StockRepository, il *inventorylog.InventoryLog) *TransferService {
+	return &TransferService{
+		r:         r,
+		tr:        tr,
+		ar:        ar,
+		stockRepo: sr,
+		il:        il,
+	}
+}
+
 func (s *TransferService) InitTransfer(req models.TransferRequest, transitStatus string) (int, error) {
 	var transferID int
 
@@ -228,7 +238,7 @@ func (s *TransferService) startStockItemsTransfer(tx *goqu.TxDatabase, transferI
 	return nil
 }
 
-func (s *TransferService) confirmTransfer(transferID int, status string) error {
+func (s *TransferService) ConfirmTransfer(transferID int, status string) error {
 	var err error
 	// TODO get only ids?
 	assets, err := s.ar.GetTransferAssets(transferID)
@@ -289,7 +299,7 @@ func mapToIDArray(assetsReq []models.AssetItemRequest) []int {
 	return ids
 }
 
-func (s *TransferService) cancelTransfer(transferID int) error {
+func (s *TransferService) CancelTransfer(transferID int) error {
 	return repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		// Pobierz informacje o transferze
 		transfer, err := s.tr.GetTransferRow(transferID)
@@ -329,6 +339,7 @@ func (s *TransferService) cancelTransfer(transferID int) error {
 					TransferID: transferID,
 					CategoryID: item.Category.ID,
 					LocationID: transfer.FromLocationID,
+					Quantity:   item.Quantity,
 				}, transfer.FromLocationID); err != nil {
 					return fmt.Errorf("failed to restore stock item %d to original location: %w", item.Category.ID, err)
 				}

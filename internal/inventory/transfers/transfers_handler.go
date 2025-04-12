@@ -10,7 +10,6 @@ import (
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
-	"warehouse/pkg/metadata"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -37,7 +36,8 @@ func (h *TransferHandler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/transfers/:id", h.GetTransfer)
 	router.GET("/transfers", h.RetrieveTransferList)
 	router.POST("/transfers", h.CreateTransfer)
-	router.PATCH("/transfers/:id/confirm", h.UpdateTransfer)
+	router.PATCH("/transfers/:id/confirm", h.ConfirmTransfer)
+	router.PATCH("/transfers/:id/cancel", h.CancelTransfer)
 	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", h.RemoveAssetFromTransfer)
 	router.PATCH("/transfers/:id/categories/:category_id/restore-to-location", h.RemoveStockItemFromTransfer)
 }
@@ -183,50 +183,38 @@ func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Stock item removed from transfer successfully"})
 }
 
-func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
+func (h *TransferHandler) ConfirmTransfer(c *gin.Context) {
 	transferID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid transfer ID parameter, must be an integer"})
 		return
 	}
 
-	var req struct {
-		Status string `json:"status" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	err = h.Service.ConfirmTransfer(transferID, "completed")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to confirm transfer", "details": err.Error()})
 		return
 	}
 
-	status, _ := metadata.NewStatus(req.Status)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Transfer confirmed successfully",
+	})
+}
 
-	switch status {
-	case "completed":
-		err := h.Service.confirmTransfer(transferID, string(status))
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to update transfer status", "details": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"message":     "Transfer confirmed successfully",
-			"transfer_id": transferID,
-			"status":      req.Status,
-		})
-	case "cancelled":
-		err := h.Service.cancelTransfer(transferID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to cancel transfer", "details": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"message":     "Transfer cancelled successfully",
-			"transfer_id": transferID,
-			"status":      req.Status,
-		})
-	default:
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": "Unsupported transfer status method"})
+func (h *TransferHandler) CancelTransfer(c *gin.Context) {
+	transferID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid transfer ID parameter, must be an integer"})
+		return
 	}
+
+	err = h.Service.CancelTransfer(transferID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to cancel transfer", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Transfer cancelled successfully",
+	})
 }
