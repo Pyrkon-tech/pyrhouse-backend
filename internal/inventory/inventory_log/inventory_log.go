@@ -13,6 +13,16 @@ func NewInventoryLog(a *auditlog.Auditlog) *InventoryLog {
 	return &InventoryLog{a: a}
 }
 
+func (s *InventoryLog) CreateAssetAuditLogEntry(action string, asset *models.Asset, msg string) {
+	s.a.Log(
+		action,
+		map[string]interface{}{
+			"asset_id": asset.ID,
+			"msg":      msg,
+		},
+		asset,
+	)
+}
 func (s *InventoryLog) CreateTransferAuditLogEntry(action string, ts *models.Transfer) {
 	// Define log messages
 	logMessages := map[string]map[string]string{

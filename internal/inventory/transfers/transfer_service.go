@@ -141,7 +141,7 @@ func (s *TransferService) RemoveStockItemFromTransfer(transferReq stocks.RemoveS
 			return err
 		}
 
-		if err := stocks.RestoreStockToLocation(tx, transferReq, previousLocation); err != nil {
+		if err := s.stockRepo.RestoreStockToLocation(tx, transferReq, previousLocation); err != nil {
 			return err
 		}
 
@@ -299,66 +299,50 @@ func mapToIDArray(assetsReq []models.AssetItemRequest) []int {
 	return ids
 }
 
-func (s *TransferService) CancelTransfer(transferID int) error {
+func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 	err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		// Pobierz informacje o transferze
-		transfer, err := s.tr.GetTransferRow(transferID)
-		if err != nil {
-			return fmt.Errorf("failed to get transfer: %w", err)
-		}
 
-		// Pobierz aktywa w transferze
-		assets, err := s.ar.GetTransferAssets(transferID)
+		assets, err := s.ar.GetTransferAssets(transfer.ID)
 		if err != nil {
 			return fmt.Errorf("failed to get transfer assets: %w", err)
 		}
 
-		// Przywróć aktywa do oryginalnej lokalizacji
 		for _, asset := range *assets {
-			if err := s.ar.RemoveAssetFromTransfer(transferID, asset.ID, transfer.FromLocationID); err != nil {
+			if err := s.ar.RemoveAssetFromTransfer(transfer.ID, asset.ID, transfer.FromLocation.ID); err != nil {
 				return fmt.Errorf("failed to restore asset %d to original location: %w", asset.ID, err)
 			}
-		}
 
-		// Aktualizuj status aktywów na "located"
-		if len(*assets) > 0 {
-			assetIDs := make([]int, len(*assets))
-			for i, asset := range *assets {
-				assetIDs[i] = asset.ID
-			}
-			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusLocated); err != nil {
+			if err := s.ar.UpdateItemStatus([]int{asset.ID}, metadata.StatusLocated); err != nil {
 				return fmt.Errorf("failed to update asset status: %w", err)
 			}
+
+			s.il.CreateAssetAuditLogEntry("cancelled", &asset, "Asset returned to original location")
 		}
 
-		// Sprawdź czy są pozycje magazynowe w transferze
-		hasStockItems, err := s.tr.HasStockItemsInTransfer(tx, transferID)
+		hasStockItems, err := s.tr.HasStockItemsInTransfer(tx, transfer.ID)
 		if err != nil {
 			return fmt.Errorf("failed to check stock items in transfer: %w", err)
 		}
 
 		if hasStockItems {
-			// Pobierz pozycje magazynowe
-			stockItems, err := s.stockRepo.GetStockItemsByTransfer(transferID)
+			stockItems, err := s.stockRepo.GetStockItemsByTransfer(transfer.ID)
 			if err != nil {
 				return fmt.Errorf("failed to get stock items: %w", err)
 			}
 
-			// Przywróć pozycje magazynowe do oryginalnej lokalizacji
 			for _, item := range *stockItems {
-				if err := stocks.RestoreStockToLocation(tx, stocks.RemoveStockItemFromTransferRequest{
-					TransferID: transferID,
+				if err := s.stockRepo.RestoreStockToLocation(tx, stocks.RemoveStockItemFromTransferRequest{
 					CategoryID: item.Category.ID,
-					LocationID: transfer.FromLocationID,
+					TransferID: transfer.ID,
 					Quantity:   item.Quantity,
-				}, transfer.FromLocationID); err != nil {
+				}, transfer.FromLocation.ID); err != nil {
 					return fmt.Errorf("failed to restore stock item %d to original location: %w", item.Category.ID, err)
 				}
 			}
 		}
 
 		// Zaktualizuj status transferu
-		if err := s.tr.UpdateTransferStatus(transferID, "cancelled"); err != nil {
+		if err := s.tr.UpdateTransferStatus(transfer.ID, "cancelled"); err != nil {
 			return fmt.Errorf("failed to update transfer status: %w", err)
 		}
 
@@ -370,7 +354,7 @@ func (s *TransferService) CancelTransfer(transferID int) error {
 	}
 
 	// Dodaj wpis do logu inwentaryzacji poza transakcją
-	go s.createInventoryLog("cancelled", transferID)
+	go s.createInventoryLog("cancelled", transfer.ID)
 
 	return nil
 }

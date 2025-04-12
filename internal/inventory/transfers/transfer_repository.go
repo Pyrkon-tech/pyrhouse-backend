@@ -303,7 +303,7 @@ func decreaseStockInTransfer(tx *goqu.TxDatabase, transferReq stocks.RemoveStock
 		return fmt.Errorf("failed to check rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("insufficient stock for item_category_id %d at location %d", transferReq.CategoryID, transferReq.LocationID)
+		return fmt.Errorf("insufficient stock for item_category_id %d at location ", transferReq.CategoryID)
 	}
 
 	return nil

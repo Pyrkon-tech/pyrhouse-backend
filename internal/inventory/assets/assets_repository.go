@@ -179,10 +179,22 @@ func (r *AssetsRepository) RemoveAsset(assetID int) (string, error) {
 	return assetSerial, nil
 }
 
+func (r *AssetsRepository) UpdateAssetLocation(tx *goqu.TxDatabase, itemID int, locationID int) error {
+	_, err := tx.Update("items").
+		Set(goqu.Record{"location_id": locationID}).
+		Where(goqu.Ex{"id": itemID}).
+		Executor().
+		Exec()
+
+	if err != nil {
+		return fmt.Errorf("failed to update asset location: %w", err)
+	}
+	return nil
+}
+
 func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
-	err := repository.WithTransaction(r.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		var err error
-		_, err = tx.Delete("serialized_transfers").
+	return repository.WithTransaction(r.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		_, err := tx.Delete("asset_transfer").
 			Where(goqu.Ex{
 				"transfer_id": transferID,
 				"item_id":     itemID,
@@ -191,27 +203,15 @@ func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, l
 			Exec()
 
 		if err != nil {
-			return fmt.Errorf("failed to remove asset from transfer %d: %w", transferID, err)
+			return fmt.Errorf("failed to remove asset from transfer, unable to delete transfer record %d: %w", transferID, err)
 		}
 
-		_, err = tx.Update("items").
-			Set(goqu.Record{"location_id": locationID}).
-			Where(goqu.Ex{"id": itemID}).
-			Executor().
-			Exec()
-
-		if err != nil {
-			return fmt.Errorf("failed to remove asset from transfer, unable to update location %d: %w", transferID, err)
+		if err := r.UpdateAssetLocation(tx, itemID, locationID); err != nil {
+			return err
 		}
 
 		return nil
 	})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (r *AssetsRepository) GetTransferAssets(transferID int) (*[]models.Asset, error) {

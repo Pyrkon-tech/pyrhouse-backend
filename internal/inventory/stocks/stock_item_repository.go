@@ -303,22 +303,9 @@ func (r *StockRepository) RemoveZeroQuantityStock(tx *goqu.TxDatabase, transferR
 	return nil
 }
 
-// TODO add handling to remove from previous location
-func RestoreStockToLocation(tx *goqu.TxDatabase, transferReq RemoveStockItemFromTransferRequest, previousLocation int) error {
+func (r *StockRepository) RestoreStockToLocation(tx *goqu.TxDatabase, transferReq RemoveStockItemFromTransferRequest, previousLocation int) error {
 	_, err := tx.Update("non_serialized_items").
 		Set(goqu.Record{"quantity": goqu.L("quantity + ?", transferReq.Quantity)}).
-		Where(goqu.Ex{
-			"item_category_id": transferReq.CategoryID,
-			"location_id":      transferReq.LocationID,
-		}).
-		Executor().
-		Exec()
-	if err != nil {
-		return fmt.Errorf("failed to restore stock to given location: %w", err)
-	}
-
-	_, err = tx.Update("non_serialized_items").
-		Set(goqu.Record{"quantity": goqu.L("quantity - ?", transferReq.Quantity)}).
 		Where(goqu.Ex{
 			"item_category_id": transferReq.CategoryID,
 			"location_id":      previousLocation,
@@ -326,7 +313,7 @@ func RestoreStockToLocation(tx *goqu.TxDatabase, transferReq RemoveStockItemFrom
 		Executor().
 		Exec()
 	if err != nil {
-		return fmt.Errorf("failed to restore stock from previous location: %w", err)
+		return fmt.Errorf("failed to restore stock to given location: %w", err)
 	}
 
 	return nil

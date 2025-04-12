@@ -10,6 +10,7 @@ import (
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
+	"warehouse/pkg/metadata"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -208,7 +209,18 @@ func (h *TransferHandler) CancelTransfer(c *gin.Context) {
 		return
 	}
 
-	err = h.Service.CancelTransfer(transferID)
+	transfer, err := h.Service.GetTransfer(transferID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to get transfer", "details": err.Error()})
+		return
+	}
+
+	if transfer.Status != string(metadata.StatusInTransit) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Transfer already in status " + transfer.Status, "details": "Cannot cancel transfer with final status"})
+		return
+	}
+
+	err = h.Service.CancelTransfer(transfer)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to cancel transfer", "details": err.Error()})
 		return

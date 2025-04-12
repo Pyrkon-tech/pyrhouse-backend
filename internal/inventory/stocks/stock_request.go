@@ -15,8 +15,14 @@ type PatchStockItemRequest struct {
 }
 
 type RemoveStockItemFromTransferRequest struct {
-	LocationID int `json:"location_id" binding:"required"`
 	Quantity   int `json:"quantity" binding:"required"`
 	TransferID int
 	CategoryID int
+}
+
+type MoveStockItemToLocationRequest struct {
+	Quantity       int `json:"quantity" binding:"required"`
+	CategoryID     int
+	FromLocationID int
+	ToLocationID   int
 }

@@ -11,6 +11,7 @@ const (
 	StatusCompleted   Status = "completed"
 	StatusAvailable   Status = "available"
 	StatusUnavailable Status = "unavailable"
+	StatusCancelled   Status = "cancelled"
 )
 
 func NewStatus(value string) (Status, error) {
@@ -23,7 +24,7 @@ func NewStatus(value string) (Status, error) {
 
 func (s Status) isValid() bool {
 	switch s {
-	case StatusInStock, StatusInTransit, StatusLocated, StatusCompleted, StatusAvailable, StatusUnavailable:
+	case StatusInStock, StatusInTransit, StatusLocated, StatusCompleted, StatusAvailable, StatusUnavailable, StatusCancelled:
 		return true
 	default:
 		return false
