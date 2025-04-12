@@ -1034,6 +1034,131 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /users/{id}/points:
+    parameters:
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+    patch:
+      tags:
+        - users
+      summary: Update user points
+      description: Updates points for an existing user. Requires admin role.
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - points
+              properties:
+                points:
+                  type: integer
+                  description: New points value for the user
+                  example: 100
+        description: Points update request
+        required: true
+      responses:
+        "200":
+          description: Points updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User points updated successfully
+        "400":
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags:
+        - users
+      summary: Add or subtract user points
+      description: Adds or subtracts points from an existing user. Use positive values to add points, negative to subtract. Requires admin role.
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - points
+              properties:
+                points:
+                  type: integer
+                  description: Points to add (positive) or subtract (negative)
+                  example: 10
+        description: Points adjustment request
+        required: true
+      responses:
+        "200":
+          description: Points updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User points updated successfully
+                  points:
+                    type: integer
+                    description: Current points after update
+                    example: 110
+        "400":
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 servers:
   - url: pyrhouse-backend-f26ml.ondigitalocean.app/api
 components:
@@ -1311,6 +1436,10 @@ components:
           example: John Doe
         role:
           $ref: "#/components/schemas/Role"
+        points:
+          type: integer
+          description: User's points
+          example: 0
     StockItem:
       type: object
       properties:

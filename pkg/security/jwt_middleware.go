@@ -5,10 +5,13 @@ import (
 	"net/http"
 	"strings"
 
+	"warehouse/pkg/roles"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// TODO: Remove this and refactor the code to use the roles package
 const (
 	RoleUser      = 1
 	RoleModerator = 2
@@ -98,4 +101,28 @@ func IsAllowed(c *gin.Context, requiredRole string) bool {
 	}
 
 	return true
+}
+
+func RequireRole(requiredRole roles.Role) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
+			return
+		}
+
+		userRole, ok := role.(string)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid role format"})
+			return
+		}
+
+		roleType := roles.Role(userRole)
+		if !roleType.HasPermission(requiredRole) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
+			return
+		}
+
+		c.Next()
+	}
 }

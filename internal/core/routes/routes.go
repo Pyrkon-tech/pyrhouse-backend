@@ -2,9 +2,9 @@ package routes
 
 import (
 	"log"
-	"net/http"
 	"os"
 	"warehouse/internal/core/container"
+	"warehouse/internal/middleware"
 	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"
@@ -27,10 +27,7 @@ func RegisterProtectedRoutes(router *gin.Engine, container *container.Container)
 }
 
 func RegisterUtilityRoutes(router *gin.Engine) {
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-		log.Println("Health check successful")
-	})
+	router.GET("/health", middleware.HealthCheckMiddleware())
 
 	openapiFilePath := "./docs/index.html"
 	if _, err := os.Stat(openapiFilePath); err == nil {

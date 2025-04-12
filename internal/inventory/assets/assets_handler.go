@@ -36,11 +36,11 @@ func (h *ItemHandler) RegisterRoutes(router *gin.Engine) {
 	protectedRoutes.Use(security.JWTMiddleware())
 	{
 		protectedRoutes.DELETE("/assets/:id", security.Authorize("admin"), h.RemoveAsset)
-		protectedRoutes.POST("/assets/categories", h.CreateItemCategory)
-		protectedRoutes.POST("/assets", h.CreateAsset)
-		protectedRoutes.POST("/assets/bulk", h.CreateBulkAssets)
-		protectedRoutes.GET("/assets/categories", security.Authorize("admin"), h.GetItemCategories)
-		protectedRoutes.DELETE("/assets/categories/:id", h.RemoveItemCategory)
+		protectedRoutes.POST("/assets/categories", security.Authorize("moderator"), h.CreateItemCategory)
+		protectedRoutes.POST("/assets", security.Authorize("user"), h.CreateAsset)
+		protectedRoutes.POST("/assets/bulk", security.Authorize("user"), h.CreateBulkAssets)
+		protectedRoutes.GET("/assets/categories", security.Authorize("user"), h.GetItemCategories)
+		protectedRoutes.DELETE("/assets/categories/:id", security.Authorize("moderator"), h.RemoveItemCategory)
 	}
 }
 

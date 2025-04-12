@@ -38,7 +38,7 @@ func (l *LoginHandler) LoginHandler() gin.HandlerFunc {
 			return
 		}
 
-		token, err := GenerateJWT(strconv.Itoa(user.ID), user.Role)
+		token, err := GenerateJWT(strconv.Itoa(user.ID), string(user.Role))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 			return

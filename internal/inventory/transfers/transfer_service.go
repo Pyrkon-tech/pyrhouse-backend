@@ -252,7 +252,7 @@ func (s *TransferService) confirmTransfer(transferID int, status string) error {
 			return fmt.Errorf("unable to update stock items err: %w", err)
 		}
 
-		err = s.tr.ConfirmTransfer(transferID, status)
+		err = s.tr.UpdateTransferStatus(transferID, status)
 		if err != nil {
 			return err
 		}
@@ -287,4 +287,59 @@ func mapToIDArray(assetsReq []models.AssetItemRequest) []int {
 		ids[i] = item.ID
 	}
 	return ids
+}
+
+func (s *TransferService) cancelTransfer(transferID int) error {
+	return repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		// Pobierz informacje o transferze
+		transfer, err := s.tr.GetTransferRow(transferID)
+		if err != nil {
+			return fmt.Errorf("failed to get transfer: %w", err)
+		}
+
+		// Pobierz aktywa w transferze
+		assets, err := s.ar.GetTransferAssets(transferID)
+		if err != nil {
+			return fmt.Errorf("failed to get transfer assets: %w", err)
+		}
+
+		// Przywróć aktywa do oryginalnej lokalizacji
+		for _, asset := range *assets {
+			if err := s.ar.RemoveAssetFromTransfer(transferID, asset.ID, transfer.FromLocationID); err != nil {
+				return fmt.Errorf("failed to restore asset %d to original location: %w", asset.ID, err)
+			}
+		}
+
+		// Sprawdź czy są pozycje magazynowe w transferze
+		hasStockItems, err := s.tr.HasStockItemsInTransfer(tx, transferID)
+		if err != nil {
+			return fmt.Errorf("failed to check stock items in transfer: %w", err)
+		}
+
+		if hasStockItems {
+			// Pobierz pozycje magazynowe
+			stockItems, err := s.stockRepo.GetStockItemsByTransfer(transferID)
+			if err != nil {
+				return fmt.Errorf("failed to get stock items: %w", err)
+			}
+
+			// Przywróć pozycje magazynowe do oryginalnej lokalizacji
+			for _, item := range *stockItems {
+				if err := stocks.RestoreStockToLocation(tx, stocks.RemoveStockItemFromTransferRequest{
+					TransferID: transferID,
+					CategoryID: item.Category.ID,
+					LocationID: transfer.FromLocationID,
+				}, transfer.FromLocationID); err != nil {
+					return fmt.Errorf("failed to restore stock item %d to original location: %w", item.Category.ID, err)
+				}
+			}
+		}
+
+		// Zaktualizuj status transferu
+		if err := s.tr.UpdateTransferStatus(transferID, "cancelled"); err != nil {
+			return fmt.Errorf("failed to update transfer status: %w", err)
+		}
+
+		return nil
+	})
 }

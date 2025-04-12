@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 	"warehouse/pkg/models"
+	"warehouse/pkg/roles"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -37,6 +38,11 @@ func (m *MockUserRepository) GetUsers() ([]models.User, error) {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]models.User), args.Error(1)
+}
+
+func (m *MockUserRepository) AddUserPoints(id int, points int) error {
+	args := m.Called(id, points)
+	return args.Error(0)
 }
 
 func setupTestContext() (*gin.Context, *httptest.ResponseRecorder) {
@@ -120,7 +126,7 @@ func TestUpdateUser(t *testing.T) {
 			userID: "1",
 			payload: models.UpdateUserRequest{
 				Fullname: stringPtr("Updated Name"),
-				Role:     stringPtr("admin"),
+				Role:     rolesPtr(roles.Admin),
 			},
 			setupMock: func() {
 				mockRepo.On("GetUser", 1).Return(&models.User{
@@ -206,6 +212,94 @@ func TestGetUserList(t *testing.T) {
 	}
 }
 
+func TestAddUserPoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockRepo := new(MockUserRepository)
+	handler := NewHandler(mockRepo)
+
+	tests := []struct {
+		name    string
+		userID  string
+		payload struct {
+			Points int `json:"points"`
+		}
+		setupMock      func()
+		expectedStatus int
+	}{
+		{
+			name:   "successful points addition",
+			userID: "1",
+			payload: struct {
+				Points int `json:"points"`
+			}{
+				Points: 10,
+			},
+			setupMock: func() {
+				mockRepo.On("AddUserPoints", 1, 10).Return(nil)
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:   "successful points subtraction",
+			userID: "1",
+			payload: struct {
+				Points int `json:"points"`
+			}{
+				Points: -5,
+			},
+			setupMock: func() {
+				mockRepo.On("AddUserPoints", 1, -5).Return(nil)
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:   "invalid user ID",
+			userID: "invalid",
+			payload: struct {
+				Points int `json:"points"`
+			}{
+				Points: 10,
+			},
+			setupMock:      func() {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:   "repository error",
+			userID: "1",
+			payload: struct {
+				Points int `json:"points"`
+			}{
+				Points: 10,
+			},
+			setupMock: func() {
+				mockRepo.On("AddUserPoints", 1, 10).Return(errors.New("db error"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo.ExpectedCalls = nil
+			tt.setupMock()
+			c, w := setupTestContext()
+
+			body, _ := json.Marshal(tt.payload)
+			c.Request = httptest.NewRequest("POST", "/users/"+tt.userID+"/points", bytes.NewBuffer(body))
+			c.Params = []gin.Param{{Key: "id", Value: tt.userID}}
+
+			handler.AddUserPoints(c)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
 func stringPtr(s string) *string {
 	return &s
+}
+
+func rolesPtr(r roles.Role) *roles.Role {
+	return &r
 }

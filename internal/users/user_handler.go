@@ -26,6 +26,7 @@ func (h *UsersHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.PATCH("/users/:id", security.Authorize("admin"), h.UpdateUser)
 	router.GET("/users/:id", security.Authorize("user"), h.GetUser)
 	router.GET("/users", security.Authorize("moderator"), h.GetUserList)
+	router.POST("/users/:id/points", security.Authorize("admin"), h.AddUserPoints)
 }
 
 func (h *UsersHandler) RegisterUser(c *gin.Context) {
@@ -95,7 +96,51 @@ func (h *UsersHandler) UpdateUser(c *gin.Context) {
 		user.Role = *req.Role
 	}
 
+	if req.Points != nil {
+		user.Points = *req.Points
+	}
+
 	c.JSON(http.StatusOK, user)
+}
+
+func (h *UsersHandler) AddUserPoints(c *gin.Context) {
+	userID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID", "details": err.Error()})
+		return
+	}
+
+	var req struct {
+		Points int `json:"points" binding:"required"`
+	}
+
+	if err = c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
+		return
+	}
+
+	err = h.Repository.AddUserPoints(userID, req.Points)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to add user points",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	user, err := h.Repository.GetUser(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to get updated user",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "User points updated successfully",
+		"points":  user.Points,
+	})
 }
 
 func (h *UsersHandler) GetUser(c *gin.Context) {

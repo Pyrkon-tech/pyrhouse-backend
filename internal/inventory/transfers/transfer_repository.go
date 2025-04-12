@@ -12,7 +12,7 @@ import (
 
 type TransferRepository interface {
 	CanTransferNonSerializedItems(assets []models.StockItemRequest, locationID int) (map[int]bool, error)
-	ConfirmTransfer(transferID int, status string) error
+	UpdateTransferStatus(transferID int, status string) error
 	GetTransferRow(transferID int) (*FlatTransfer, error)
 	GetTransferRows() (*[]FlatTransfer, error)
 	InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error)
@@ -144,7 +144,7 @@ func (r *transferRepository) GetTransferRows() (*[]FlatTransfer, error) {
 	return &flatTransfers, nil
 }
 
-func (r *transferRepository) ConfirmTransfer(transferID int, status string) error {
+func (r *transferRepository) UpdateTransferStatus(transferID int, status string) error {
 	// TODO Transaction + remove transit status (do we really need this status?)
 	query := r.Repo.GoquDBWrapper.
 		Update("transfers").

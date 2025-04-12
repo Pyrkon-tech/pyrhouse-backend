@@ -1,32 +1,25 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 	"time"
 
-	"warehouse/cmd"
-	"warehouse/internal/core/container"
-	"warehouse/internal/core/routes"
-
-	"warehouse/internal/database"
-
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+
+	"warehouse/internal/core/container"
+	"warehouse/internal/core/routes"
+	"warehouse/internal/database"
+	"warehouse/internal/middleware"
 )
 
 func init() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// Load .env file, but don't overwrite system environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: No .env file found, falling back to system environment variables.")
 	}
-
-	cmd.Execute(ctx)
 }
 
 func main() {
@@ -35,11 +28,11 @@ func main() {
 	// Setup DB
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		log.Fatalf("Starting server on port %s", dbURL)
+		log.Fatal("DATABASE_URL environment variable is not set")
 	}
 	db, err := database.NewPostgresConnection(dbURL)
 	if err != nil {
-		log.Fatalf("Error: %v", err)
+		log.Fatalf("Error connecting to database: %v", err)
 	}
 	defer db.Close()
 	log.Println("[DB]: Setup completed")
@@ -47,15 +40,33 @@ func main() {
 	container := container.NewAppContainer(db)
 	router := setupRouter(container)
 
-	if err := router.Run(os.Getenv("APP_HOST")); err != nil {
-		panic(err)
+	// Ustawienie wersji aplikacji
+	middleware.SetVersion("1.0.0")
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("Server starting on port %s", port)
+	if err := router.Run(":" + port); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
 	}
 }
 
 func setupRouter(container *container.Container) *gin.Engine {
 	router := gin.Default()
+
+	// Dodanie middleware do odzyskiwania po awariach
+	router.Use(middleware.RecoveryMiddleware())
+
+	// Dodanie middleware do timeoutu żądań (30 sekund)
+	router.Use(middleware.TimeoutMiddleware(30 * time.Second))
+
+	// Endpoint /health jest już zarejestrowany w routes.RegisterUtilityRoutes
+
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5000", "https://pyrhouse-frontend-p2sbw.ondigitalocean.app"}, // Add your domain and localhost
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5000", "https://pyrhouse-frontend-p2sbw.ondigitalocean.app"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},

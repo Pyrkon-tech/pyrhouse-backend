@@ -103,7 +103,7 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to transfer items", "details": err.Error()})
 		return
 	}
-	
+
 	transfer, err := h.Service.GetTransfer(transferID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusAccepted, gin.H{"message": "Transfer created successfully but unable to generate full object now", "id": transferID, "details": err.Error()})
@@ -211,6 +211,18 @@ func (h *TransferHandler) UpdateTransfer(c *gin.Context) {
 
 		c.JSON(http.StatusOK, gin.H{
 			"message":     "Transfer confirmed successfully",
+			"transfer_id": transferID,
+			"status":      req.Status,
+		})
+	case "cancelled":
+		err := h.Service.cancelTransfer(transferID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to cancel transfer", "details": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":     "Transfer cancelled successfully",
 			"transfer_id": transferID,
 			"status":      req.Status,
 		})
