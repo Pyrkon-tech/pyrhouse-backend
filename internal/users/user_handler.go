@@ -23,7 +23,7 @@ func NewHandler(r UserRepository) *UsersHandler {
 
 func (h *UsersHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/users", security.Authorize("admin"), h.RegisterUser)
-	router.PATCH("/users/:id", security.Authorize("admin"), h.UpdateUser)
+	router.PATCH("/users/:id", security.Authorize("user"), h.UpdateUser)
 	router.GET("/users/:id", security.Authorize("user"), h.GetUser)
 	router.GET("/users", security.Authorize("moderator"), h.GetUserList)
 	router.POST("/users/:id/points", security.Authorize("admin"), h.AddUserPoints)
@@ -110,19 +110,16 @@ func (h *UsersHandler) UpdateUser(c *gin.Context) {
 		changes.Points = &points
 	}
 
-	// Jeśli nie ma żadnych zmian, zwracamy sukces
 	if !changes.HasChanges() {
 		c.JSON(http.StatusOK, user)
 		return
 	}
 
-	// Aktualizujemy użytkownika tylko jeśli są zmiany
 	if err := h.Repository.UpdateUser(userID, changes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user", "details": err.Error()})
 		return
 	}
 
-	// Pobieramy zaktualizowanego użytkownika
 	updatedUser, err := h.Repository.GetUser(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get updated user", "details": err.Error()})
