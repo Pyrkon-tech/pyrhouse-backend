@@ -194,7 +194,7 @@ func (r *AssetsRepository) UpdateAssetLocation(tx *goqu.TxDatabase, itemID int, 
 
 func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
 	return repository.WithTransaction(r.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		_, err := tx.Delete("asset_transfer").
+		_, err := tx.Delete("serialized_transfers").
 			Where(goqu.Ex{
 				"transfer_id": transferID,
 				"item_id":     itemID,
