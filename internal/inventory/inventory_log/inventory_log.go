@@ -26,6 +26,11 @@ func (s *InventoryLog) CreateTransferAuditLogEntry(action string, ts *models.Tra
 			"assetsMessage":   "Assets in transport",
 			"stocksMessage":   "Stock Items in transport",
 		},
+		"cancelled": {
+			"transferMessage": "Transfer cancelled",
+			"assetsMessage":   "Assets returned to original location",
+			"stocksMessage":   "Stock Items returned to original location",
+		},
 	}
 
 	messages, ok := logMessages[action]

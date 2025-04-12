@@ -300,7 +300,7 @@ func mapToIDArray(assetsReq []models.AssetItemRequest) []int {
 }
 
 func (s *TransferService) CancelTransfer(transferID int) error {
-	return repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+	err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		// Pobierz informacje o transferze
 		transfer, err := s.tr.GetTransferRow(transferID)
 		if err != nil {
@@ -317,6 +317,17 @@ func (s *TransferService) CancelTransfer(transferID int) error {
 		for _, asset := range *assets {
 			if err := s.ar.RemoveAssetFromTransfer(transferID, asset.ID, transfer.FromLocationID); err != nil {
 				return fmt.Errorf("failed to restore asset %d to original location: %w", asset.ID, err)
+			}
+		}
+
+		// Aktualizuj status aktywów na "located"
+		if len(*assets) > 0 {
+			assetIDs := make([]int, len(*assets))
+			for i, asset := range *assets {
+				assetIDs[i] = asset.ID
+			}
+			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusLocated); err != nil {
+				return fmt.Errorf("failed to update asset status: %w", err)
 			}
 		}
 
@@ -353,4 +364,13 @@ func (s *TransferService) CancelTransfer(transferID int) error {
 
 		return nil
 	})
+
+	if err != nil {
+		return err
+	}
+
+	// Dodaj wpis do logu inwentaryzacji poza transakcją
+	go s.createInventoryLog("cancelled", transferID)
+
+	return nil
 }
