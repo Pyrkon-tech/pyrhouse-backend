@@ -210,6 +210,10 @@ func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, l
 			return err
 		}
 
+		if err := r.UpdateItemStatus([]int{itemID}, metadata.StatusAvailable); err != nil {
+			return err
+		}
+
 		return nil
 	})
 }
