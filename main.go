@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"time"
@@ -25,6 +26,11 @@ func init() {
 func main() {
 	var err error
 
+	// Parse command line flags
+	migrateOnly := flag.Bool("migrate", false, "run only migrations without starting the server")
+	migrationsDir := flag.String("dir", "./migrations", "directory containing migration files")
+	flag.Parse()
+
 	// Setup DB
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -37,6 +43,16 @@ func main() {
 	defer db.Close()
 	log.Println("[DB]: Setup completed")
 
+	// Run migrations if requested
+	if *migrateOnly {
+		if err := database.RunMigrations(db, *migrationsDir); err != nil {
+			log.Fatalf("Error running migrations: %v", err)
+		}
+		log.Println("[Migrations]: Completed successfully")
+		return
+	}
+
+	// Start server
 	container := container.NewAppContainer(db)
 	router := setupRouter(container)
 
