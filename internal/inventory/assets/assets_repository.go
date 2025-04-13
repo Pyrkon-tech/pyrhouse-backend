@@ -281,25 +281,22 @@ func (r *AssetsRepository) UpdateItemStatus(assetIDs []int, status metadata.Stat
 		record := goqu.Record{"status": string(status)}
 		condition := goqu.Ex{"id": assetIDs}
 
-		query := tx.Update("items").
+		result, err := tx.Update("items").
 			Set(record).
-			Where(condition)
-
-		if _, err := query.Executor().Exec(); err != nil {
+			Where(condition).
+			Executor().
+			Exec()
+		if err != nil {
 			return fmt.Errorf("failed to update asset status: %w", err)
 		}
 
-		var updatedCount int
-		countQuery := tx.Select(goqu.COUNT("*")).
-			From("items").
-			Where(condition)
-
-		if _, err := countQuery.Executor().ScanVal(&updatedCount); err != nil {
-			return fmt.Errorf("failed to count updated records: %w", err)
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
 		}
 
-		if updatedCount != len(assetIDs) {
-			return fmt.Errorf("expected to update %d records, but updated %d", len(assetIDs), updatedCount)
+		if int(rowsAffected) != len(assetIDs) {
+			return fmt.Errorf("expected to update %d records, but updated %d", len(assetIDs), rowsAffected)
 		}
 
 		return nil

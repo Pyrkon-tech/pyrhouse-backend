@@ -163,8 +163,7 @@ func (r *StockRepository) UpdateStock(stockRequest *PatchStockItemRequest) (*mod
 
 func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.StockItem, error) {
 	var flatStocks []models.FlatStockRecord
-	// Query to fetch flat stock data
-	// TODO WRóć tu i zrób refactor zeby sie populowało
+
 	query := r.repository.GoquDBWrapper.
 		Select(
 			goqu.I("nst.item_category_id").As("category_id"),
@@ -178,29 +177,28 @@ func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.Sto
 			goqu.I("nst.stock_id").As("transfer_stock_id"),
 		).
 		From(goqu.T("non_serialized_transfers").As("nst")).
-		LeftJoin(
+		InnerJoin(
 			goqu.T("transfers").As("t"),
-			goqu.On(goqu.Ex{
-				"t.id": transferID, // Directly use the value
-			}),
+			goqu.On(goqu.Ex{"t.id": transferID}),
 		).
-		LeftJoin(
+		InnerJoin(
 			goqu.T("item_category").As("c"),
 			goqu.On(goqu.Ex{"nst.item_category_id": goqu.I("c.id")}),
 		).
-		LeftJoin(
+		InnerJoin(
 			goqu.T("locations").As("l"),
 			goqu.On(goqu.Ex{"t.to_location_id": goqu.I("l.id")}),
 		).
 		Where(goqu.Ex{"nst.transfer_id": transferID})
+
 	err := query.Executor().ScanStructs(&flatStocks)
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement for stock items: %w", err)
 	}
 
-	var stocks []models.StockItem
-	for _, flatStock := range flatStocks {
-		stocks = append(stocks, models.StockItem{
+	stocks := make([]models.StockItem, len(flatStocks))
+	for i, flatStock := range flatStocks {
+		stocks[i] = models.StockItem{
 			ID: flatStock.TransferStockID,
 			Category: models.ItemCategory{
 				ID:    flatStock.CategoryID,
@@ -214,7 +212,7 @@ func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.Sto
 			},
 			Quantity: flatStock.Quantity,
 			Origin:   flatStock.Origin,
-		})
+		}
 	}
 
 	return &stocks, nil
