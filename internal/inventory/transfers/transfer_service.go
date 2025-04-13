@@ -304,24 +304,40 @@ func mapToIDArray(assetsReq []models.AssetItemRequest) []int {
 
 func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 	err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-
+		// Pobierz aktywa w jednym zapytaniu
 		assets, err := s.ar.GetTransferAssets(transfer.ID)
 		if err != nil {
 			return fmt.Errorf("failed to get transfer assets: %w", err)
 		}
 
-		for _, asset := range *assets {
-			if err := s.ar.RemoveAssetFromTransfer(transfer.ID, asset.ID, transfer.FromLocation.ID); err != nil {
-				return fmt.Errorf("failed to restore asset %d to original location: %w", asset.ID, err)
+		// Aktualizuj status aktywów wsadowo
+		if len(*assets) > 0 {
+			assetIDs := make([]int, len(*assets))
+			for i, asset := range *assets {
+				assetIDs[i] = asset.ID
 			}
 
-			if err := s.ar.UpdateItemStatus([]int{asset.ID}, metadata.StatusLocated); err != nil {
+			// Wykonaj operacje wsadowo
+			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusLocated); err != nil {
 				return fmt.Errorf("failed to update asset status: %w", err)
 			}
 
-			s.il.CreateAssetAuditLogEntry("cancelled", &asset, "Asset returned to original location")
+			// Przywróć aktywa do oryginalnej lokalizacji
+			for _, assetID := range assetIDs {
+				if err := s.ar.RemoveAssetFromTransfer(transfer.ID, assetID, transfer.FromLocation.ID); err != nil {
+					return fmt.Errorf("failed to restore asset %d to original location: %w", assetID, err)
+				}
+			}
+
+			// Dodaj wpisy do logu asynchronicznie
+			go func(assets []models.Asset) {
+				for _, asset := range assets {
+					s.il.CreateAssetAuditLogEntry("cancelled", &asset, "Asset returned to original location")
+				}
+			}(*assets)
 		}
 
+		// Sprawdź i przywróć pozycje magazynowe
 		hasStockItems, err := s.tr.HasStockItemsInTransfer(tx, transfer.ID)
 		if err != nil {
 			return fmt.Errorf("failed to check stock items in transfer: %w", err)
@@ -333,6 +349,7 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 				return fmt.Errorf("failed to get stock items: %w", err)
 			}
 
+			// Przywróć pozycje magazynowe wsadowo
 			for _, item := range *stockItems {
 				if err := s.stockRepo.RestoreStockToLocation(tx, stocks.RemoveStockItemFromTransferRequest{
 					CategoryID:   item.Category.ID,

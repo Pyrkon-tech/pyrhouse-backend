@@ -277,14 +277,27 @@ func (r *AssetsRepository) UpdatePyrCode(assetID int, pyrCode string) error {
 }
 
 func (r *AssetsRepository) UpdateItemStatus(assetIDs []int, status metadata.Status) error {
-	record := goqu.Record{"status": string(status)}
-	condition := goqu.Ex{"id": assetIDs}
-	err := r.updateAsset(record, condition)
-	if err != nil {
-		return fmt.Errorf("failed to update asset status: %w", err)
-	}
+	return repository.WithTransaction(r.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		record := goqu.Record{"status": string(status)}
+		condition := goqu.Ex{"id": assetIDs}
 
-	return nil
+		var updatedCount int
+		query := tx.Update("items").
+			Set(record).
+			Where(condition).
+			Returning(goqu.COUNT("*"))
+
+		_, err := query.Executor().ScanVal(&updatedCount)
+		if err != nil {
+			return fmt.Errorf("failed to update asset status: %w", err)
+		}
+
+		if updatedCount != len(assetIDs) {
+			return fmt.Errorf("expected to update %d records, but updated %d", len(assetIDs), updatedCount)
+		}
+
+		return nil
+	})
 }
 
 func (r *AssetsRepository) updateAsset(record goqu.Record, condition goqu.Expression) error {
