@@ -316,14 +316,9 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 				assetIDs[i] = asset.ID
 			}
 
-			// Wykonaj operacje wsadowo
-			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusLocated, tx); err != nil {
-				return fmt.Errorf("failed to update asset status: %w", err)
-			}
-
-			// Przywróć aktywa do oryginalnej lokalizacji
+			// Przywróć aktywa do oryginalnej lokalizacji i zaktualizuj status
 			for _, assetID := range assetIDs {
-				if err := s.ar.RemoveAssetFromTransfer(transfer.ID, assetID, transfer.FromLocation.ID); err != nil {
+				if err := s.ar.UpdateAssetStatusAndLocation(tx, assetID, transfer.FromLocation.ID, metadata.StatusLocated); err != nil {
 					return fmt.Errorf("failed to restore asset %d to original location: %w", assetID, err)
 				}
 			}

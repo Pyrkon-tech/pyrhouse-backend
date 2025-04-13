@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -76,8 +77,14 @@ func setupRouter(container *container.Container) *gin.Engine {
 	// Dodanie middleware do odzyskiwania po awariach
 	router.Use(middleware.RecoveryMiddleware())
 
-	// Dodanie middleware do timeoutu żądań (30 sekund)
-	router.Use(middleware.TimeoutMiddleware(30 * time.Second))
+	// Timeout tylko jeśli REQUEST_TIMEOUT jest ustawiony
+	timeoutStr := os.Getenv("REQUEST_TIMEOUT")
+	if timeoutStr != "" {
+		if timeoutSeconds, err := strconv.Atoi(timeoutStr); err == nil && timeoutSeconds > 0 {
+			timeout := time.Duration(timeoutSeconds) * time.Second
+			router.Use(middleware.TimeoutMiddleware(timeout))
+		}
+	}
 
 	// Endpoint /health jest już zarejestrowany w routes.RegisterUtilityRoutes
 

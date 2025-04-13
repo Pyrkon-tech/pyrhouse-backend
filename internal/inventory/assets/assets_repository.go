@@ -1,6 +1,7 @@
 package assets
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"warehouse/internal/repository"
@@ -180,7 +181,28 @@ func (r *AssetsRepository) RemoveAsset(assetID int) (string, error) {
 }
 
 func (r *AssetsRepository) UpdateAssetLocation(tx *goqu.TxDatabase, itemID int, locationID int) error {
-	_, err := tx.Update("items").
+	if tx == nil {
+		return fmt.Errorf("transaction is required for UpdateAssetLocation")
+	}
+
+	// Najpierw sprawdzamy czy asset istnieje
+	var exists bool
+	_, err := tx.Select(goqu.L("1")).
+		From("items").
+		Where(goqu.Ex{"id": itemID}).
+		Executor().
+		ScanVal(&exists)
+
+	if err != nil {
+		return fmt.Errorf("failed to check if asset exists: %w", err)
+	}
+
+	if !exists {
+		return fmt.Errorf("no asset found with id: %d", itemID)
+	}
+
+	// Aktualizujemy lokalizację
+	_, err = tx.Update("items").
 		Set(goqu.Record{"location_id": locationID}).
 		Where(goqu.Ex{"id": itemID}).
 		Executor().
@@ -189,12 +211,61 @@ func (r *AssetsRepository) UpdateAssetLocation(tx *goqu.TxDatabase, itemID int, 
 	if err != nil {
 		return fmt.Errorf("failed to update asset location: %w", err)
 	}
+
+	return nil
+}
+
+func (r *AssetsRepository) UpdateAssetStatusAndLocation(tx *goqu.TxDatabase, itemID int, locationID int, status metadata.Status) error {
+	if tx == nil {
+		return fmt.Errorf("transaction is required for UpdateAssetStatusAndLocation")
+	}
+
+	// Aktualizujemy status i lokalizację w jednym zapytaniu
+	result, err := tx.Update("items").
+		Set(goqu.Record{
+			"location_id": locationID,
+			"status":      string(status),
+		}).
+		Where(goqu.Ex{"id": itemID}).
+		Executor().
+		Exec()
+
+	if err != nil {
+		return fmt.Errorf("failed to update asset status and location: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no asset found with id: %d", itemID)
+	}
+
 	return nil
 }
 
 func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
 	return repository.WithTransaction(r.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		_, err := tx.Delete("serialized_transfers").
+		// Najpierw sprawdzamy czy asset istnieje
+		var count int
+		_, err := tx.Select(goqu.COUNT("*")).
+			From("items").
+			Where(goqu.Ex{"id": itemID}).
+			Executor().
+			ScanVal(&count)
+
+		if err != nil {
+			return fmt.Errorf("failed to check if asset exists: %w", err)
+		}
+
+		if count == 0 {
+			return fmt.Errorf("asset with id %d does not exist", itemID)
+		}
+
+		// Usuwamy z transferu
+		result, err := tx.Delete("serialized_transfers").
 			Where(goqu.Ex{
 				"transfer_id": transferID,
 				"item_id":     itemID,
@@ -203,14 +274,20 @@ func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, l
 			Exec()
 
 		if err != nil {
-			return fmt.Errorf("failed to remove asset from transfer, unable to delete transfer record %d: %w", transferID, err)
+			return fmt.Errorf("failed to remove asset from transfer: %w", err)
 		}
 
-		if err := r.UpdateAssetLocation(tx, itemID, locationID); err != nil {
-			return err
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
 		}
 
-		if err := r.UpdateItemStatus([]int{itemID}, metadata.StatusAvailable, tx); err != nil {
+		if rowsAffected == 0 {
+			return fmt.Errorf("no transfer record found for asset %d and transfer %d", itemID, transferID)
+		}
+
+		// Aktualizujemy status i lokalizację w jednym zapytaniu
+		if err := r.UpdateAssetStatusAndLocation(tx, itemID, locationID, metadata.StatusAvailable); err != nil {
 			return err
 		}
 
@@ -277,36 +354,44 @@ func (r *AssetsRepository) UpdatePyrCode(assetID int, pyrCode string) error {
 }
 
 func (r *AssetsRepository) UpdateItemStatus(assetIDs []int, status metadata.Status, tx *goqu.TxDatabase) error {
-	updateFunc := func(tx *goqu.TxDatabase) error {
-		record := goqu.Record{"status": string(status)}
-		condition := goqu.Ex{"id": assetIDs}
+	if len(assetIDs) == 0 {
+		return nil
+	}
 
-		result, err := tx.Update("items").
+	record := goqu.Record{"status": string(status)}
+	condition := goqu.Ex{"id": assetIDs}
+
+	var result sql.Result
+	var err error
+
+	if tx != nil {
+		result, err = tx.Update("items").
 			Set(record).
 			Where(condition).
 			Executor().
 			Exec()
-		if err != nil {
-			return fmt.Errorf("failed to update asset status: %w", err)
-		}
-
-		rowsAffected, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("failed to get rows affected: %w", err)
-		}
-
-		if int(rowsAffected) != len(assetIDs) {
-			return fmt.Errorf("expected to update %d records, but updated %d", len(assetIDs), rowsAffected)
-		}
-
-		return nil
+	} else {
+		result, err = r.repository.GoquDBWrapper.Update("items").
+			Set(record).
+			Where(condition).
+			Executor().
+			Exec()
 	}
 
-	if tx != nil {
-		return updateFunc(tx)
+	if err != nil {
+		return fmt.Errorf("failed to update asset status: %w", err)
 	}
 
-	return repository.WithTransaction(r.repository.GoquDBWrapper, updateFunc)
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if int(rowsAffected) != len(assetIDs) {
+		return fmt.Errorf("expected to update %d records, but updated %d", len(assetIDs), rowsAffected)
+	}
+
+	return nil
 }
 
 func (r *AssetsRepository) updateAsset(record goqu.Record, condition goqu.Expression) error {

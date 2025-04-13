@@ -34,19 +34,19 @@ func RecoveryMiddleware() gin.HandlerFunc {
 // TimeoutMiddleware dodaje timeout do żądań
 func TimeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Ustawienie timeoutu dla żądania
+		// Tworzymy nowy kontekst z timeoutem
 		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
 		defer cancel()
 
-		// Przekazanie kontekstu z timeoutem do żądania
+		// Przekazujemy kontekst do żądania
 		c.Request = c.Request.WithContext(ctx)
 
 		// Kanał do sygnalizowania zakończenia żądania
-		done := make(chan bool, 1)
+		done := make(chan struct{})
 
 		go func() {
 			c.Next()
-			done <- true
+			close(done)
 		}()
 
 		// Oczekiwanie na zakończenie żądania lub timeout
