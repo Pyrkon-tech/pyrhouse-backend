@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
@@ -23,8 +24,11 @@ var (
 		Uptime:      "0s",
 		Version:     "1.0.0",
 	}
-	healthMutex sync.RWMutex
-	startTime   = time.Now()
+	healthMutex      sync.RWMutex
+	startTime        = time.Now()
+	lastResponse     []byte
+	lastResponseTime time.Time
+	cacheDuration    = 5 * time.Second
 )
 
 // HealthCheckMiddleware dodaje endpoint do sprawdzania zdrowia aplikacji
@@ -33,9 +37,20 @@ func HealthCheckMiddleware() gin.HandlerFunc {
 		healthMutex.RLock()
 		defer healthMutex.RUnlock()
 
+		// Sprawdź cache
+		if time.Since(lastResponseTime) < cacheDuration && lastResponse != nil {
+			c.Data(http.StatusOK, "application/json", lastResponse)
+			return
+		}
+
 		// Aktualizacja czasu działania
 		healthStatus.Uptime = time.Since(startTime).String()
 		healthStatus.LastChecked = time.Now()
+
+		// Zapisz odpowiedź do cache
+		response, _ := json.Marshal(healthStatus)
+		lastResponse = response
+		lastResponseTime = time.Now()
 
 		c.JSON(http.StatusOK, healthStatus)
 	}
@@ -48,6 +63,7 @@ func UpdateHealthStatus(status string) {
 
 	healthStatus.Status = status
 	healthStatus.LastChecked = time.Now()
+	lastResponse = nil // Invalidate cache
 }
 
 // SetVersion ustawia wersję aplikacji
@@ -56,4 +72,5 @@ func SetVersion(version string) {
 	defer healthMutex.Unlock()
 
 	healthStatus.Version = version
+	lastResponse = nil // Invalidate cache
 }
