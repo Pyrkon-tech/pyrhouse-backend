@@ -21,24 +21,29 @@ func NewRepository(db *sql.DB) *Repository {
 	}
 }
 
-func WithTransaction(db *goqu.Database, fn func(tx *goqu.TxDatabase) error) (err error) {
-	rawTx, err := db.Begin()
+func WithTransaction(db *goqu.Database, fn func(*goqu.TxDatabase) error) error {
+	tx, err := db.Begin()
 	if err != nil {
-		return fmt.Errorf("failed to start transaction: %w", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	tx := goqu.NewTx("postgres", rawTx)
 	defer func() {
 		if p := recover(); p != nil {
-			rawTx.Rollback()
+			_ = tx.Rollback()
 			panic(p)
-		} else if err != nil {
-			rawTx.Rollback()
-		} else {
-			err = rawTx.Commit()
 		}
 	}()
 
-	err = fn(tx)
-	return
+	if err := fn(tx); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return fmt.Errorf("tx err: %v, rollback err: %v", err, rbErr)
+		}
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
