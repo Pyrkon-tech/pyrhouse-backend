@@ -57,7 +57,7 @@ type AssetsRepositoryInterface interface {
 	RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error
 	GetTransferAssets(transferID int) (*[]models.Asset, error)
 	UpdatePyrCode(id int, pyrCode string) error
-	UpdateItemStatus(assetIDs []int, status metadata.Status) error
+	UpdateItemStatus(assetIDs []int, status metadata.Status, tx *goqu.TxDatabase) error
 }
 
 type AuditLogInterface interface {
@@ -169,8 +169,8 @@ func (m *MockAssetsRepository) UpdatePyrCode(id int, pyrCode string) error {
 	return args.Error(0)
 }
 
-func (m *MockAssetsRepository) UpdateItemStatus(assetIDs []int, status metadata.Status) error {
-	args := m.Called(assetIDs, status)
+func (m *MockAssetsRepository) UpdateItemStatus(assetIDs []int, status metadata.Status, tx *goqu.TxDatabase) error {
+	args := m.Called(assetIDs, status, tx)
 	return args.Error(0)
 }
 

@@ -210,7 +210,7 @@ func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, l
 			return err
 		}
 
-		if err := r.UpdateItemStatus([]int{itemID}, metadata.StatusAvailable); err != nil {
+		if err := r.UpdateItemStatus([]int{itemID}, metadata.StatusAvailable, tx); err != nil {
 			return err
 		}
 
@@ -276,20 +276,26 @@ func (r *AssetsRepository) UpdatePyrCode(assetID int, pyrCode string) error {
 	return nil
 }
 
-func (r *AssetsRepository) UpdateItemStatus(assetIDs []int, status metadata.Status) error {
-	return repository.WithTransaction(r.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+func (r *AssetsRepository) UpdateItemStatus(assetIDs []int, status metadata.Status, tx *goqu.TxDatabase) error {
+	updateFunc := func(tx *goqu.TxDatabase) error {
 		record := goqu.Record{"status": string(status)}
 		condition := goqu.Ex{"id": assetIDs}
 
-		var updatedCount int
 		query := tx.Update("items").
 			Set(record).
-			Where(condition).
-			Returning(goqu.COUNT("*"))
+			Where(condition)
 
-		_, err := query.Executor().ScanVal(&updatedCount)
-		if err != nil {
+		if _, err := query.Executor().Exec(); err != nil {
 			return fmt.Errorf("failed to update asset status: %w", err)
+		}
+
+		var updatedCount int
+		countQuery := tx.Select(goqu.COUNT("*")).
+			From("items").
+			Where(condition)
+
+		if _, err := countQuery.Executor().ScanVal(&updatedCount); err != nil {
+			return fmt.Errorf("failed to count updated records: %w", err)
 		}
 
 		if updatedCount != len(assetIDs) {
@@ -297,7 +303,13 @@ func (r *AssetsRepository) UpdateItemStatus(assetIDs []int, status metadata.Stat
 		}
 
 		return nil
-	})
+	}
+
+	if tx != nil {
+		return updateFunc(tx)
+	}
+
+	return repository.WithTransaction(r.repository.GoquDBWrapper, updateFunc)
 }
 
 func (r *AssetsRepository) updateAsset(record goqu.Record, condition goqu.Expression) error {

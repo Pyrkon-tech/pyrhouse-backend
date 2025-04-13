@@ -254,9 +254,8 @@ func (s *TransferService) ConfirmTransfer(transferID int, status string) error {
 	}(*assets)
 
 	err = repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		// TODO To coś chujowo to jest rozbite (albo nie jest bo Confirm transfer uzupełnia asset transfer record a nie tutaj) (unify & move to service)
 		if len(assetIDs) > 0 {
-			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusLocated); err != nil {
+			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusLocated, tx); err != nil {
 				return fmt.Errorf("unable to update assets err: %w", err)
 			}
 		}
@@ -318,7 +317,7 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 			}
 
 			// Wykonaj operacje wsadowo
-			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusLocated); err != nil {
+			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusLocated, tx); err != nil {
 				return fmt.Errorf("failed to update asset status: %w", err)
 			}
 
