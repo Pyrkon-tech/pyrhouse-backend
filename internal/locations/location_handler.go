@@ -23,6 +23,7 @@ func (h *LocationHandler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/locations", h.GetLocations)
 	router.GET("/locations/:id/assets", h.GetLocationItems)
 	router.GET("/locations/:id/search", h.SearchLocationItems)
+	router.GET("locations/:id", h.GetLocationDetails)
 	router.DELETE("/locations/:id", h.RemoveLocation)
 }
 
@@ -34,6 +35,17 @@ func (h *LocationHandler) GetLocations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, locations)
+}
+
+func (h *LocationHandler) GetLocationDetails(c *gin.Context) {
+	locationID := c.Param("id")
+	location, err := h.Repository.GetLocationDetails(locationID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not get location details", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, location)
 }
 
 func (h *LocationHandler) SearchLocationItems(c *gin.Context) {

@@ -261,3 +261,18 @@ func (r *LocationRepository) SearchLocationItems(locationID string, searchQuery 
 
 	return assets, nil
 }
+
+func (r *LocationRepository) GetLocationDetails(locationID string) (*models.Location, error) {
+	var location models.Location
+	query := r.Repository.GoquDBWrapper.
+		Select("id", "name", "details").
+		From("locations").
+		Where(goqu.Ex{"id": locationID})
+
+	_, err := query.Executor().ScanStruct(&location)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get location details: %w", err)
+	}
+
+	return &location, nil
+}
