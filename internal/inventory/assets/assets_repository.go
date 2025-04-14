@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"warehouse/internal/repository"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/metadata"
@@ -462,19 +464,41 @@ func (r *AssetsRepository) CountAssetsInCategory(categoryID int) (int, error) {
 }
 
 func (r *AssetsRepository) GenerateUniquePyrCode(categoryID int, categoryPyrID string) (string, error) {
-	var maxNumber int
+	// Pobieramy wszystkie istniejące kody PYR dla danej kategorii
+	var existingCodes []string
 	query := r.repository.GoquDBWrapper.
-		Select(goqu.L("COALESCE(MAX(CAST(SUBSTRING(pyr_code, LENGTH(?) + 1) AS INTEGER)), 0)", "PYR-"+categoryPyrID)).
+		Select("pyr_code").
 		From("items").
 		Where(goqu.L("pyr_code LIKE ?", "PYR-"+categoryPyrID+"%"))
 
-	_, err := query.Executor().ScanVal(&maxNumber)
+	err := query.Executor().ScanVals(&existingCodes)
 	if err != nil {
-		return "", fmt.Errorf("failed to get max PYR code number: %w", err)
+		return "", fmt.Errorf("failed to get existing PYR codes: %w", err)
+	}
+
+	// Znajdujemy największy numer w istniejących kodach
+	maxNumber := 0
+	prefix := "PYR-" + categoryPyrID
+	for _, code := range existingCodes {
+		if !strings.HasPrefix(code, prefix) {
+			continue
+		}
+
+		// Wyciągamy numer z kodu (wszystko po prefixie)
+		numStr := strings.TrimPrefix(code, prefix)
+		// Usuwamy ewentualne przyrostki (np. "-1")
+		if idx := strings.Index(numStr, "-"); idx != -1 {
+			numStr = numStr[:idx]
+		}
+
+		// Próbujemy przekonwertować na liczbę
+		if num, err := strconv.Atoi(numStr); err == nil && num > maxNumber {
+			maxNumber = num
+		}
 	}
 
 	// Próbujemy wygenerować unikalny kod
-	for suffix := 0; suffix < 10; suffix++ {
+	for suffix := 0; suffix < 100; suffix++ {
 		baseNumber := maxNumber + 1
 		pyrCode := metadata.NewPyrCode(categoryPyrID, baseNumber)
 		newCode := pyrCode.GeneratePyrCode()
