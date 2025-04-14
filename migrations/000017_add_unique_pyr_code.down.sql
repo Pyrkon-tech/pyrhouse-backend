@@ -1,0 +1,1 @@
+ALTER TABLE items DROP CONSTRAINT IF EXISTS unique_pyr_code; 

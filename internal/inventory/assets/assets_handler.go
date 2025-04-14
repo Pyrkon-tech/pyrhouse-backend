@@ -2,6 +2,7 @@ package assets
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"warehouse/internal/repository"
@@ -110,9 +111,32 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 		}
 	}
 
-	pyrCode := metadata.NewPyrCode(asset.Category.PyrID, asset.ID)
-	asset.PyrCode = pyrCode.GeneratePyrCode()
-	go h.r.UpdatePyrCode(asset.ID, asset.PyrCode)
+	pyrCode, err := h.r.GenerateUniquePyrCode(asset.Category.ID, asset.Category.PyrID)
+	if err != nil {
+		log.Printf("Failed to generate PYR code: %v", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to generate unique PYR code",
+			"details": err.Error(),
+		})
+		if _, err := h.r.RemoveAsset(asset.ID); err != nil {
+			log.Printf("Failed to remove asset after PYR code generation failure: %v", err)
+		}
+		return
+	}
+
+	asset.PyrCode = pyrCode
+	if err := h.r.UpdatePyrCode(asset.ID, asset.PyrCode); err != nil {
+		log.Printf("Failed to update PYR code: %v", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to update asset with PYR code",
+			"details": err.Error(),
+		})
+		if _, err := h.r.RemoveAsset(asset.ID); err != nil {
+			log.Printf("Failed to remove asset after PYR code update failure: %v", err)
+		}
+		return
+	}
+
 	go h.AuditLog.Log(
 		"create",
 		map[string]interface{}{
@@ -231,8 +255,13 @@ func (h *ItemHandler) CreateBulkAssets(c *gin.Context) {
 			}
 		}
 
-		pyrCode := metadata.NewPyrCode(asset.Category.PyrID, asset.ID)
-		asset.PyrCode = pyrCode.GeneratePyrCode()
+		pyrCode, err := h.r.GenerateUniquePyrCode(asset.Category.ID, asset.Category.PyrID)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate unique PYR code"})
+			return
+		}
+
+		asset.PyrCode = pyrCode
 		go h.r.UpdatePyrCode(asset.ID, asset.PyrCode)
 		go h.AuditLog.Log(
 			"create",

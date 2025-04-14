@@ -445,3 +445,61 @@ func (r *AssetsRepository) getAssetQuery() *goqu.SelectDataset {
 		)
 	return query
 }
+
+func (r *AssetsRepository) CountAssetsInCategory(categoryID int) (int, error) {
+	var count int
+	query := r.repository.GoquDBWrapper.
+		Select(goqu.COUNT("*")).
+		From("items").
+		Where(goqu.Ex{"item_category_id": categoryID})
+
+	_, err := query.Executor().ScanVal(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count assets in category: %w", err)
+	}
+
+	return count, nil
+}
+
+func (r *AssetsRepository) GenerateUniquePyrCode(categoryID int, categoryPyrID string) (string, error) {
+	var maxNumber int
+	query := r.repository.GoquDBWrapper.
+		Select(goqu.L("COALESCE(MAX(CAST(SUBSTRING(pyr_code, LENGTH(?) + 1) AS INTEGER)), 0)", "PYR-"+categoryPyrID)).
+		From("items").
+		Where(goqu.L("pyr_code LIKE ?", "PYR-"+categoryPyrID+"%"))
+
+	_, err := query.Executor().ScanVal(&maxNumber)
+	if err != nil {
+		return "", fmt.Errorf("failed to get max PYR code number: %w", err)
+	}
+
+	// Próbujemy wygenerować unikalny kod
+	for suffix := 0; suffix < 10; suffix++ {
+		baseNumber := maxNumber + 1
+		pyrCode := metadata.NewPyrCode(categoryPyrID, baseNumber)
+		newCode := pyrCode.GeneratePyrCode()
+
+		if suffix > 0 {
+			newCode = fmt.Sprintf("%s-%d", newCode, suffix)
+		}
+
+		// Sprawdzamy czy taki kod już istnieje
+		var exists bool
+		existsQuery := r.repository.GoquDBWrapper.
+			Select(goqu.L("1")).
+			From("items").
+			Where(goqu.Ex{"pyr_code": newCode}).
+			Limit(1)
+
+		_, err = existsQuery.Executor().ScanVal(&exists)
+		if err != nil {
+			return "", fmt.Errorf("failed to check if PYR code exists: %w", err)
+		}
+
+		if !exists {
+			return newCode, nil
+		}
+	}
+
+	return "", fmt.Errorf("nie udało się wygenerować unikalnego kodu PYR po 100 próbach")
+}
