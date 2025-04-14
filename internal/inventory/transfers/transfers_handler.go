@@ -87,6 +87,16 @@ func (h *TransferHandler) CreateTransfer(c *gin.Context) {
 		return
 	}
 
+	if req.FromLocationID == req.LocationID {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Transfer from and to location cannot be the same", "code": "same_location"})
+		return
+	}
+
+	if req.LocationID == 0 || req.FromLocationID == 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Location ID is required", "code": "missing_location_id"})
+		return
+	}
+
 	validationErrors, err := h.Service.ValidateStock(req)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to verify stock"})
