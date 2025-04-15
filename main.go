@@ -18,9 +18,13 @@ import (
 )
 
 func init() {
+	log.Println("Inicjalizacja aplikacji...")
 	// Load .env file, but don't overwrite system environment variables
 	if err := godotenv.Load(); err != nil {
-		log.Println("Warning: No .env file found, falling back to system environment variables.")
+		log.Printf("Ostrzeżenie: Nie znaleziono pliku .env: %v", err)
+	} else {
+		log.Println("Plik .env załadowany pomyślnie")
+		log.Printf("JWT_SECRET ustawiony: %v", os.Getenv("JWT_SECRET") != "")
 	}
 }
 

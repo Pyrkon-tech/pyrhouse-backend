@@ -3,6 +3,7 @@ package container
 import (
 	"database/sql"
 	auditLogRepo "warehouse/internal/auditlog"
+	"warehouse/internal/integrations/googlesheets"
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/items"
 	"warehouse/internal/inventory/stocks"
@@ -15,15 +16,16 @@ import (
 )
 
 type Container struct {
-	Repository      *repository.Repository
-	AuditLog        *auditlog.Auditlog
-	LoginHandler    *security.LoginHandler
-	AssetHandler    *assets.ItemHandler
-	StockHandler    *stocks.StockHandler
-	LocationHandler *locations.LocationHandler
-	TransferHandler *transfers.TransferHandler
-	UserHandler     *users.UsersHandler
-	ItemHandler     *items.ItemHandler
+	Repository          *repository.Repository
+	AuditLog            *auditlog.Auditlog
+	LoginHandler        *security.LoginHandler
+	AssetHandler        *assets.ItemHandler
+	StockHandler        *stocks.StockHandler
+	LocationHandler     *locations.LocationHandler
+	TransferHandler     *transfers.TransferHandler
+	UserHandler         *users.UsersHandler
+	ItemHandler         *items.ItemHandler
+	GoogleSheetsHandler *googlesheets.GoogleSheetsHandler
 }
 
 func NewAppContainer(db *sql.DB) *Container {
@@ -43,15 +45,22 @@ func NewAppContainer(db *sql.DB) *Container {
 	transferHandler := transfers.NewHandler(repo, transferRepository, assetRepo, auditLog)
 	itemsHandler := items.NewItemHandler(repo, stockRepo, assetRepo, auditLogRepo)
 
+	// Inicjalizacja handlera Google Sheets
+	googleSheetsHandler, err := googlesheets.NewGoogleSheetsHandler()
+	if err != nil {
+		googleSheetsHandler = nil
+	}
+
 	return &Container{
-		Repository:      repo,
-		AuditLog:        auditLog,
-		LoginHandler:    loginHandler,
-		AssetHandler:    assetHandler,
-		StockHandler:    stockHandler,
-		LocationHandler: locationHandler,
-		TransferHandler: transferHandler,
-		UserHandler:     userHandler,
-		ItemHandler:     itemsHandler,
+		Repository:          repo,
+		AuditLog:            auditLog,
+		LoginHandler:        loginHandler,
+		AssetHandler:        assetHandler,
+		StockHandler:        stockHandler,
+		LocationHandler:     locationHandler,
+		TransferHandler:     transferHandler,
+		UserHandler:         userHandler,
+		ItemHandler:         itemsHandler,
+		GoogleSheetsHandler: googleSheetsHandler,
 	}
 }

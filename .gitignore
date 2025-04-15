@@ -4,3 +4,6 @@
 cmd/server/*
 !cmd/server/main.go
 __debug_bin*
+
+# Google credentials
+configs/google-credentials.json

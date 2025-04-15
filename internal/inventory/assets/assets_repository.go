@@ -498,7 +498,7 @@ func (r *AssetsRepository) GenerateUniquePyrCode(categoryID int, categoryPyrID s
 	}
 
 	// Próbujemy wygenerować unikalny kod
-	for suffix := 0; suffix < 100; suffix++ {
+	for suffix := 0; suffix < 50; suffix++ {
 		baseNumber := maxNumber + 1
 		pyrCode := metadata.NewPyrCode(categoryPyrID, baseNumber)
 		newCode := pyrCode.GeneratePyrCode()

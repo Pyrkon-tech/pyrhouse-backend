@@ -24,6 +24,13 @@ func RegisterProtectedRoutes(router *gin.Engine, container *container.Container)
 	protectedRoutes.Use(security.JWTMiddleware())
 
 	container.UserHandler.RegisterRoutes(protectedRoutes)
+
+	if container.GoogleSheetsHandler != nil {
+		container.GoogleSheetsHandler.RegisterRoutes(protectedRoutes)
+		log.Println("Google Sheets API routes registered successfully")
+	} else {
+		log.Println("Google Sheets API routes not registered - handler is nil")
+	}
 }
 
 func RegisterUtilityRoutes(router *gin.Engine) {

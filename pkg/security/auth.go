@@ -1,17 +1,41 @@
 package security
 
 import (
+	"log"
+	"os"
 	"time"
 	"warehouse/internal/repository"
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// TODO CHANGE ME FFS
-var jwtSecret = []byte("your_secret_key")
+var jwtSecret []byte
+
+func init() {
+	log.Println("Inicjalizacja modułu security...")
+	secret := os.Getenv("JWT_SECRET")
+	log.Printf("Odczytana wartość JWT_SECRET: %v", secret != "")
+
+	if secret == "" {
+		log.Println("Próba ponownego załadowania zmiennych środowiskowych...")
+		if err := godotenv.Load(); err != nil {
+			log.Printf("Błąd ładowania .env: %v", err)
+		}
+		secret = os.Getenv("JWT_SECRET")
+		log.Printf("Ponowna próba odczytu JWT_SECRET: %v", secret != "")
+	}
+
+	if secret == "" {
+		log.Fatal("JWT_SECRET environment variable is not set")
+	}
+
+	jwtSecret = []byte(secret)
+	log.Println("Moduł security zainicjalizowany pomyślnie")
+}
 
 func AuthenticateUser(username, password string, repo *repository.Repository) (*models.User, error) {
 	var user models.User
