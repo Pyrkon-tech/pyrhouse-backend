@@ -58,7 +58,7 @@ func NewGoogleSheetsHandler() (*GoogleSheetsHandler, error) {
 }
 
 func (h *GoogleSheetsHandler) RegisterRoutes(router *gin.RouterGroup) {
-	router.GET("/sheets/quests", security.Authorize("moderator"), h.getQuests)
+	router.GET("/sheets/quests", security.Authorize("user"), h.getQuests)
 }
 
 func (h *GoogleSheetsHandler) getQuests(c *gin.Context) {
