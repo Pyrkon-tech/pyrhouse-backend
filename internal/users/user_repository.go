@@ -6,6 +6,7 @@ import (
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
+	"github.com/lib/pq"
 )
 
 type UserRepository interface {
@@ -14,6 +15,7 @@ type UserRepository interface {
 	GetUsers() ([]models.User, error)
 	AddUserPoints(id int, points int) error
 	UpdateUser(id int, changes *models.UserChanges) error
+	DeleteUser(id int) error
 }
 
 type userRepositoryImpl struct {
@@ -99,6 +101,27 @@ func (r *userRepositoryImpl) UpdateUser(id int, changes *models.UserChanges) err
 	_, err := query.Executor().Exec()
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	return nil
+}
+
+func (r *userRepositoryImpl) DeleteUser(id int) error {
+	result, err := r.repository.GoquDBWrapper.Delete("users").Where(goqu.Ex{"id": id}).Executor().Exec()
+	if err != nil {
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+			return fmt.Errorf("nie można usunąć użytkownika, ponieważ ma przypisane transfery")
+		}
+		return fmt.Errorf("błąd podczas usuwania użytkownika: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("nie można sprawdzić liczby usuniętych wierszy: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("nie znaleziono użytkownika o id: %d", id)
 	}
 
 	return nil

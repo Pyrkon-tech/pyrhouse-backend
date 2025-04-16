@@ -88,3 +88,15 @@ func (s *InventoryLog) CreateTransferAuditLogEntry(action string, ts *models.Tra
 		)
 	}
 }
+
+func (s *InventoryLog) CreateTransferUserLogEntry(action string, transferID int, user *models.TransferUser) {
+	s.a.Log(
+		action,
+		map[string]interface{}{
+			"transfer_id": transferID,
+			"user_id":     user.UserID,
+			"msg":         "Użytkownik przypisany do questa dostawy",
+		},
+		user,
+	)
+}

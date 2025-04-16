@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"warehouse/pkg/models"
 	"warehouse/pkg/security"
 
@@ -27,6 +28,7 @@ func (h *UsersHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/users/:id", security.Authorize("user"), h.GetUser)
 	router.GET("/users", security.Authorize("moderator"), h.GetUserList)
 	router.POST("/users/:id/points", security.Authorize("admin"), h.AddUserPoints)
+	router.DELETE("/users/:id", security.Authorize("admin"), h.DeleteUser)
 }
 
 func (h *UsersHandler) RegisterUser(c *gin.Context) {
@@ -202,6 +204,31 @@ func (h *UsersHandler) GetUserList(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, users)
+}
+
+func (h *UsersHandler) DeleteUser(c *gin.Context) {
+	userID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe ID użytkownika", "details": err.Error()})
+		return
+	}
+
+	if !h.isAllowed(c, userID, "admin") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Nie masz uprawnień do wykonania tej operacji"})
+		return
+	}
+
+	err = h.Repository.DeleteUser(userID)
+	if err != nil {
+		if strings.Contains(err.Error(), "nie można usunąć użytkownika, ponieważ ma przypisane transfery") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Nie można usunąć użytkownika", "details": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie można usunąć użytkownika", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Użytkownik został usunięty"})
 }
 
 func (h *UsersHandler) isAllowed(c *gin.Context, userID int, userRole string) bool {

@@ -13,6 +13,18 @@ type Transfer struct {
 	StockItemsCollection []StockItem `json:"stock_items,omitempty"`
 	TransferDate         time.Time   `json:"transfer_date"`
 	Status               string      `json:"status"`
+	Users                []User      `json:"users,omitempty"`
+}
+
+type TransferUser struct {
+	UserID int `json:"id" binding:"required" db:"user_id"`
+}
+
+func (tu *TransferUser) CreateLogView() AuditLog {
+	return AuditLog{
+		ResourceID:   tu.UserID,
+		ResourceType: "user",
+	}
 }
 
 func (t *Transfer) CreateLogView() AuditLog {

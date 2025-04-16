@@ -15,4 +15,5 @@ type TransferRequest struct {
 	LocationID          int                `json:"location_id" binding:"required"`
 	AssetItemCollection []AssetItemRequest `json:"assets"`
 	StockItemCollection []StockItemRequest `json:"stocks"`
+	Users               []TransferUser     `json:"users,omitempty"`
 }

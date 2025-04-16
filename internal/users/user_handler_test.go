@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -47,6 +48,11 @@ func (m *MockUserRepository) AddUserPoints(id int, points int) error {
 
 func (m *MockUserRepository) UpdateUser(id int, changes *models.UserChanges) error {
 	args := m.Called(id, changes)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) DeleteUser(id int) error {
+	args := m.Called(id)
 	return args.Error(0)
 }
 
@@ -431,6 +437,74 @@ func TestUpdateUserPassword(t *testing.T) {
 			c.Params = []gin.Param{{Key: "id", Value: tt.userID}}
 
 			handler.UpdateUser(c)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func TestDeleteUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockRepo := new(MockUserRepository)
+	handler := NewHandler(mockRepo)
+
+	tests := []struct {
+		name           string
+		userID         string
+		setupMock      func()
+		expectedStatus int
+	}{
+		{
+			name:   "successful deletion",
+			userID: "1",
+			setupMock: func() {
+				mockRepo.On("DeleteUser", 1).Return(nil)
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:   "user has transfers",
+			userID: "1",
+			setupMock: func() {
+				mockRepo.On("DeleteUser", 1).Return(fmt.Errorf("nie można usunąć użytkownika, ponieważ ma przypisane transfery"))
+			},
+			expectedStatus: http.StatusConflict,
+		},
+		{
+			name:           "invalid user ID",
+			userID:         "invalid",
+			setupMock:      func() {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:   "user not found",
+			userID: "999",
+			setupMock: func() {
+				mockRepo.On("DeleteUser", 999).Return(fmt.Errorf("nie znaleziono użytkownika o id: 999"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
+		{
+			name:   "unauthorized access",
+			userID: "2",
+			setupMock: func() {
+				// Nie dodajemy mocka, bo handler zakończy się wcześniej
+			},
+			expectedStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo.ExpectedCalls = nil
+			tt.setupMock()
+			c, w := setupTestContext()
+
+			c.Request = httptest.NewRequest("DELETE", "/users/"+tt.userID, nil)
+			c.Params = []gin.Param{{Key: "id", Value: tt.userID}}
+
+			handler.DeleteUser(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			mockRepo.AssertExpectations(t)

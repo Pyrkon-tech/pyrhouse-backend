@@ -22,6 +22,8 @@ type TransferRepository interface {
 	InsertStockItemsTransferRecord(tx *goqu.TxDatabase, transferID int, unserializedItems []models.StockItemRequest) error
 	RemoveStockItemsTransferRecords(tx *goqu.TxDatabase, transferID int) error
 	HasStockItemsInTransfer(tx *goqu.TxDatabase, transferID int) (bool, error)
+	InsertTransferUsers(tx *goqu.TxDatabase, transferID int, users []models.TransferUser) error
+	GetTransferUsers(transferID int) ([]models.User, error)
 }
 
 type transferRepository struct {
@@ -307,4 +309,47 @@ func decreaseStockInTransfer(tx *goqu.TxDatabase, transferReq stocks.RemoveStock
 	}
 
 	return nil
+}
+
+func (r *transferRepository) InsertTransferUsers(tx *goqu.TxDatabase, transferID int, users []models.TransferUser) error {
+	if len(users) == 0 {
+		return nil
+	}
+
+	var records []goqu.Record
+	for _, user := range users {
+		records = append(records, goqu.Record{
+			"transfer_id": transferID,
+			"user_id":     user.UserID,
+		})
+	}
+
+	query := tx.Insert("transfer_users").Rows(records)
+
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to insert transfer users: %w", err)
+	}
+
+	return nil
+}
+
+func (r *transferRepository) GetTransferUsers(transferID int) ([]models.User, error) {
+	var users []models.User
+
+	query := r.Repo.GoquDBWrapper.
+		Select(
+			"users.id",
+			"users.username",
+		).
+		From("transfer_users").
+		Join(goqu.T("users"), goqu.On(goqu.Ex{"transfer_users.user_id": goqu.I("users.id")})).
+		Where(goqu.Ex{"transfer_id": transferID})
+
+	err := query.Executor().ScanStructs(&users)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transfer users: %w", err)
+	}
+
+	return users, nil
 }

@@ -60,6 +60,27 @@ func (s *TransferService) InitTransfer(req models.TransferRequest, transitStatus
 		return 0, err
 	}
 
+	// Asynchroniczne dodawanie użytkowników
+	if len(req.Users) > 0 {
+		go func(users []models.TransferUser) {
+			err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+				if err := s.tr.InsertTransferUsers(tx, transferID, users); err != nil {
+					return err
+				}
+
+				// Logowanie dla każdego użytkownika
+				for _, user := range users {
+					user := user // Kopiujemy zmienną do lokalnego zakresu
+					s.il.CreateTransferUserLogEntry("assigned_to_transfer", transferID, &user)
+				}
+				return nil
+			})
+			if err != nil {
+				log.Printf("Błąd podczas asynchronicznego dodawania użytkowników do transferu %d: %v", transferID, err)
+			}
+		}(req.Users)
+	}
+
 	go s.createInventoryLog("in_transfer", transferID)
 
 	return transferID, nil
@@ -79,6 +100,11 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 		return nil, err
 	}
 
+	users, err := s.tr.GetTransferUsers(transferID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transfer users: %w", err)
+	}
+
 	transfer := models.Transfer{
 		ID: flatTransfer.ID,
 		FromLocation: models.Location{
@@ -93,6 +119,7 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 		StockItemsCollection: *stockItems,
 		TransferDate:         flatTransfer.TransferDate,
 		Status:               flatTransfer.Status,
+		Users:                users,
 	}
 
 	return &transfer, nil
