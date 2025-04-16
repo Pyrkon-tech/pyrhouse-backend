@@ -10,6 +10,7 @@ type QuestItem struct {
 	ItemName string `json:"item_name"`
 	Quantity int    `json:"quantity"`
 	Notes    string `json:"notes"`
+	Status   string `json:"status"`
 }
 
 // Quest reprezentuje zagregowany element z arkusza Google Sheets
@@ -18,6 +19,7 @@ type Quest struct {
 	DeliveryDate string      `json:"delivery_date"`
 	Location     string      `json:"location"`
 	Pavilion     string      `json:"pavilion"`
+	Status       string      `json:"status"`
 	Items        []QuestItem `json:"items"`
 }
 
@@ -58,27 +60,27 @@ func MapHeaders(headers []interface{}) map[int]string {
 
 // ParseQuests parsuje dane z arkusza na listę zagregowanych obiektów Quest
 func ParseQuests(values [][]interface{}) []Quest {
-	log.Printf("Rozpoczynam parsowanie %d wierszy danych", len(values))
+	log.Printf("[spreadsheet-parser] Rozpoczynam parsowanie %d wierszy danych", len(values))
 
 	if len(values) < 2 {
-		log.Printf("Za mało wierszy danych, potrzebne minimum 2 wiersze (nagłówki + dane)")
+		log.Printf("[spreadsheet-parser] Za mało wierszy danych, potrzebne minimum 2 wiersze (nagłówki + dane)")
 		return []Quest{}
 	}
 
 	headers := values[0]
-	log.Printf("Nagłówki: %v", headers)
+	log.Printf("[spreadsheet-parser] Nagłówki: %v", headers)
 
 	headerMap := MapHeaders(headers)
-	log.Printf("Zmapowane nagłówki: %v", headerMap)
+	log.Printf("[spreadsheet-parser] Zmapowane nagłówki: %v", headerMap)
 
 	// Map do przechowywania zagregowanych questów
 	questMap := make(map[string]*Quest)
 
 	for i := 1; i < len(values); i++ {
 		row := values[i]
-		log.Printf("Przetwarzanie wiersza %d: %v", i, row)
+		log.Printf("[spreadsheet-parser] Przetwarzanie wiersza %d: %v", i, row)
 
-		var recipient, deliveryDate, location, pavilion, itemName, notes string
+		var recipient, deliveryDate, location, pavilion, itemName, notes, status string
 		var quantity int
 
 		for j, cell := range row {
@@ -92,7 +94,7 @@ func ParseQuests(values [][]interface{}) []Quest {
 				continue
 			}
 
-			log.Printf("  Kolumna %d: %s = %s", j, fieldName, cellStr)
+			log.Printf("[spreadsheet-parser] Kolumna %d: %s = %s", j, fieldName, cellStr)
 
 			switch fieldName {
 			case "recipient":
@@ -112,6 +114,8 @@ func ParseQuests(values [][]interface{}) []Quest {
 				}
 			case "notes":
 				notes = cellStr
+			case "status":
+				status = cellStr
 			}
 		}
 
@@ -127,6 +131,7 @@ func ParseQuests(values [][]interface{}) []Quest {
 				DeliveryDate: deliveryDate,
 				Location:     location,
 				Pavilion:     pavilion,
+				Status:       status,
 				Items:        make([]QuestItem, 0),
 			}
 			questMap[key] = quest
@@ -137,15 +142,15 @@ func ParseQuests(values [][]interface{}) []Quest {
 			ItemName: itemName,
 			Quantity: quantity,
 			Notes:    notes,
+			Status:   status,
 		})
 	}
 
-	// Konwertujemy mapę na slice
 	quests := make([]Quest, 0, len(questMap))
 	for _, quest := range questMap {
 		quests = append(quests, *quest)
 	}
 
-	log.Printf("Zakończono parsowanie, utworzono %d zagregowanych questów", len(quests))
+	log.Printf("[spreadsheet-parser] Zakończono parsowanie, utworzono %d zagregowanych questów", len(quests))
 	return quests
 }

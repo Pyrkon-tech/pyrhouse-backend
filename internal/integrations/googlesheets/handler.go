@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"warehouse/pkg/security"
 
@@ -65,16 +66,17 @@ func (h *GoogleSheetsHandler) getQuests(c *gin.Context) {
 	readRange := "A1:I999"
 
 	if spreadsheetID == "" || readRange == "" {
-		c.JSON(400, gin.H{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Wymagane parametry spreadsheet_id i range",
 		})
 		return
 	}
 
+	filterStatus := c.Query("status")
 	values, err := h.ReadSpreadsheet(spreadsheetID, readRange)
 	if err != nil {
 		log.Printf("Błąd podczas pobierania danych: %v", err)
-		c.JSON(500, gin.H{
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
 		return
@@ -82,16 +84,31 @@ func (h *GoogleSheetsHandler) getQuests(c *gin.Context) {
 
 	if values == nil {
 		log.Printf("Nie znaleziono danych w arkuszu")
-		c.JSON(200, gin.H{
-			"quests": []Quest{},
-		})
+		c.JSON(http.StatusOK, []Quest{})
 		return
 	}
 
 	quests := ParseQuests(values)
-	log.Printf("Przetworzono %d questów", len(quests))
+	filteredQuests := filterQuestsByStatus(quests, filterStatus)
+	log.Printf("Przetworzono %d questów, po filtrowaniu: %d", len(quests), len(filteredQuests))
 
-	c.JSON(200, quests)
+	c.JSON(http.StatusOK, filteredQuests)
+}
+
+func filterQuestsByStatus(quests []Quest, status string) []Quest {
+	if len(quests) == 0 {
+		return []Quest{}
+	}
+
+	filtered := make([]Quest, 0, len(quests))
+	for _, quest := range quests {
+		if status == "delivered" && quest.Status == "Wysłane" {
+			filtered = append(filtered, quest)
+		} else if status == "" && (quest.Status == "Zamówione" || quest.Status == "Zatwierdzone") {
+			filtered = append(filtered, quest)
+		}
+	}
+	return filtered
 }
 
 func (h *GoogleSheetsHandler) ReadSpreadsheet(spreadsheetID string, readRange string) ([][]interface{}, error) {
