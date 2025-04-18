@@ -3,6 +3,7 @@ package transfers
 import (
 	"fmt"
 	"log"
+	"time"
 	"warehouse/internal/inventory/assets"
 	inventorylog "warehouse/internal/inventory/inventory_log"
 	"warehouse/internal/inventory/stocks"
@@ -91,21 +92,8 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 	if err != nil {
 		return nil, err
 	}
-	assets, err := s.ar.GetTransferAssets(transferID)
-	if err != nil {
-		return nil, err
-	}
-	stockItems, err := s.stockRepo.GetStockItemsByTransfer(transferID)
-	if err != nil {
-		return nil, err
-	}
 
-	users, err := s.tr.GetTransferUsers(transferID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get transfer users: %w", err)
-	}
-
-	transfer := models.Transfer{
+	transfer := &models.Transfer{
 		ID: flatTransfer.ID,
 		FromLocation: models.Location{
 			ID:   flatTransfer.FromLocationID,
@@ -115,14 +103,40 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 			ID:   flatTransfer.ToLocationID,
 			Name: flatTransfer.ToLocationName,
 		},
-		AssetsCollection:     *assets,
-		StockItemsCollection: *stockItems,
-		TransferDate:         flatTransfer.TransferDate,
-		Status:               flatTransfer.Status,
-		Users:                users,
+		Status:       flatTransfer.Status,
+		TransferDate: flatTransfer.TransferDate,
 	}
 
-	return &transfer, nil
+	if flatTransfer.DeliveryLatitude != nil && flatTransfer.DeliveryLongitude != nil && flatTransfer.DeliveryTimestamp != nil {
+		transfer.DeliveryLocation = &models.DeliveryLocation{
+			Lat:       *flatTransfer.DeliveryLatitude,
+			Lng:       *flatTransfer.DeliveryLongitude,
+			Timestamp: *flatTransfer.DeliveryTimestamp,
+		}
+	}
+
+	// Pobierz aktywa
+	assets, err := s.ar.GetTransferAssets(transferID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transfer assets: %w", err)
+	}
+	transfer.AssetsCollection = *assets
+
+	// Pobierz pozycje magazynowe
+	stockItems, err := s.stockRepo.GetStockItemsByTransfer(transferID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transfer stock items: %w", err)
+	}
+	transfer.StockItemsCollection = *stockItems
+
+	// Pobierz użytkowników
+	users, err := s.tr.GetTransferUsers(transferID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transfer users: %w", err)
+	}
+	transfer.Users = users
+
+	return transfer, nil
 }
 
 func (s *TransferService) GetTransfers() (*[]models.Transfer, error) {
@@ -408,4 +422,8 @@ func (s *TransferService) GetTransfersByUserAndStatus(userID int, status string)
 	}
 
 	return transfers, nil
+}
+
+func (s *TransferService) UpdateDeliveryLocation(transferID int, latitude float64, longitude float64, timestamp time.Time) error {
+	return s.tr.UpdateDeliveryLocation(transferID, latitude, longitude, timestamp)
 }

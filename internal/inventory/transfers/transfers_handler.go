@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 	"warehouse/internal/inventory/assets"
 	inventorylog "warehouse/internal/inventory/inventory_log"
 	"warehouse/internal/inventory/stocks"
@@ -21,6 +22,14 @@ type TransferHandler struct {
 	TransferRepository TransferRepository
 	Service            *TransferService
 	AssetRepo          *assets.AssetsRepository
+}
+
+type DeliveryLocationRequest struct {
+	DeliveryLocation struct {
+		Lat       float64   `json:"lat" binding:"required"`
+		Lng       float64   `json:"lng" binding:"required"`
+		Timestamp time.Time `json:"timestamp" binding:"required"`
+	} `json:"delivery_location" binding:"required"`
 }
 
 func NewHandler(r *repository.Repository, tr TransferRepository, ar *assets.AssetsRepository, a *auditlog.Auditlog) *TransferHandler {
@@ -43,6 +52,7 @@ func (h *TransferHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.PATCH("/transfers/:id/cancel", h.CancelTransfer)
 	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", h.RemoveAssetFromTransfer)
 	router.PATCH("/transfers/:id/categories/:category_id/restore-to-location", h.RemoveStockItemFromTransfer)
+	router.PATCH("/transfers/:id/delivery-location", h.UpdateDeliveryLocation)
 }
 
 func (h *TransferHandler) GetTransfer(c *gin.Context) {
@@ -285,4 +295,37 @@ func (h *TransferHandler) CancelTransfer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Transfer cancelled successfully",
 	})
+}
+
+func (h *TransferHandler) UpdateDeliveryLocation(c *gin.Context) {
+	transferID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe ID transferu"})
+		return
+	}
+
+	var req DeliveryLocationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe dane"})
+		return
+	}
+
+	transfer, err := h.Service.GetTransfer(transferID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie można pobrać transferu"})
+		return
+	}
+
+	if transfer.Status != "in_transit" && transfer.Status != "completed" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Można zaktualizować lokalizację tylko dla transferów w trakcie lub zakończonych"})
+		return
+	}
+
+	err = h.Service.UpdateDeliveryLocation(transferID, req.DeliveryLocation.Lat, req.DeliveryLocation.Lng, req.DeliveryLocation.Timestamp)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie można zaktualizować lokalizacji dostawy", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Lokalizacja dostawy została zaktualizowana"})
 }

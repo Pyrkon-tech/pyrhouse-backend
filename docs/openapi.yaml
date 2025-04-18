@@ -1180,6 +1180,72 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /transfers/{transferID}/delivery-location:
+    patch:
+      tags:
+        - transfer
+      summary: Aktualizuj lokalizację dostawy transferu
+      description: Aktualizuje lokalizację dostawy dla transferu w trakcie lub zakończonego
+      parameters:
+        - in: path
+          name: transferID
+          schema:
+            type: integer
+          required: true
+          description: Identyfikator transferu
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - delivery_location
+              properties:
+                delivery_location:
+                  type: object
+                  required:
+                    - lat
+                    - lng
+                    - timestamp
+                  properties:
+                    lat:
+                      type: number
+                      format: float
+                      description: Szerokość geograficzna
+                      example: 50.00366850638076
+                    lng:
+                      type: number
+                      format: float
+                      description: Długość geograficzna
+                      example: 20.235703352753667
+                    timestamp:
+                      type: string
+                      format: date-time
+                      description: Czas dostawy
+                      example: "2025-04-18T21:43:12.473Z"
+      responses:
+        "200":
+          description: Lokalizacja dostawy została zaktualizowana
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Lokalizacja dostawy została zaktualizowana"
+        "400":
+          description: Nieprawidłowe żądanie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Można zaktualizować lokalizację tylko dla transferów w trakcie lub zakończonych"
+        "500":
+          $ref: "#/components/responses/DefaultError"
 servers:
   - url: pyrhouse-backend-f26ml.ondigitalocean.app/api
 components:

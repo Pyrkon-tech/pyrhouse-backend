@@ -25,6 +25,7 @@ type TransferRepository interface {
 	HasStockItemsInTransfer(tx *goqu.TxDatabase, transferID int) (bool, error)
 	InsertTransferUsers(tx *goqu.TxDatabase, transferID int, users []models.TransferUser) error
 	GetTransferUsers(transferID int) ([]models.User, error)
+	UpdateDeliveryLocation(transferID int, latitude float64, longitude float64, timestamp time.Time) error
 }
 
 type transferRepository struct {
@@ -73,18 +74,20 @@ func (r *transferRepository) CanTransferNonSerializedItems(stocks []models.Stock
 }
 
 type FlatTransfer struct {
-	ID               int       `db:"transfer_id"`
-	FromLocationID   int       `db:"from_location_id"`
-	FromLocationName string    `db:"from_location_name"`
-	ToLocationID     int       `db:"to_location_id"`
-	ToLocationName   string    `db:"to_location_name"`
-	TransferDate     time.Time `db:"transfer_date"`
-	Status           string    `db:"transfer_status"`
+	ID                int        `db:"transfer_id"`
+	FromLocationID    int        `db:"from_location_id"`
+	FromLocationName  string     `db:"from_location_name"`
+	ToLocationID      int        `db:"to_location_id"`
+	ToLocationName    string     `db:"to_location_name"`
+	TransferDate      time.Time  `db:"transfer_date"`
+	Status            string     `db:"transfer_status"`
+	DeliveryLatitude  *float64   `db:"delivery_latitude"`
+	DeliveryLongitude *float64   `db:"delivery_longitude"`
+	DeliveryTimestamp *time.Time `db:"delivery_timestamp"`
 }
 
-// TODO Service method
 func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, error) {
-	var flatTransfer FlatTransfer
+	var transfer FlatTransfer
 
 	query := r.Repo.GoquDBWrapper.
 		Select(
@@ -95,7 +98,9 @@ func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, erro
 			goqu.I("l2.name").As("to_location_name"),
 			goqu.I("t.status").As("transfer_status"),
 			goqu.I("t.transfer_date").As("transfer_date"),
-			//TODO goqu.I("t.receiver").As("transfer_receiver"),
+			goqu.I("t.delivery_latitude").As("delivery_latitude"),
+			goqu.I("t.delivery_longitude").As("delivery_longitude"),
+			goqu.I("t.delivery_timestamp").As("delivery_timestamp"),
 		).
 		From(goqu.T("transfers").As("t")).
 		LeftJoin(
@@ -107,12 +112,13 @@ func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, erro
 			goqu.On(goqu.Ex{"t.to_location_id": goqu.I("l2.id")}),
 		).
 		Where(goqu.Ex{"t.id": transferID})
-	_, err := query.Executor().ScanStruct(&flatTransfer)
+
+	_, err := query.Executor().ScanStruct(&transfer)
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}
 
-	return &flatTransfer, nil
+	return &transfer, nil
 }
 
 func (r *transferRepository) GetTransferRows() (*[]FlatTransfer, error) {
@@ -393,4 +399,18 @@ func (r *transferRepository) GetTransfersByUserAndStatus(userID int, status stri
 	}
 
 	return flatTransfers, nil
+}
+
+func (r *transferRepository) UpdateDeliveryLocation(transferID int, latitude float64, longitude float64, timestamp time.Time) error {
+	_, err := r.Repo.GoquDBWrapper.Update("transfers").
+		Set(goqu.Record{
+			"delivery_latitude":  latitude,
+			"delivery_longitude": longitude,
+			"delivery_timestamp": timestamp,
+		}).
+		Where(goqu.C("id").Eq(transferID)).
+		Executor().
+		Exec()
+
+	return err
 }
