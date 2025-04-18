@@ -15,6 +15,7 @@ type TransferRepository interface {
 	UpdateTransferStatus(transferID int, status string) error
 	GetTransferRow(transferID int) (*FlatTransfer, error)
 	GetTransferRows() (*[]FlatTransfer, error)
+	GetTransfersByUserAndStatus(userID int, status string) ([]FlatTransfer, error)
 	InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error)
 	GetTransferLocationById(tx *goqu.TxDatabase, transferID int) (int, error)
 	InsertAssetsTransferRecord(tx *goqu.TxDatabase, transferID int, assets []int) error
@@ -352,4 +353,44 @@ func (r *transferRepository) GetTransferUsers(transferID int) ([]models.User, er
 	}
 
 	return users, nil
+}
+
+func (r *transferRepository) GetTransfersByUserAndStatus(userID int, status string) ([]FlatTransfer, error) {
+	var flatTransfers []FlatTransfer
+
+	query := r.Repo.GoquDBWrapper.
+		Select(
+			goqu.I("t.id").As("transfer_id"),
+			goqu.I("l1.id").As("from_location_id"),
+			goqu.I("l1.name").As("from_location_name"),
+			goqu.I("l2.id").As("to_location_id"),
+			goqu.I("l2.name").As("to_location_name"),
+			goqu.I("t.status").As("transfer_status"),
+			goqu.I("t.transfer_date").As("transfer_date"),
+		).
+		From(goqu.T("transfers").As("t")).
+		LeftJoin(
+			goqu.T("locations").As("l1"),
+			goqu.On(goqu.Ex{"t.from_location_id": goqu.I("l1.id")}),
+		).
+		LeftJoin(
+			goqu.T("locations").As("l2"),
+			goqu.On(goqu.Ex{"t.to_location_id": goqu.I("l2.id")}),
+		).
+		Join(
+			goqu.T("transfer_users").As("tu"),
+			goqu.On(goqu.Ex{"t.id": goqu.I("tu.transfer_id")}),
+		).
+		Where(goqu.Ex{"tu.user_id": userID})
+
+	if status != "" {
+		query = query.Where(goqu.Ex{"t.status": status})
+	}
+
+	err := query.Executor().ScanStructs(&flatTransfers)
+	if err != nil {
+		return nil, fmt.Errorf("error executing SQL statement: %w", err)
+	}
+
+	return flatTransfers, nil
 }

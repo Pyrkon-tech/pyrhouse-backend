@@ -12,6 +12,7 @@ import (
 	"warehouse/pkg/auditlog"
 	"warehouse/pkg/metadata"
 	"warehouse/pkg/models"
+	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,9 +34,10 @@ func NewHandler(r *repository.Repository, tr TransferRepository, ar *assets.Asse
 	}
 }
 
-func (h *TransferHandler) RegisterRoutes(router *gin.Engine) {
+func (h *TransferHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/transfers/:id", h.GetTransfer)
 	router.GET("/transfers", h.RetrieveTransferList)
+	router.GET("/transfers/users/:user_id", h.GetTransfersByUserAndStatus)
 	router.POST("/transfers", h.CreateTransfer)
 	router.PATCH("/transfers/:id/confirm", h.ConfirmTransfer)
 	router.PATCH("/transfers/:id/cancel", h.CancelTransfer)
@@ -192,6 +194,50 @@ func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Stock item removed from transfer successfully"})
+}
+
+func (h *TransferHandler) GetTransfersByUserAndStatus(c *gin.Context) {
+	userID, err := strconv.Atoi(c.Param("user_id"))
+	if err != nil || userID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe ID użytkownika"})
+		return
+	}
+
+	status := c.Query("status")
+	if status == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Status jest wymagany"})
+		return
+	}
+
+	validStatuses := map[string]bool{
+		"in_transit": true,
+		"completed":  true,
+		"cancelled":  true,
+	}
+	if !validStatuses[status] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy status transferu"})
+		return
+	}
+
+	isAllowed := security.IsOwnerOrAllowed(c, userID, "moderator")
+	if !isAllowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu do tego zasobu"})
+		return
+	}
+
+	transfers, err := h.Service.GetTransfersByUserAndStatus(userID, status)
+	if err != nil {
+		log.Printf("Unable to get transfers: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie można pobrać transferów", "details": err.Error()})
+		return
+	}
+
+	if len(transfers) == 0 {
+		c.JSON(http.StatusOK, []models.Transfer{})
+		return
+	}
+
+	c.JSON(http.StatusOK, transfers)
 }
 
 func (h *TransferHandler) ConfirmTransfer(c *gin.Context) {

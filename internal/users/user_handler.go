@@ -74,7 +74,7 @@ func (h *UsersHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if !h.isAllowed(c, userID, "admin") {
+	if !security.IsOwnerOrAllowed(c, userID, "admin") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "You are not allowed to access this resource"})
 		return
 	}
@@ -178,7 +178,7 @@ func (h *UsersHandler) GetUser(c *gin.Context) {
 		return
 	}
 
-	if !h.isAllowed(c, userID, "moderator") {
+	if !security.IsOwnerOrAllowed(c, userID, "moderator") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "You are not allowed to access this resource"})
 		return
 	}
@@ -213,7 +213,7 @@ func (h *UsersHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if !h.isAllowed(c, userID, "admin") {
+	if !security.IsOwnerOrAllowed(c, userID, "admin") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Nie masz uprawnień do wykonania tej operacji"})
 		return
 	}
@@ -229,18 +229,4 @@ func (h *UsersHandler) DeleteUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Użytkownik został usunięty"})
-}
-
-func (h *UsersHandler) isAllowed(c *gin.Context, userID int, userRole string) bool {
-	authID, ok := c.Get("userID")
-	authID, err := strconv.Atoi(authID.(string))
-	if err != nil || authID == 0 || !ok {
-		return false
-	}
-
-	if authID != userID && !security.IsAllowed(c, userRole) {
-		return false
-	}
-
-	return true
 }

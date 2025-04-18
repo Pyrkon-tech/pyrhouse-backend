@@ -400,3 +400,12 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 
 	return nil
 }
+
+func (s *TransferService) GetTransfersByUserAndStatus(userID int, status string) ([]FlatTransfer, error) {
+	transfers, err := s.tr.GetTransfersByUserAndStatus(userID, status)
+	if err != nil {
+		return nil, fmt.Errorf("error getting transfers by user and status: %w", err)
+	}
+
+	return transfers, nil
+}

@@ -3,6 +3,7 @@ package security
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"warehouse/pkg/roles"
@@ -101,6 +102,30 @@ func IsAllowed(c *gin.Context, requiredRole string) bool {
 	}
 
 	return true
+}
+
+// IsOwnerOrAllowed checks if the user is either the owner of the resource or has the required role.
+func IsOwnerOrAllowed(c *gin.Context, resourceUserID int, requiredRole string) bool {
+	authID, ok := c.Get("userID")
+	if !ok {
+		return false
+	}
+
+	authIDStr, ok := authID.(string)
+	if !ok {
+		return false
+	}
+
+	authIDInt, err := strconv.Atoi(authIDStr)
+	if err != nil || authIDInt == 0 {
+		return false
+	}
+
+	if authIDInt == resourceUserID {
+		return true
+	}
+
+	return IsAllowed(c, requiredRole)
 }
 
 func RequireRole(requiredRole roles.Role) gin.HandlerFunc {
