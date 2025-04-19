@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"strconv"
-	"strings"
 	"warehouse/internal/repository"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/metadata"
@@ -464,66 +462,21 @@ func (r *AssetsRepository) CountAssetsInCategory(categoryID int) (int, error) {
 }
 
 func (r *AssetsRepository) GenerateUniquePyrCode(categoryID int, categoryPyrID string) (string, error) {
-	// Pobieramy wszystkie istniejące kody PYR dla danej kategorii
-	var existingCodes []string
-	query := r.repository.GoquDBWrapper.
-		Select("pyr_code").
+	var nextNumber int
+
+	// Pobieramy największy numer dla danej kategorii
+	query := r.repository.GoquDBWrapper.Select(
+		goqu.L("COALESCE(MAX(CAST(REGEXP_REPLACE(pyr_code, '^PYR-" + categoryPyrID + "(\\d+)(-\\d+)?$', '\\1') AS INTEGER)), 0)"),
+	).
 		From("items").
-		Where(goqu.L("pyr_code LIKE ?", "PYR-"+categoryPyrID+"%"))
+		Where(goqu.L("pyr_code ~ ?", "^PYR-"+categoryPyrID+"\\d+(-\\d+)?$"))
 
-	err := query.Executor().ScanVals(&existingCodes)
+	_, err := query.Executor().ScanVal(&nextNumber)
 	if err != nil {
-		return "", fmt.Errorf("failed to get existing PYR codes: %w", err)
+		return "", fmt.Errorf("failed to get next number: %w", err)
 	}
 
-	// Znajdujemy największy numer w istniejących kodach
-	maxNumber := 0
-	prefix := "PYR-" + categoryPyrID
-	for _, code := range existingCodes {
-		if !strings.HasPrefix(code, prefix) {
-			continue
-		}
-
-		// Wyciągamy numer z kodu (wszystko po prefixie)
-		numStr := strings.TrimPrefix(code, prefix)
-		// Usuwamy ewentualne przyrostki (np. "-1")
-		if idx := strings.Index(numStr, "-"); idx != -1 {
-			numStr = numStr[:idx]
-		}
-
-		// Próbujemy przekonwertować na liczbę
-		if num, err := strconv.Atoi(numStr); err == nil && num > maxNumber {
-			maxNumber = num
-		}
-	}
-
-	// Próbujemy wygenerować unikalny kod
-	for suffix := 0; suffix < 50; suffix++ {
-		baseNumber := maxNumber + 1
-		pyrCode := metadata.NewPyrCode(categoryPyrID, baseNumber)
-		newCode := pyrCode.GeneratePyrCode()
-
-		if suffix > 0 {
-			newCode = fmt.Sprintf("%s-%d", newCode, suffix)
-		}
-
-		// Sprawdzamy czy taki kod już istnieje
-		var exists bool
-		existsQuery := r.repository.GoquDBWrapper.
-			Select(goqu.L("1")).
-			From("items").
-			Where(goqu.Ex{"pyr_code": newCode}).
-			Limit(1)
-
-		_, err = existsQuery.Executor().ScanVal(&exists)
-		if err != nil {
-			return "", fmt.Errorf("failed to check if PYR code exists: %w", err)
-		}
-
-		if !exists {
-			return newCode, nil
-		}
-	}
-
-	return "", fmt.Errorf("nie udało się wygenerować unikalnego kodu PYR po 100 próbach")
+	nextNumber++
+	pyrCode := metadata.NewPyrCode(categoryPyrID, nextNumber)
+	return pyrCode.GeneratePyrCode(), nil
 }

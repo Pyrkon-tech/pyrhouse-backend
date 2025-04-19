@@ -12,6 +12,7 @@ import (
 	"warehouse/pkg/models"
 	"warehouse/pkg/security"
 
+	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"
 )
 
@@ -234,47 +235,70 @@ func (h *ItemHandler) CreateBulkAssets(c *gin.Context) {
 	var createdAssets []models.Asset
 	var errors []string
 
-	for _, serial := range req.Serials {
-		itemReq := models.ItemRequest{
-			Serial:     serial,
-			LocationId: req.LocationId,
-			Status:     req.Status,
-			CategoryId: req.CategoryId,
-			Origin:     req.Origin,
-		}
+	err = repository.WithTransaction(h.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		for _, serial := range req.Serials {
+			itemReq := models.ItemRequest{
+				Serial:     serial,
+				LocationId: req.LocationId,
+				Status:     req.Status,
+				CategoryId: req.CategoryId,
+				Origin:     req.Origin,
+			}
 
-		asset, err := h.r.PersistItem(itemReq)
-		if err != nil {
-			switch err.(type) {
-			case *custom_error.UniqueViolationError:
-				errors = append(errors, fmt.Sprintf("Serial number %s already registered", serial))
-				continue
-			default:
-				errors = append(errors, fmt.Sprintf("Failed to create asset with serial %s: %v", serial, err))
+			asset, err := h.r.PersistItem(itemReq)
+			if err != nil {
+				switch err.(type) {
+				case *custom_error.UniqueViolationError:
+					errors = append(errors, fmt.Sprintf("Serial number %s already registered", serial))
+					continue
+				default:
+					errors = append(errors, fmt.Sprintf("Failed to create asset with serial %s: %v", serial, err))
+					continue
+				}
+			}
+
+			pyrCode, err := h.r.GenerateUniquePyrCode(asset.Category.ID, asset.Category.PyrID)
+			if err != nil {
+				log.Printf("Failed to generate PYR code for asset %d: %v", asset.ID, err)
+				if _, removeErr := h.r.RemoveAsset(asset.ID); removeErr != nil {
+					log.Printf("Failed to remove asset after PYR code generation failure: %v", removeErr)
+				}
+				errors = append(errors, fmt.Sprintf("Failed to generate PYR code for asset with serial %s: %v", serial, err))
 				continue
 			}
+
+			if err := h.r.UpdatePyrCode(asset.ID, pyrCode); err != nil {
+				log.Printf("Failed to update PYR code for asset %d: %v", asset.ID, err)
+				if _, removeErr := h.r.RemoveAsset(asset.ID); removeErr != nil {
+					log.Printf("Failed to remove asset after PYR code update failure: %v", removeErr)
+				}
+				errors = append(errors, fmt.Sprintf("Failed to update PYR code for asset with serial %s: %v", serial, err))
+				continue
+			}
+
+			asset.PyrCode = pyrCode
+			createdAssets = append(createdAssets, *asset)
+
+			go h.AuditLog.Log(
+				"create",
+				map[string]interface{}{
+					"serial":      asset.Serial,
+					"pyr_code":    asset.PyrCode,
+					"location_id": asset.Location.ID,
+					"msg":         "Asset created successfully",
+				},
+				asset,
+			)
 		}
+		return nil
+	})
 
-		pyrCode, err := h.r.GenerateUniquePyrCode(asset.Category.ID, asset.Category.PyrID)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate unique PYR code"})
-			return
-		}
-
-		asset.PyrCode = pyrCode
-		go h.r.UpdatePyrCode(asset.ID, asset.PyrCode)
-		go h.AuditLog.Log(
-			"create",
-			map[string]interface{}{
-				"serial":      asset.Serial,
-				"pyr_code":    asset.PyrCode,
-				"location_id": asset.Location.ID,
-				"msg":         "Asset created successfully",
-			},
-			asset,
-		)
-
-		createdAssets = append(createdAssets, *asset)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error":   "Transaction failed",
+			"details": err.Error(),
+		})
+		return
 	}
 
 	response := gin.H{
