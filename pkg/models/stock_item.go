@@ -6,6 +6,7 @@ type StockItem struct { // Non-Serializied Item
 	Location Location     `json:"location,omitempty"`
 	Quantity int          `json:"quantity" db:"quantity"`
 	Origin   string       `json:"origin"`
+	Status   string       `json:"status,omitempty" db:"status"`
 }
 
 func (a StockItem) CreateLogView() AuditLog {

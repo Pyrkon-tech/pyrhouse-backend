@@ -26,6 +26,7 @@ type TransferRepository interface {
 	InsertTransferUsers(tx *goqu.TxDatabase, transferID int, users []models.TransferUser) error
 	GetTransferUsers(transferID int) ([]models.User, error)
 	UpdateDeliveryLocation(transferID int, latitude float64, longitude float64, timestamp time.Time) error
+	UpdateStockItemsTransferStatus(tx *goqu.TxDatabase, transferID int, status string) error
 }
 
 type transferRepository struct {
@@ -413,4 +414,17 @@ func (r *transferRepository) UpdateDeliveryLocation(transferID int, latitude flo
 		Exec()
 
 	return err
+}
+
+func (r *transferRepository) UpdateStockItemsTransferStatus(tx *goqu.TxDatabase, transferID int, status string) error {
+	query := tx.Update("non_serialized_transfers").
+		Set(goqu.Record{"status": status}).
+		Where(goqu.Ex{"transfer_id": transferID})
+
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update stock items transfer status: %w", err)
+	}
+
+	return nil
 }

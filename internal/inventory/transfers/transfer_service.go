@@ -228,7 +228,6 @@ func (s *TransferService) ValidateStock(transferRequest models.TransferRequest) 
 }
 
 func (s *TransferService) completeStockItemsTransfer(tx *goqu.TxDatabase, transferID int) error {
-
 	HasStockItems, err := s.tr.HasStockItemsInTransfer(tx, transferID)
 	if err != nil {
 		return err
@@ -241,9 +240,10 @@ func (s *TransferService) completeStockItemsTransfer(tx *goqu.TxDatabase, transf
 	if err := s.stockRepo.IncreaseStockAtDestination(tx, transferID); err != nil {
 		return fmt.Errorf("failed to increase stock items at destination: %w", err)
 	}
-	// TODO Prevent remove or figure out a way to keep what was transfered
-	if err := s.tr.RemoveStockItemsTransferRecords(tx, transferID); err != nil {
-		return fmt.Errorf("failed remove stock items transfer entry: %w", err)
+
+	// Zamiast usuwać wpisy, aktualizujemy ich status
+	if err := s.tr.UpdateStockItemsTransferStatus(tx, transferID, "completed"); err != nil {
+		return fmt.Errorf("failed to update stock items transfer status: %w", err)
 	}
 
 	return nil
@@ -394,6 +394,11 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 				}); err != nil {
 					return fmt.Errorf("failed to restore stock item %d to original location: %w", item.Category.ID, err)
 				}
+			}
+
+			// Aktualizuj status pozycji magazynowych w transferze
+			if err := s.tr.UpdateStockItemsTransferStatus(tx, transfer.ID, "cancelled"); err != nil {
+				return fmt.Errorf("failed to update stock items transfer status: %w", err)
 			}
 		}
 
