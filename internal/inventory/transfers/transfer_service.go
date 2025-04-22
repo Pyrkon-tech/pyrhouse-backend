@@ -327,7 +327,7 @@ func (s *TransferService) createInventoryLog(action string, transferID int) {
 	transfer, err := s.GetTransfer(transferID)
 
 	if err != nil {
-		log.Printf("Unable to get transfer id: %d for auditlog error: %s", transferID, err.Error())
+		log.Printf("Unable to get transfer id: %d for auditlog error: %v", transferID, err)
 	}
 
 	s.il.CreateTransferAuditLogEntry(action, transfer)
@@ -384,7 +384,7 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 				return fmt.Errorf("failed to get stock items: %w", err)
 			}
 
-			// Przywróć pozycje magazynowe wsadowo
+			// Przywróć pozycje magazynowe
 			for _, item := range *stockItems {
 				if err := s.stockRepo.RestoreStockToLocation(tx, stocks.RemoveStockItemFromTransferRequest{
 					CategoryID:   item.Category.ID,
@@ -402,7 +402,6 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 			}
 		}
 
-		// Zaktualizuj status transferu
 		if err := s.tr.UpdateTransferStatus(transfer.ID, "cancelled"); err != nil {
 			return fmt.Errorf("failed to update transfer status: %w", err)
 		}
@@ -414,7 +413,6 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 		return err
 	}
 
-	// Dodaj wpis do logu inwentaryzacji poza transakcją
 	go s.createInventoryLog("cancelled", transfer.ID)
 
 	return nil
@@ -430,5 +428,23 @@ func (s *TransferService) GetTransfersByUserAndStatus(userID int, status string)
 }
 
 func (s *TransferService) UpdateDeliveryLocation(transferID int, latitude float64, longitude float64, timestamp time.Time) error {
-	return s.tr.UpdateDeliveryLocation(transferID, latitude, longitude, timestamp)
+	err := s.tr.UpdateDeliveryLocation(transferID, latitude, longitude, timestamp)
+
+	if err != nil {
+		return fmt.Errorf("failed to update delivery location: %w", err)
+	}
+	go s.createDeliveryLocationAssetLog(transferID, latitude, longitude, timestamp)
+
+	return nil
+}
+
+func (s *TransferService) createDeliveryLocationAssetLog(transferID int, latitude float64, longitude float64, timestamp time.Time) {
+	assets, err := s.ar.GetTransferAssets(transferID)
+	if err != nil {
+		log.Printf("failed to get transfer assets: %v", err)
+	}
+
+	for _, asset := range *assets {
+		s.il.CreateDeliveryLocationAssetLog("last_known_location", &asset, latitude, longitude, timestamp)
+	}
 }

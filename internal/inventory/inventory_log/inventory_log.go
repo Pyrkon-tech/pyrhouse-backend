@@ -1,6 +1,7 @@
 package inventorylog
 
 import (
+	"time"
 	"warehouse/pkg/auditlog"
 	"warehouse/pkg/models"
 )
@@ -13,6 +14,23 @@ func NewInventoryLog(a *auditlog.Auditlog) *InventoryLog {
 	return &InventoryLog{a: a}
 }
 
+func (s *InventoryLog) CreateDeliveryLocationAssetLog(action string, asset *models.Asset, latitude float64, longitude float64, timestamp time.Time) {
+	s.a.Log(
+		action,
+		map[string]interface{}{
+			"asset_id": asset.ID,
+			"msg":      "Ostatnia znana lokalizacja",
+			"location": map[string]interface{}{
+				"location_id": asset.Location.ID,
+				"latitude":    latitude,
+				"longitude":   longitude,
+				"timestamp":   timestamp,
+			},
+		},
+		asset,
+	)
+}
+
 func (s *InventoryLog) CreateAssetAuditLogEntry(action string, asset *models.Asset, msg string) {
 	s.a.Log(
 		action,
@@ -23,6 +41,7 @@ func (s *InventoryLog) CreateAssetAuditLogEntry(action string, asset *models.Ass
 		asset,
 	)
 }
+
 func (s *InventoryLog) CreateTransferAuditLogEntry(action string, ts *models.Transfer) {
 	// Define log messages
 	logMessages := map[string]map[string]string{
