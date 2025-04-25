@@ -5,6 +5,7 @@ import (
 	"net/http"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
+	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,14 +18,14 @@ func NewLocationHandler(r *LocationRepository) *LocationHandler {
 	return &LocationHandler{Repository: r}
 }
 
-func (h *LocationHandler) RegisterRoutes(router *gin.Engine) {
-	router.POST("/locations", h.CreateLocation)
-	router.PATCH("/locations/:id", h.UpdateLocation)
+func (h *LocationHandler) RegisterRoutes(router *gin.RouterGroup) {
+	router.POST("/locations", security.Authorize("moderator"), h.CreateLocation)
+	router.PATCH("/locations/:id", security.Authorize("moderator"), h.UpdateLocation)
 	router.GET("/locations", h.GetLocations)
 	router.GET("/locations/:id/assets", h.GetLocationItems)
 	router.GET("/locations/:id/search", h.SearchLocationItems)
 	router.GET("locations/:id", h.GetLocationDetails)
-	router.DELETE("/locations/:id", h.RemoveLocation)
+	router.DELETE("/locations/:id", security.Authorize("moderator"), h.RemoveLocation)
 }
 
 func (h *LocationHandler) GetLocations(c *gin.Context) {
