@@ -129,7 +129,7 @@ func (h *StockHandler) GetStocks(c *gin.Context) {
 	conditions := repository.NewQueryBuilder()
 
 	if query.LocationID != nil {
-		conditions.AddCondition("location_ids", []int{*query.LocationID})
+		conditions.AddCondition("location_id", *query.LocationID)
 	}
 	if query.CategoryID != nil {
 		conditions.AddCondition("category_id", *query.CategoryID)

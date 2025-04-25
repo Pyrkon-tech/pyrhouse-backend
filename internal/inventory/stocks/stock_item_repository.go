@@ -69,7 +69,7 @@ func (r *StockRepository) GetStockItems() (*[]models.StockItem, error) {
 func (r *StockRepository) GetStockItemsBy(conditions repository.QueryBuilder) (*[]models.StockItem, error) {
 
 	aliases := map[string]string{
-		"location_ids":   "s.location_id",
+		"location_id":    "s.location_id",
 		"category_id":    "s.item_category_id",
 		"category_label": "c.label",
 	}
