@@ -2,7 +2,6 @@ package repository
 
 import (
 	"fmt"
-	"log"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
@@ -53,11 +52,45 @@ func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*mod
 }
 
 func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
-	result, err := r.GoquDBWrapper.Delete("item_category").Where(goqu.Ex{"id": categoryID}).Executor().Exec()
+	// Sprawdź czy są przypisane elementy w non_serialized_items
+	var nonSerializedCount int
+	query := r.GoquDBWrapper.Select(goqu.COUNT("*")).
+		From("non_serialized_items").
+		Where(goqu.Ex{"item_category_id": categoryID})
+
+	_, err := query.Executor().ScanVal(&nonSerializedCount)
+	if err != nil {
+		return fmt.Errorf("failed to check if category has non-serialized items: %w", err)
+	}
+
+	// Sprawdź czy są przypisane elementy w items
+	var itemsCount int
+	query = r.GoquDBWrapper.Select(goqu.COUNT("*")).
+		From("items").
+		Where(goqu.Ex{"item_category_id": categoryID})
+
+	_, err = query.Executor().ScanVal(&itemsCount)
+	if err != nil {
+		return fmt.Errorf("failed to check if category has items: %w", err)
+	}
+
+	if nonSerializedCount > 0 || itemsCount > 0 {
+		return fmt.Errorf("cannot delete category with id %s - it has %d non-serialized items and %d assets assigned",
+			categoryID, nonSerializedCount, itemsCount)
+	}
+
+	result, err := r.GoquDBWrapper.Delete("item_category").
+		Where(goqu.Ex{"id": categoryID}).
+		Executor().
+		Exec()
 
 	if err != nil {
-		log.Fatal("failed to delete asset category: ", err)
-		return err
+		if pqErr, ok := err.(*pq.Error); ok {
+			if pqErr.Code == "23503" { // foreign key violation
+				return fmt.Errorf("cannot delete category - it has items assigned")
+			}
+		}
+		return fmt.Errorf("failed to delete category: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
@@ -66,7 +99,7 @@ func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("no asset category found with id: %s", categoryID)
+		return fmt.Errorf("no category found with id: %s", categoryID)
 	}
 
 	return nil
