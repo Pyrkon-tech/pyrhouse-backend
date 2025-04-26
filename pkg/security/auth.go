@@ -53,11 +53,12 @@ func AuthenticateUser(username, password string, repo *repository.Repository) (*
 	return &user, nil
 }
 
-func GenerateJWT(userID string, role string) (string, error) {
+func GenerateJWT(userID string, role string, username string) (string, error) {
 	claims := jwt.MapClaims{
-		"userID": userID,
-		"role":   role,
-		"exp":    time.Now().Add(time.Hour * 120).Unix(), // 4 DAYS
+		"userID":   userID,
+		"role":     role,
+		"username": username,
+		"exp":      time.Now().Add(time.Hour * 120).Unix(), // 4 DAYS
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
