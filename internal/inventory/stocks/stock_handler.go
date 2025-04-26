@@ -2,10 +2,12 @@ package stocks
 
 import (
 	"net/http"
+	"strconv"
 	"warehouse/internal/repository"
 	"warehouse/pkg/auditlog"
 	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/metadata"
+	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,10 +27,11 @@ func NewStockHandler(r *repository.Repository, sr *StockRepository, a *auditlog.
 	}
 }
 
-func (h *StockHandler) RegisterRoutes(router *gin.Engine) {
-	router.POST("/stocks", h.CreateStock)
-	router.PATCH("/stocks/:id", h.UpdateStock)
-	router.GET("/stocks", h.GetStocks)
+func (h *StockHandler) RegisterRoutes(router *gin.RouterGroup) {
+	router.POST("/stocks", security.Authorize("user"), h.CreateStock)
+	router.PATCH("/stocks/:id", security.Authorize("user"), h.UpdateStock)
+	router.GET("/stocks", security.Authorize("user"), h.GetStocks)
+	router.DELETE("/stocks/:id", security.Authorize("admin"), h.DeleteStock)
 }
 
 func (h *StockHandler) CreateStock(c *gin.Context) {
@@ -145,4 +148,21 @@ func (h *StockHandler) GetStocks(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, stockItems)
+}
+
+func (h *StockHandler) DeleteStock(c *gin.Context) {
+	id := c.Param("id")
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid stock ID"})
+		return
+	}
+
+	err = h.StockRepository.DeleteStock(idInt)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete stock", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Stock deleted successfully"})
 }

@@ -12,15 +12,15 @@ import (
 
 func RegisterPublicRoutes(router *gin.Engine, container *container.Container) {
 	container.LoginHandler.RegisterRoutes(router)
-	container.AssetHandler.RegisterRoutes(router)
-	container.StockHandler.RegisterRoutes(router)
-	container.ItemHandler.RegisterRoutes(router)
 }
 
 func RegisterProtectedRoutes(router *gin.Engine, container *container.Container) {
 	protectedRoutes := router.Group("")
 	protectedRoutes.Use(security.JWTMiddleware())
 
+	container.AssetHandler.RegisterRoutes(protectedRoutes)
+	container.StockHandler.RegisterRoutes(protectedRoutes)
+	container.ItemHandler.RegisterRoutes(protectedRoutes)
 	container.UserHandler.RegisterRoutes(protectedRoutes)
 	container.TransferHandler.RegisterRoutes(protectedRoutes)
 	container.LocationHandler.RegisterRoutes(protectedRoutes)

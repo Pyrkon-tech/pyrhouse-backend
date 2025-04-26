@@ -25,7 +25,7 @@ func NewItemHandler(r *repository.Repository, sr *stocks.StockRepository, ar *as
 	}
 }
 
-func (h *ItemHandler) RegisterRoutes(router *gin.Engine) {
+func (h *ItemHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/items", h.RetrieveItemList)
 	router.GET("/items/:category/:id", h.RetrieveItem)
 }

@@ -317,6 +317,17 @@ func (r *StockRepository) RestoreStockToLocation(tx *goqu.TxDatabase, transferRe
 	return nil
 }
 
+func (r *StockRepository) DeleteStock(id int) error {
+	_, err := r.repository.GoquDBWrapper.Delete("non_serialized_items").
+		Where(goqu.Ex{"id": id}).
+		Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to delete stock: %w", err)
+	}
+
+	return nil
+}
+
 func (r *StockRepository) getStockItemQuery() *goqu.SelectDataset {
 	return r.repository.GoquDBWrapper.
 		Select(

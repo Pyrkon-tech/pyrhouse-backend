@@ -30,14 +30,14 @@ func NewAssetHandler(r *repository.Repository, ar *AssetsRepository, a *auditlog
 	}
 }
 
-func (h *ItemHandler) RegisterRoutes(router *gin.Engine) {
+func (h *ItemHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/assets/pyrcode/:serial", h.GetItemByPyrCode)
 
 	// move to main when appropriate
 	protectedRoutes := router.Group("")
 	protectedRoutes.Use(security.JWTMiddleware())
 	{
-		protectedRoutes.DELETE("/assets/:id", security.Authorize("admin"), h.RemoveAsset)
+		protectedRoutes.DELETE("/assets/:id", security.Authorize("moderator"), h.RemoveAsset)
 		protectedRoutes.POST("/assets/categories", security.Authorize("moderator"), h.CreateItemCategory)
 		protectedRoutes.POST("/assets", security.Authorize("user"), h.CreateAsset)
 		protectedRoutes.POST("/assets/bulk", security.Authorize("user"), h.CreateBulkAssets)
