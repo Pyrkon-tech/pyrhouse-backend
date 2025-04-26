@@ -12,6 +12,7 @@ import (
 type UserRepository interface {
 	PersistUser(req models.CreateUserRequest, hashedPassword []byte) error
 	GetUser(id int) (*models.User, error)
+	IsUsernameUnique(username string) (bool, error)
 	GetUsers() ([]models.User, error)
 	AddUserPoints(id int, points int) error
 	UpdateUser(id int, changes *models.UserChanges) error
@@ -68,6 +69,18 @@ func (r *userRepositoryImpl) GetUser(id int) (*models.User, error) {
 	return &user, nil
 }
 
+func (r *userRepositoryImpl) IsUsernameUnique(username string) (bool, error) {
+	var count int
+
+	query := `SELECT COUNT(*) FROM users WHERE username = $1`
+	err := r.repository.DB.QueryRow(query, username).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return count == 0, nil
+}
+
 func (r *userRepositoryImpl) AddUserPoints(id int, points int) error {
 	query := r.repository.GoquDBWrapper.Update("users").
 		Set(goqu.Record{"points": goqu.L("points + ?", points)}).
@@ -92,6 +105,14 @@ func (r *userRepositoryImpl) UpdateUser(id int, changes *models.UserChanges) err
 	}
 	if changes.Points != nil {
 		updateFields["points"] = *changes.Points
+	}
+
+	if changes.Fullname != nil {
+		updateFields["fullname"] = *changes.Fullname
+	}
+
+	if changes.Username != nil {
+		updateFields["username"] = *changes.Username
 	}
 
 	query := r.repository.GoquDBWrapper.Update("users").
