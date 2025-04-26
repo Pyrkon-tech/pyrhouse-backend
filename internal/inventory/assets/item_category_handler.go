@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	custom_error "warehouse/pkg/errors"
 	"warehouse/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -56,6 +57,10 @@ func (h *ItemHandler) RemoveItemCategory(c *gin.Context) {
 
 	err := h.repository.DeleteItemCategoryByID(CategoryID)
 	if err != nil {
+		if _, ok := err.(*custom_error.ForeignKeyViolationError); ok {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Nie mona usunąć kategorii #" + CategoryID + ": istnieje powiązany sprzęt"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete asset category"})
 		return
 	}

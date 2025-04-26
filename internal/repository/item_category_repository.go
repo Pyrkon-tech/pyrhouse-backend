@@ -75,8 +75,10 @@ func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
 	}
 
 	if nonSerializedCount > 0 || itemsCount > 0 {
-		return fmt.Errorf("cannot delete category with id %s - it has %d non-serialized items and %d assets assigned",
-			categoryID, nonSerializedCount, itemsCount)
+		return custom_error.WrapDBError(
+			"Nie można usunąć kategorii, ponieważ ma przypisane elementy",
+			"23503",
+		)
 	}
 
 	result, err := r.GoquDBWrapper.Delete("item_category").
@@ -87,7 +89,10 @@ func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23503" { // foreign key violation
-				return fmt.Errorf("cannot delete category - it has items assigned")
+				return custom_error.WrapDBError(
+					"Nie można usunąć kategorii, ponieważ ma przypisane elementy",
+					string(pqErr.Code),
+				)
 			}
 		}
 		return fmt.Errorf("failed to delete category: %w", err)
