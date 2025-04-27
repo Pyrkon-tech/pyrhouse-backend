@@ -29,7 +29,7 @@ func NewStockHandler(r *repository.Repository, sr *StockRepository, a *auditlog.
 
 func (h *StockHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/stocks", security.Authorize("user"), h.CreateStock)
-	router.PATCH("/stocks/:id", security.Authorize("user"), h.UpdateStock)
+	router.PATCH("/stocks/:id", security.Authorize("moderator"), h.UpdateStock)
 	router.GET("/stocks", security.Authorize("user"), h.GetStocks)
 	router.DELETE("/stocks/:id", security.Authorize("admin"), h.DeleteStock)
 }
