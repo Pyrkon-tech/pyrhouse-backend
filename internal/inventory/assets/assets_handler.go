@@ -71,6 +71,11 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 		return
 	}
 
+	if req.Serial == nil || *req.Serial == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Numer seryjny nie może być pusty"})
+		return
+	}
+
 	origin, err := metadata.NewOrigin(req.Origin)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
@@ -169,7 +174,7 @@ func (h *ItemHandler) RemoveAsset(c *gin.Context) {
 		return
 	}
 
-	asset.Serial, err = h.r.RemoveAsset(asset.ID)
+	_, err = h.r.RemoveAsset(asset.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete asset category", "details": err.Error()})
 		return

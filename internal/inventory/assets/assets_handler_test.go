@@ -318,7 +318,7 @@ func TestCreateBulkAssets_Success(t *testing.T) {
 	// Mock successful asset creation for both serials
 	asset1 := &models.Asset{
 		ID:     1,
-		Serial: "SERIAL001",
+		Serial: &serial1,
 		Category: models.ItemCategory{
 			ID:    4,
 			PyrID: "L",
@@ -330,7 +330,7 @@ func TestCreateBulkAssets_Success(t *testing.T) {
 
 	asset2 := &models.Asset{
 		ID:     2,
-		Serial: "SERIAL002",
+		Serial: &serial2,
 		Category: models.ItemCategory{
 			ID:    4,
 			PyrID: "L",
@@ -410,7 +410,7 @@ func TestCreateBulkAssets_DefaultLocation(t *testing.T) {
 	// Mock successful asset creation
 	asset := &models.Asset{
 		ID:     1,
-		Serial: "SERIAL001",
+		Serial: &serial1,
 		Category: models.ItemCategory{
 			ID:    4,
 			PyrID: "L",
@@ -477,7 +477,7 @@ func TestCreateBulkAssets_DefaultStatus(t *testing.T) {
 	// Mock successful asset creation
 	asset := &models.Asset{
 		ID:     1,
-		Serial: "SERIAL001",
+		Serial: &serial1,
 		Category: models.ItemCategory{
 			ID:    4,
 			PyrID: "L",
@@ -547,7 +547,7 @@ func TestCreateBulkAssets_DuplicateSerial(t *testing.T) {
 	// Mock successful asset creation for first serial
 	asset1 := &models.Asset{
 		ID:     1,
-		Serial: "SERIAL001",
+		Serial: &serial1,
 		Category: models.ItemCategory{
 			ID:    4,
 			PyrID: "L",
@@ -569,7 +569,7 @@ func TestCreateBulkAssets_DuplicateSerial(t *testing.T) {
 	// Mock successful asset creation for third serial
 	asset3 := &models.Asset{
 		ID:     3,
-		Serial: "SERIAL003",
+		Serial: &serial3,
 		Category: models.ItemCategory{
 			ID:    4,
 			PyrID: "L",
@@ -784,12 +784,15 @@ func TestCreateAssetWithoutSerial_Success(t *testing.T) {
 
 	// Mock expectations
 	mockRepo.On("GetCategoryType", 4).Return("asset", nil)
+	serial1 := "SERIAL001"
+	serial2 := "SERIAL002"
+	serial3 := "SERIAL003"
 
 	// Mock successful asset creation for all three assets
 	assets := []*models.Asset{
 		{
 			ID:     1,
-			Serial: "",
+			Serial: &serial1,
 			Category: models.ItemCategory{
 				ID:    4,
 				PyrID: "L",
@@ -800,7 +803,7 @@ func TestCreateAssetWithoutSerial_Success(t *testing.T) {
 		},
 		{
 			ID:     2,
-			Serial: "",
+			Serial: &serial2,
 			Category: models.ItemCategory{
 				ID:    4,
 				PyrID: "L",
@@ -811,7 +814,7 @@ func TestCreateAssetWithoutSerial_Success(t *testing.T) {
 		},
 		{
 			ID:     3,
-			Serial: "",
+			Serial: &serial3,
 			Category: models.ItemCategory{
 				ID:    4,
 				PyrID: "L",

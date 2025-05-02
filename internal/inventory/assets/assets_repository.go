@@ -168,21 +168,21 @@ func (r *AssetsRepository) CanRemoveAsset(assetID int) (bool, error) {
 	return result, nil
 }
 
-func (r *AssetsRepository) RemoveAsset(assetID int) (string, error) {
-	var assetSerial string
+func (r *AssetsRepository) RemoveAsset(assetID int) (int, error) {
+	var id int
 	query := r.repository.GoquDBWrapper.
 		Delete("items").
 		Where(goqu.Ex{"id": assetID}).
-		Returning("item_serial")
+		Returning("id")
 
-	_, err := query.Executor().ScanVal(&assetSerial)
+	_, err := query.Executor().ScanVal(&id)
 
 	if err != nil {
 		log.Fatal("failed to delete asset category: ", err)
-		return "", err
+		return 0, err
 	}
 
-	return assetSerial, nil
+	return id, nil
 }
 
 func (r *AssetsRepository) UpdateAssetLocation(tx *goqu.TxDatabase, itemID int, locationID int) error {

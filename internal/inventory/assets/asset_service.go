@@ -27,7 +27,6 @@ func NewAssetService(assetsRepo *AssetsRepository, repo *repository.Repository, 
 
 func (s *AssetService) CreateAssetsWithoutSerial(req models.EmergencyAssetRequest) ([]models.Asset, []string, error) {
 	var createdAssets []models.Asset
-	var errors []string
 
 	err := repository.WithTransaction(s.repo.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		for i := 0; i < req.Quantity; i++ {
@@ -41,27 +40,22 @@ func (s *AssetService) CreateAssetsWithoutSerial(req models.EmergencyAssetReques
 
 			asset, err := s.assetsRepo.PersistItem(itemReq)
 			if err != nil {
-				errors = append(errors, fmt.Sprintf("Nie udało się utworzyć zasobu: %v", err))
-				continue
+				return fmt.Errorf("nie udało się utworzyć zasobu: %v", err)
 			}
 
 			pyrCode, err := s.assetsRepo.GenerateUniquePyrCode(asset.Category.ID, asset.Category.PyrID)
 			if err != nil {
-				log.Printf("Nie udało się wygenerować kodu PYR: %v", err)
-				errors = append(errors, fmt.Sprintf("Nie udało się wygenerować kodu PYR: %v", err))
 				if _, removeErr := s.assetsRepo.RemoveAsset(asset.ID); removeErr != nil {
-					log.Printf("Nie udało się usunąć zasobu po błędzie generowania kodu PYR: %v", removeErr)
+					log.Printf("nie udało się usunąć zasobu po błędzie generowania kodu PYR: %v", removeErr)
 				}
-				continue
+				return fmt.Errorf("nie udało się wygenerować kodu PYR: %v", err)
 			}
 
 			if err := s.assetsRepo.UpdatePyrCode(asset.ID, pyrCode); err != nil {
-				log.Printf("Nie udało się zaktualizować kodu PYR: %v", err)
-				errors = append(errors, fmt.Sprintf("Nie udało się zaktualizować kodu PYR: %v", err))
 				if _, removeErr := s.assetsRepo.RemoveAsset(asset.ID); removeErr != nil {
-					log.Printf("Nie udało się usunąć zasobu po błędzie aktualizacji kodu PYR: %v", removeErr)
+					log.Printf("nie udało się usunąć zasobu po błędzie aktualizacji kodu PYR: %v", removeErr)
 				}
-				continue
+				return fmt.Errorf("nie udało się zaktualizować kodu PYR: %v", err)
 			}
 
 			asset.PyrCode = pyrCode
@@ -80,7 +74,11 @@ func (s *AssetService) CreateAssetsWithoutSerial(req models.EmergencyAssetReques
 		return nil
 	})
 
-	return createdAssets, errors, err
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return createdAssets, nil, nil
 }
 
 func (s *AssetService) CreateBulkAssets(req models.BulkItemRequest) ([]models.Asset, []string, error) {
