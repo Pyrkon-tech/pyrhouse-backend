@@ -5,6 +5,7 @@ import (
 	auditLogRepo "warehouse/internal/auditlog"
 	"warehouse/internal/integrations/googlesheets"
 	"warehouse/internal/inventory/assets"
+	"warehouse/internal/inventory/category"
 	"warehouse/internal/inventory/items"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/inventory/transfers"
@@ -26,6 +27,7 @@ type Container struct {
 	UserHandler         *users.UsersHandler
 	ItemHandler         *items.ItemHandler
 	GoogleSheetsHandler *googlesheets.GoogleSheetsHandler
+	ItemCategoryHandler *category.ItemCategoryHandler
 }
 
 func NewAppContainer(db *sql.DB) *Container {
@@ -39,6 +41,7 @@ func NewAppContainer(db *sql.DB) *Container {
 	assetHandler := assets.NewAssetHandler(repo, assetRepo, auditLog)
 	stockRepo := stocks.NewRepository(repo)
 	stockHandler := stocks.NewStockHandler(repo, stockRepo, auditLog)
+	itemCategoryHandler := category.NewItemCategoryHandler(repo, assetRepo, stockRepo, auditLog)
 	locationRepository := locations.NewLocationRepository(repo)
 	locationHandler := locations.NewLocationHandler(locationRepository)
 	transferRepository := transfers.NewRepository(repo)
@@ -62,5 +65,6 @@ func NewAppContainer(db *sql.DB) *Container {
 		UserHandler:         userHandler,
 		ItemHandler:         itemsHandler,
 		GoogleSheetsHandler: googleSheetsHandler,
+		ItemCategoryHandler: itemCategoryHandler,
 	}
 }

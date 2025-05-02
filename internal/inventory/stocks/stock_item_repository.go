@@ -129,6 +129,18 @@ func (r *StockRepository) GetStockItem(id int) (*models.StockItem, error) {
 	return &stock, nil
 }
 
+func (r *StockRepository) HasRelatedItems(categoryID string) bool {
+	query := `SELECT COUNT(*) FROM non_serialized_items WHERE item_category_id = $1`
+	var count int
+	err := r.repository.DB.QueryRow(query, categoryID).Scan(&count)
+	if err != nil {
+		log.Fatal("failed to check related assets: ", err)
+
+		return false
+	}
+	return count > 0
+}
+
 func (r *StockRepository) UpdateStock(stockRequest *PatchStockItemRequest) (*models.StockItem, error) {
 	updates, err := buildUpdateFields(stockRequest)
 	if err != nil {

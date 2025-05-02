@@ -40,3 +40,10 @@ func removeDiacritics(input string) string {
 		return r
 	}, t)
 }
+
+func (i *ItemCategory) CreateLogView() AuditLog {
+	return AuditLog{
+		ResourceID:   i.ID,
+		ResourceType: "category",
+	}
+}

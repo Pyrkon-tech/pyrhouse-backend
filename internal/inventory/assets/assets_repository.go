@@ -112,14 +112,19 @@ func (r *AssetsRepository) HasItemsInLocation(assetIDs []int, fromLocationId int
 func (r *AssetsRepository) PersistItem(itemRequest models.ItemRequest) (*models.Asset, error) {
 	var assetID int
 
+	record := goqu.Record{
+		"location_id":      itemRequest.LocationId,
+		"item_category_id": itemRequest.CategoryId,
+		"status":           itemRequest.Status,
+		"origin":           itemRequest.Origin,
+	}
+
+	if itemRequest.Serial != nil {
+		record["item_serial"] = *itemRequest.Serial
+	}
+
 	query := r.repository.GoquDBWrapper.Insert("items").
-		Rows(goqu.Record{
-			"item_serial":      itemRequest.Serial,
-			"location_id":      itemRequest.LocationId,
-			"item_category_id": itemRequest.CategoryId,
-			"status":           itemRequest.Status,
-			"origin":           itemRequest.Origin,
-		}).
+		Rows(record).
 		Returning("id")
 
 	if _, err := query.Executor().ScanVal(&assetID); err != nil {

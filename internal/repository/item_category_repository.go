@@ -124,3 +124,29 @@ func (r *Repository) GetCategoryType(ID int) (string, error) {
 
 	return categoryType, err
 }
+
+func (r *Repository) UpdateItemCategory(categoryID int, updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+
+	query := r.GoquDBWrapper.Update("item_category").
+		Set(updates).
+		Where(goqu.Ex{"id": categoryID})
+
+	result, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update item_category record: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("could not retrieve rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no category found with id: %d", categoryID)
+	}
+
+	return nil
+}

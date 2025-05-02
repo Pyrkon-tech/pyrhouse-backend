@@ -1,7 +1,6 @@
 package assets
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -12,38 +11,32 @@ import (
 	"warehouse/pkg/models"
 	"warehouse/pkg/security"
 
-	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"
 )
 
 type ItemHandler struct {
-	r          *AssetsRepository
-	repository *repository.Repository
-	AuditLog   *auditlog.Auditlog
+	r            *AssetsRepository
+	repository   *repository.Repository
+	AuditLog     *auditlog.Auditlog
+	assetService *AssetService
 }
 
 func NewAssetHandler(r *repository.Repository, ar *AssetsRepository, a *auditlog.Auditlog) *ItemHandler {
 	return &ItemHandler{
-		r:          ar,
-		repository: r,
-		AuditLog:   a,
+		r:            ar,
+		repository:   r,
+		AuditLog:     a,
+		assetService: NewAssetService(ar, r, a),
 	}
 }
 
 func (h *ItemHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/assets/pyrcode/:serial", h.GetItemByPyrCode)
 
-	// move to main when appropriate
-	protectedRoutes := router.Group("")
-	protectedRoutes.Use(security.JWTMiddleware())
-	{
-		protectedRoutes.DELETE("/assets/:id", security.Authorize("moderator"), h.RemoveAsset)
-		protectedRoutes.POST("/assets/categories", security.Authorize("moderator"), h.CreateItemCategory)
-		protectedRoutes.POST("/assets", security.Authorize("user"), h.CreateAsset)
-		protectedRoutes.POST("/assets/bulk", security.Authorize("user"), h.CreateBulkAssets)
-		protectedRoutes.GET("/assets/categories", security.Authorize("user"), h.GetItemCategories)
-		protectedRoutes.DELETE("/assets/categories/:id", security.Authorize("moderator"), h.RemoveItemCategory)
-	}
+	router.POST("/assets", security.Authorize("user"), h.CreateAsset)
+	router.POST("/assets/bulk", security.Authorize("user"), h.CreateBulkAssets)
+	router.POST("/assets/without-serial", security.Authorize("user"), h.CreateAssetWithoutSerial)
+	router.DELETE("/assets/:id", security.Authorize("moderator"), h.RemoveAsset)
 }
 
 func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {
@@ -197,107 +190,34 @@ func (h *ItemHandler) RemoveAsset(c *gin.Context) {
 func (h *ItemHandler) CreateBulkAssets(c *gin.Context) {
 	var req models.BulkItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format żądania", "details": err.Error()})
 		return
 	}
 
-	// Set default location ID to 1 if not specified
-	if req.LocationId == 0 {
-		req.LocationId = 1
-	}
-
-	// Set default status to "available" if not specified
-	if req.Status == "" {
-		req.Status = "available"
-	}
-
-	origin, err := metadata.NewOrigin(req.Origin)
+	locationId, status, origin, err := h.getRequestDefaults(req.LocationId, req.Status, req.Origin)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid asset origin",
-			"details": err.Error(),
-		})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nie udało się pobrać wartości domyślnych", "details": err.Error()})
 		return
 	}
-	req.Origin = origin.String()
+
+	req.LocationId = locationId
+	req.Status = status
+	req.Origin = origin
 
 	categoryType, err := h.repository.GetCategoryType(req.CategoryId)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Unable to check category type", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nie udało się sprawdzić typu kategorii", "details": err.Error()})
 		return
 	}
 
 	if categoryType != "asset" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid category type", "details": "Category must be an asset"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy typ kategorii", "details": "Kategoria musi być typu Sprzęt(asset)"})
 		return
 	}
 
-	var createdAssets []models.Asset
-	var errors []string
-
-	err = repository.WithTransaction(h.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		for _, serial := range req.Serials {
-			itemReq := models.ItemRequest{
-				Serial:     serial,
-				LocationId: req.LocationId,
-				Status:     req.Status,
-				CategoryId: req.CategoryId,
-				Origin:     req.Origin,
-			}
-
-			asset, err := h.r.PersistItem(itemReq)
-			if err != nil {
-				switch err.(type) {
-				case *custom_error.UniqueViolationError:
-					errors = append(errors, fmt.Sprintf("Serial number %s already registered", serial))
-					continue
-				default:
-					errors = append(errors, fmt.Sprintf("Failed to create asset with serial %s: %v", serial, err))
-					continue
-				}
-			}
-
-			pyrCode, err := h.r.GenerateUniquePyrCode(asset.Category.ID, asset.Category.PyrID)
-			if err != nil {
-				log.Printf("Failed to generate PYR code for asset %d: %v", asset.ID, err)
-				if _, removeErr := h.r.RemoveAsset(asset.ID); removeErr != nil {
-					log.Printf("Failed to remove asset after PYR code generation failure: %v", removeErr)
-				}
-				errors = append(errors, fmt.Sprintf("Failed to generate PYR code for asset with serial %s: %v", serial, err))
-				continue
-			}
-
-			if err := h.r.UpdatePyrCode(asset.ID, pyrCode); err != nil {
-				log.Printf("Failed to update PYR code for asset %d: %v", asset.ID, err)
-				if _, removeErr := h.r.RemoveAsset(asset.ID); removeErr != nil {
-					log.Printf("Failed to remove asset after PYR code update failure: %v", removeErr)
-				}
-				errors = append(errors, fmt.Sprintf("Failed to update PYR code for asset with serial %s: %v", serial, err))
-				continue
-			}
-
-			asset.PyrCode = pyrCode
-			createdAssets = append(createdAssets, *asset)
-
-			go h.AuditLog.Log(
-				"create",
-				map[string]interface{}{
-					"serial":      asset.Serial,
-					"pyr_code":    asset.PyrCode,
-					"location_id": asset.Location.ID,
-					"msg":         "Asset created successfully",
-				},
-				asset,
-			)
-		}
-		return nil
-	})
-
+	createdAssets, errors, err := h.assetService.CreateBulkAssets(req)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error":   "Transaction failed",
-			"details": err.Error(),
-		})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się utworzyć zasobów zbiorczo", "details": err.Error()})
 		return
 	}
 
@@ -309,4 +229,67 @@ func (h *ItemHandler) CreateBulkAssets(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, response)
+}
+
+func (h *ItemHandler) CreateAssetWithoutSerial(c *gin.Context) {
+	var req models.EmergencyAssetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format żądania", "details": err.Error()})
+		return
+	}
+
+	locationId, status, origin, err := h.getRequestDefaults(req.LocationId, req.Status, req.Origin)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nie udało się pobrać wartości domyślnych", "details": err.Error()})
+		return
+	}
+
+	req.LocationId = locationId
+	req.Status = status
+	req.Origin = origin
+
+	categoryType, err := h.repository.GetCategoryType(req.CategoryId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nie udało się sprawdzić typu kategorii", "details": err.Error()})
+		return
+	}
+
+	if categoryType != "asset" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy typ kategorii", "details": "Kategoria musi być typu Sprzęt(asset)"})
+		return
+	}
+
+	createdAssets, errors, err := h.assetService.CreateAssetsWithoutSerial(req)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się utworzyć zasobów awaryjnych", "details": err.Error()})
+		return
+	}
+
+	response := gin.H{
+		"created": createdAssets,
+	}
+	if len(errors) > 0 {
+		response["errors"] = errors
+	}
+
+	c.JSON(http.StatusCreated, response)
+}
+
+func (h *ItemHandler) getRequestDefaults(locationId int, status string, origin string) (int, string, string, error) {
+
+	if locationId == 0 {
+		locationId = 1
+	}
+
+	if status == "" {
+		status = "available"
+	}
+
+	o, err := metadata.NewOrigin(origin)
+	if err != nil {
+		return 0, "", "", err
+	}
+	origin = o.String()
+
+	return locationId, status, origin, nil
 }

@@ -245,10 +245,10 @@ func (h *TestItemHandler) CreateBulkAssets(c *gin.Context) {
 		if err != nil {
 			switch err.(type) {
 			case *custom_error.UniqueViolationError:
-				errors = append(errors, fmt.Sprintf("Serial number %s already registered", serial))
+				errors = append(errors, fmt.Sprintf("Serial number %s already registered", *serial))
 				continue
 			default:
-				errors = append(errors, fmt.Sprintf("Failed to create asset with serial %s: %v", serial, err))
+				errors = append(errors, fmt.Sprintf("Failed to create asset with serial %s: %v", *serial, err))
 				continue
 			}
 		}
@@ -257,7 +257,7 @@ func (h *TestItemHandler) CreateBulkAssets(c *gin.Context) {
 		asset.PyrCode = pyrCode.GeneratePyrCode()
 		err = h.r.UpdatePyrCode(asset.ID, asset.PyrCode)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("Failed to update PYR code for asset with serial %s: %v", serial, err))
+			errors = append(errors, fmt.Sprintf("Failed to update PYR code for asset with serial %s: %v", *serial, err))
 			continue
 		}
 
@@ -268,7 +268,7 @@ func (h *TestItemHandler) CreateBulkAssets(c *gin.Context) {
 			"msg":         "Asset created successfully",
 		}, asset)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("Failed to log audit for asset with serial %s: %v", serial, err))
+			errors = append(errors, fmt.Sprintf("Failed to log audit for asset with serial %s: %v", *serial, err))
 			continue
 		}
 
@@ -302,8 +302,10 @@ func TestCreateBulkAssets_Success(t *testing.T) {
 	router.POST("/assets/bulk", handler.CreateBulkAssets)
 
 	// Test data
+	serial1 := "SERIAL001"
+	serial2 := "SERIAL002"
 	reqBody := models.BulkItemRequest{
-		Serials:    []string{"SERIAL001", "SERIAL002"},
+		Serials:    []*string{&serial1, &serial2},
 		LocationId: 1,
 		Status:     "available",
 		CategoryId: 4,
@@ -339,11 +341,11 @@ func TestCreateBulkAssets_Success(t *testing.T) {
 	}
 
 	mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
-		return req.Serial == "SERIAL001"
+		return *req.Serial == "SERIAL001"
 	})).Return(asset1, nil)
 
 	mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
-		return req.Serial == "SERIAL002"
+		return *req.Serial == "SERIAL002"
 	})).Return(asset2, nil)
 
 	mockAssetsRepo.On("UpdatePyrCode", 1, "PYR-L1").Return(nil)
@@ -394,8 +396,9 @@ func TestCreateBulkAssets_DefaultLocation(t *testing.T) {
 	router.POST("/assets/bulk", handler.CreateBulkAssets)
 
 	// Test data with LocationId not set (zero value)
+	serial1 := "SERIAL001"
 	reqBody := models.BulkItemRequest{
-		Serials:    []string{"SERIAL001"},
+		Serials:    []*string{&serial1},
 		Status:     "available",
 		CategoryId: 4,
 		Origin:     "purchase",
@@ -419,7 +422,7 @@ func TestCreateBulkAssets_DefaultLocation(t *testing.T) {
 
 	// Verify that LocationId is set to 1 in the request
 	mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
-		return req.Serial == "SERIAL001" && req.LocationId == 1 && req.Status == "available"
+		return *req.Serial == "SERIAL001" && req.LocationId == 1 && req.Status == "available"
 	})).Return(asset, nil)
 
 	mockAssetsRepo.On("UpdatePyrCode", 1, "PYR-L1").Return(nil)
@@ -460,8 +463,9 @@ func TestCreateBulkAssets_DefaultStatus(t *testing.T) {
 	router.POST("/assets/bulk", handler.CreateBulkAssets)
 
 	// Test data with Status not set (empty string)
+	serial1 := "SERIAL001"
 	reqBody := models.BulkItemRequest{
-		Serials:    []string{"SERIAL001"},
+		Serials:    []*string{&serial1},
 		LocationId: 1,
 		CategoryId: 4,
 		Origin:     "purchase",
@@ -485,7 +489,7 @@ func TestCreateBulkAssets_DefaultStatus(t *testing.T) {
 
 	// Verify that Status is set to "available" in the request
 	mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
-		return req.Serial == "SERIAL001" && req.Status == "available" && req.LocationId == 1 && req.CategoryId == 4 && req.Origin == "purchase"
+		return *req.Serial == "SERIAL001" && req.Status == "available" && req.LocationId == 1 && req.CategoryId == 4 && req.Origin == "purchase"
 	})).Return(asset, nil)
 
 	mockAssetsRepo.On("UpdatePyrCode", 1, "PYR-L1").Return(nil)
@@ -526,8 +530,11 @@ func TestCreateBulkAssets_DuplicateSerial(t *testing.T) {
 	router.POST("/assets/bulk", handler.CreateBulkAssets)
 
 	// Test data
+	serial1 := "SERIAL001"
+	serial2 := "SERIAL002"
+	serial3 := "SERIAL003"
 	reqBody := models.BulkItemRequest{
-		Serials:    []string{"SERIAL001", "SERIAL002", "SERIAL003"},
+		Serials:    []*string{&serial1, &serial2, &serial3},
 		LocationId: 1,
 		Status:     "available",
 		CategoryId: 4,
@@ -552,11 +559,11 @@ func TestCreateBulkAssets_DuplicateSerial(t *testing.T) {
 
 	// Mock duplicate serial error for second serial
 	mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
-		return req.Serial == "SERIAL001"
+		return *req.Serial == "SERIAL001"
 	})).Return(asset1, nil)
 
 	mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
-		return req.Serial == "SERIAL002"
+		return *req.Serial == "SERIAL002"
 	})).Return(nil, &custom_error.UniqueViolationError{})
 
 	// Mock successful asset creation for third serial
@@ -573,7 +580,7 @@ func TestCreateBulkAssets_DuplicateSerial(t *testing.T) {
 	}
 
 	mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
-		return req.Serial == "SERIAL003"
+		return *req.Serial == "SERIAL003"
 	})).Return(asset3, nil)
 
 	mockAssetsRepo.On("UpdatePyrCode", 1, "PYR-L1").Return(nil)
@@ -604,7 +611,7 @@ func TestCreateBulkAssets_DuplicateSerial(t *testing.T) {
 	errors, ok := response["errors"].([]interface{})
 	assert.True(t, ok)
 	assert.Len(t, errors, 1)
-	assert.Contains(t, errors[0], "SERIAL002")
+	assert.Contains(t, errors[0], "Serial number SERIAL002 already registered")
 
 	// Verify mock expectations
 	mockRepo.AssertExpectations(t)
@@ -629,8 +636,10 @@ func TestCreateBulkAssets_InvalidCategory(t *testing.T) {
 	router.POST("/assets/bulk", handler.CreateBulkAssets)
 
 	// Test data
+	serial1 := "SERIAL001"
+	serial2 := "SERIAL002"
 	reqBody := models.BulkItemRequest{
-		Serials:    []string{"SERIAL001", "SERIAL002"},
+		Serials:    []*string{&serial1, &serial2},
 		LocationId: 1,
 		Status:     "available",
 		CategoryId: 4,
@@ -663,4 +672,284 @@ func TestCreateBulkAssets_InvalidCategory(t *testing.T) {
 	// Verify mock expectations
 	mockRepo.AssertExpectations(t)
 	mockAssetsRepo.AssertExpectations(t)
+}
+
+func (h *TestItemHandler) CreateAssetWithoutSerial(c *gin.Context) {
+	var req models.EmergencyAssetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
+		return
+	}
+
+	// Set default location ID to 1 if not specified
+	if req.LocationId == 0 {
+		req.LocationId = 1
+	}
+
+	// Set default status to "available" if not specified
+	if req.Status == "" {
+		req.Status = "available"
+	}
+
+	// Validate origin
+	if req.Origin == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "Origin is required",
+		})
+		return
+	}
+
+	categoryType, err := h.repository.GetCategoryType(req.CategoryId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Unable to check category type", "details": err.Error()})
+		return
+	}
+
+	if categoryType != "asset" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid category type"})
+		return
+	}
+
+	var createdAssets []models.Asset
+	var errors []string
+
+	for i := 0; i < req.Quantity; i++ {
+		itemReq := models.ItemRequest{
+			Serial:     nil,
+			LocationId: req.LocationId,
+			Status:     req.Status,
+			CategoryId: req.CategoryId,
+			Origin:     req.Origin,
+		}
+
+		asset, err := h.r.PersistItem(itemReq)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to create asset: %v", err))
+			continue
+		}
+
+		pyrCode := fmt.Sprintf("PYR-L%d", asset.ID)
+		if err := h.r.UpdatePyrCode(asset.ID, pyrCode); err != nil {
+			errors = append(errors, fmt.Sprintf("Failed to update PYR code for asset: %v", err))
+			continue
+		}
+
+		asset.PyrCode = pyrCode
+		createdAssets = append(createdAssets, *asset)
+
+		go h.AuditLog.Log(
+			"create",
+			map[string]interface{}{
+				"pyr_code":    asset.PyrCode,
+				"location_id": asset.Location.ID,
+				"msg":         "Asset created successfully",
+			},
+			asset,
+		)
+	}
+
+	response := gin.H{
+		"created": createdAssets,
+	}
+	if len(errors) > 0 {
+		response["errors"] = errors
+	}
+
+	c.JSON(http.StatusCreated, response)
+}
+
+func TestCreateAssetWithoutSerial_Success(t *testing.T) {
+	// Setup
+	router := SetupTestRouter()
+
+	mockAssetsRepo := new(MockAssetsRepository)
+	mockRepo := new(MockRepository)
+	mockAuditLog := new(MockAuditLog)
+
+	handler := &TestItemHandler{
+		r:          mockAssetsRepo,
+		repository: mockRepo,
+		AuditLog:   mockAuditLog,
+	}
+	router.POST("/assets/without-serial", handler.CreateAssetWithoutSerial)
+
+	// Test data
+	reqBody := models.EmergencyAssetRequest{
+		Quantity:   3,
+		LocationId: 1,
+		Status:     "available",
+		CategoryId: 4,
+		Origin:     "purchase",
+	}
+
+	// Mock expectations
+	mockRepo.On("GetCategoryType", 4).Return("asset", nil)
+
+	// Mock successful asset creation for all three assets
+	assets := []*models.Asset{
+		{
+			ID:     1,
+			Serial: "",
+			Category: models.ItemCategory{
+				ID:    4,
+				PyrID: "L",
+			},
+			Location: models.Location{
+				ID: 1,
+			},
+		},
+		{
+			ID:     2,
+			Serial: "",
+			Category: models.ItemCategory{
+				ID:    4,
+				PyrID: "L",
+			},
+			Location: models.Location{
+				ID: 1,
+			},
+		},
+		{
+			ID:     3,
+			Serial: "",
+			Category: models.ItemCategory{
+				ID:    4,
+				PyrID: "L",
+			},
+			Location: models.Location{
+				ID: 1,
+			},
+		},
+	}
+
+	for i, asset := range assets {
+		mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
+			return req.Serial == nil && req.LocationId == 1 && req.Status == "available"
+		})).Return(asset, nil)
+
+		mockAssetsRepo.On("UpdatePyrCode", i+1, fmt.Sprintf("PYR-L%d", i+1)).Return(nil)
+	}
+
+	mockAuditLog.On("Log", "create", mock.Anything, mock.Anything).Return(nil).Times(3)
+
+	// Create request
+	jsonData, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", "/assets/without-serial", bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+
+	// Perform request
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Assertions
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.Nil(t, err)
+
+	created, ok := response["created"].([]interface{})
+	assert.True(t, ok)
+	assert.Len(t, created, 3)
+
+	// Verify mock expectations
+	mockRepo.AssertExpectations(t)
+	mockAssetsRepo.AssertExpectations(t)
+	mockAuditLog.AssertExpectations(t)
+}
+
+func TestCreateAssetWithoutSerial_InvalidQuantity(t *testing.T) {
+	// Setup
+	router := SetupTestRouter()
+
+	mockAssetsRepo := new(MockAssetsRepository)
+	mockRepo := new(MockRepository)
+	mockAuditLog := new(MockAuditLog)
+
+	handler := &TestItemHandler{
+		r:          mockAssetsRepo,
+		repository: mockRepo,
+		AuditLog:   mockAuditLog,
+	}
+	router.POST("/assets/without-serial", handler.CreateAssetWithoutSerial)
+
+	// Test data with invalid quantity
+	reqBody := models.EmergencyAssetRequest{
+		Quantity:   0, // Invalid quantity
+		LocationId: 1,
+		Status:     "available",
+		CategoryId: 4,
+		Origin:     "purchase",
+	}
+
+	// Create request
+	jsonData, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", "/assets/without-serial", bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+
+	// Perform request
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Assertions
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.Nil(t, err)
+
+	errorMsg, ok := response["error"].(string)
+	assert.True(t, ok)
+	assert.Contains(t, errorMsg, "Invalid request payload")
+}
+
+func TestCreateAssetWithoutSerial_InvalidCategory(t *testing.T) {
+	// Setup
+	router := SetupTestRouter()
+
+	mockAssetsRepo := new(MockAssetsRepository)
+	mockRepo := new(MockRepository)
+	mockAuditLog := new(MockAuditLog)
+
+	handler := &TestItemHandler{
+		r:          mockAssetsRepo,
+		repository: mockRepo,
+		AuditLog:   mockAuditLog,
+	}
+	router.POST("/assets/without-serial", handler.CreateAssetWithoutSerial)
+
+	// Test data
+	reqBody := models.EmergencyAssetRequest{
+		Quantity:   2,
+		LocationId: 1,
+		Status:     "available",
+		CategoryId: 4,
+		Origin:     "purchase",
+	}
+
+	// Mock expectations - category type is not "asset"
+	mockRepo.On("GetCategoryType", 4).Return("stock", nil)
+
+	// Create request
+	jsonData, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", "/assets/without-serial", bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+
+	// Perform request
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Assertions
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.Nil(t, err)
+
+	errorMsg, ok := response["error"].(string)
+	assert.True(t, ok)
+	assert.Equal(t, "Invalid category type", errorMsg)
+
+	// Verify mock expectations
+	mockRepo.AssertExpectations(t)
 }
