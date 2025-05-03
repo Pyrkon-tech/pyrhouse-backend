@@ -511,3 +511,46 @@ func (r *AssetsRepository) UpdateAssetSerial(assetID int, serial string) error {
 
 	return nil
 }
+
+func (r *AssetsRepository) GetAssetsForReport() ([]models.FlatAssetRecord, error) {
+	query := r.getAssetQuery().
+		Where(goqu.Ex{"c.category_type": "asset"}).
+		Order(goqu.I("i.id").Asc())
+
+	var flatAssets []models.FlatAssetRecord
+	err := query.Executor().ScanStructs(&flatAssets)
+	if err != nil {
+		return nil, fmt.Errorf("nie udało się pobrać danych do raportu: %w", err)
+	}
+
+	return flatAssets, nil
+}
+
+func (r *AssetsRepository) GetStockForReport() ([]models.FlatStockRecord, error) {
+	query := r.repository.GoquDBWrapper.Select(
+		goqu.I("i.id").As("stock_id"),
+		goqu.I("c.label").As("category_label"),
+		goqu.I("i.origin").As("origin"),
+		goqu.I("i.quantity").As("quantity"),
+		goqu.I("l.name").As("location_name"),
+	).
+		From(goqu.T("non_serialized_items").As("i")).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),
+		).
+		LeftJoin(
+			goqu.T("locations").As("l"),
+			goqu.On(goqu.Ex{"i.location_id": goqu.I("l.id")}),
+		).
+		Where(goqu.Ex{"c.category_type": "stock"}).
+		Order(goqu.I("i.id").Asc())
+
+	var flatStocks []models.FlatStockRecord
+	err := query.Executor().ScanStructs(&flatStocks)
+	if err != nil {
+		return nil, fmt.Errorf("nie udało się pobrać danych do raportu: %w", err)
+	}
+
+	return flatStocks, nil
+}

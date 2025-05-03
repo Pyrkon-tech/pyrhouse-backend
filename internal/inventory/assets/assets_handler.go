@@ -1,6 +1,8 @@
 package assets
 
 import (
+	"encoding/csv"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -38,6 +40,8 @@ func (h *ItemHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/assets/without-serial", security.Authorize("user"), h.CreateAssetWithoutSerial)
 	router.DELETE("/assets/:id", security.Authorize("moderator"), h.RemoveAsset)
 	router.PATCH("/assets/:id/serial", security.Authorize("moderator"), h.UpdateAssetSerial)
+	router.GET("/assets/report", security.Authorize("moderator"), h.GetAssetsReport)
+	router.GET("/stocks/report", security.Authorize("moderator"), h.GetStockReport)
 }
 
 func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {
@@ -353,4 +357,80 @@ func (h *ItemHandler) UpdateAssetSerial(c *gin.Context) {
 	)
 
 	c.JSON(http.StatusOK, updatedAsset)
+}
+
+func (h *ItemHandler) GetAssetsReport(c *gin.Context) {
+	assets, err := h.r.GetAssetsForReport()
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się wygenerować raportu", "details": err.Error()})
+		return
+	}
+
+	csvData := [][]string{
+		{"ID", "Numer seryjny", "Kod PYR", "Status", "Kategoria", "Typ kategorii", "Lokalizacja", "Pochodzenie"},
+	}
+
+	for _, asset := range assets {
+		csvData = append(csvData, []string{
+			fmt.Sprintf("%d", asset.ID),
+			asset.Serial.String,
+			asset.PyrCode.String,
+			asset.Status,
+			asset.CategoryLabel,
+			asset.CategoryType,
+			asset.LocationName,
+			asset.Origin,
+		})
+	}
+
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=raport_sprzetu.csv")
+	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+
+	writer := csv.NewWriter(c.Writer)
+	for _, record := range csvData {
+		if err := writer.Write(record); err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas generowania CSV", "details": err.Error()})
+			return
+		}
+	}
+	writer.Flush()
+}
+
+func (h *ItemHandler) GetStockReport(c *gin.Context) {
+	stock, err := h.r.GetStockForReport()
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się wygenerować raportu", "details": err.Error()})
+		return
+	}
+
+	csvData := [][]string{
+		{"ID", "Kategoria", "Pochodzenie", "Ilość", "Lokalizacja"},
+	}
+
+	for _, item := range stock {
+		csvData = append(csvData, []string{
+			fmt.Sprintf("%d", item.ID),
+			item.CategoryLabel,
+			item.Origin,
+			strconv.Itoa(item.Quantity),
+			item.LocationName,
+		})
+	}
+
+	c.Header("Content-Type", "text/csv")
+	c.Header("Content-Disposition", "attachment; filename=raport_magazynu.csv")
+	c.Header("Cache-Control", "no-cache")
+
+	writer := csv.NewWriter(c.Writer)
+	for _, record := range csvData {
+		if err := writer.Write(record); err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas generowania CSV", "details": err.Error()})
+			return
+		}
+	}
+	writer.Flush()
 }
