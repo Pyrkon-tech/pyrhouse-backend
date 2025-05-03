@@ -367,19 +367,19 @@ func (h *ItemHandler) GetAssetsReport(c *gin.Context) {
 	}
 
 	csvData := [][]string{
-		{"ID", "Numer seryjny", "Kod PYR", "Status", "Kategoria", "Typ kategorii", "Lokalizacja", "Pochodzenie"},
+		{"ID", "Kategoria", "Numer seryjny", "Kod PYR", "Pochodzenie", "Status", "Typ kategorii", "Lokalizacja"},
 	}
 
 	for _, asset := range assets {
 		csvData = append(csvData, []string{
 			fmt.Sprintf("%d", asset.ID),
+			asset.CategoryLabel,
 			asset.Serial.String,
 			asset.PyrCode.String,
+			asset.Origin,
 			asset.Status,
-			asset.CategoryLabel,
 			asset.CategoryType,
 			asset.LocationName,
-			asset.Origin,
 		})
 	}
 
