@@ -37,6 +37,7 @@ func (h *ItemHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/assets/bulk", security.Authorize("user"), h.CreateBulkAssets)
 	router.POST("/assets/without-serial", security.Authorize("user"), h.CreateAssetWithoutSerial)
 	router.DELETE("/assets/:id", security.Authorize("moderator"), h.RemoveAsset)
+	router.PATCH("/assets/:id/serial", security.Authorize("moderator"), h.UpdateAssetSerial)
 }
 
 func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {
@@ -297,4 +298,59 @@ func (h *ItemHandler) getRequestDefaults(locationId int, status string, origin s
 	origin = o.String()
 
 	return locationId, status, origin, nil
+}
+
+func (h *ItemHandler) UpdateAssetSerial(c *gin.Context) {
+	assetID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID zasobu"})
+		return
+	}
+
+	var req struct {
+		Serial string `json:"serial" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format żądania", "details": err.Error()})
+		return
+	}
+
+	// Pobierz aktualny zasób do logowania
+	asset, err := h.r.GetAsset(assetID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się pobrać zasobu", "details": err.Error()})
+		return
+	}
+
+	// Aktualizuj numer seryjny
+	if err := h.r.UpdateAssetSerial(assetID, req.Serial); err != nil {
+		switch err.(type) {
+		case *custom_error.UniqueViolationError:
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Numer seryjny już istnieje"})
+			return
+		default:
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się zaktualizować numeru seryjnego", "details": err.Error()})
+			return
+		}
+	}
+
+	// Pobierz zaktualizowany zasób
+	updatedAsset, err := h.r.GetAsset(assetID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się pobrać zaktualizowanego zasobu", "details": err.Error()})
+		return
+	}
+
+	// Zaloguj zmianę
+	go h.AuditLog.Log(
+		"update",
+		map[string]interface{}{
+			"old_serial": asset.Serial,
+			"new_serial": updatedAsset.Serial,
+			"msg":        "Zaktualizowano numer seryjny zasobu",
+		},
+		updatedAsset,
+	)
+
+	c.JSON(http.StatusOK, updatedAsset)
 }

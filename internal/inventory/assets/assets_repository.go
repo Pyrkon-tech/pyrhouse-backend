@@ -485,3 +485,29 @@ func (r *AssetsRepository) GenerateUniquePyrCode(categoryID int, categoryPyrID s
 	pyrCode := metadata.NewPyrCode(categoryPyrID, nextNumber)
 	return pyrCode.GeneratePyrCode(), nil
 }
+
+func (r *AssetsRepository) UpdateAssetSerial(assetID int, serial string) error {
+	query := r.repository.GoquDBWrapper.
+		Update("items").
+		Set(goqu.Record{"item_serial": serial}).
+		Where(goqu.Ex{"id": assetID})
+
+	result, err := query.Executor().Exec()
+	if err != nil {
+		if pqErr, ok := err.(*pq.Error); ok {
+			return custom_error.WrapDBError("Numer seryjny już istnieje", string(pqErr.Code))
+		}
+		return fmt.Errorf("nie udało się zaktualizować numeru seryjnego: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("nie udało się sprawdzić liczby zaktualizowanych wierszy: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("nie znaleziono zasobu o ID: %d", assetID)
+	}
+
+	return nil
+}
