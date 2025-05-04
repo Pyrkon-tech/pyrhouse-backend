@@ -89,7 +89,7 @@ func (h *LocationHandler) UpdateLocation(c *gin.Context) {
 		return
 	}
 
-	if req.Details == nil && req.Name == nil {
+	if req.Details == nil && req.Name == nil && req.Pavilion == nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload, no fields to update"})
 		return
 	}

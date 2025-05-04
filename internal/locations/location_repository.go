@@ -26,7 +26,7 @@ func NewLocationRepository(r *repository.Repository) *LocationRepository {
 
 func (r *LocationRepository) GetLocations() (*[]models.Location, error) {
 	var locations = []models.Location{}
-	query := r.Repository.GoquDBWrapper.Select("id", "name", "details", "pavilion").From("locations")
+	query := r.Repository.GoquDBWrapper.Select("id", "name", "details", "pavilion").From("locations").Order(goqu.C("id").Asc())
 	if err := query.Executor().ScanStructs(&locations); err != nil {
 		return nil, fmt.Errorf("unable to execute SQL: %w", err)
 	}
