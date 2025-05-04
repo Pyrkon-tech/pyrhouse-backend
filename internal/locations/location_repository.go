@@ -26,7 +26,7 @@ func NewLocationRepository(r *repository.Repository) *LocationRepository {
 
 func (r *LocationRepository) GetLocations() (*[]models.Location, error) {
 	var locations = []models.Location{}
-	query := r.Repository.GoquDBWrapper.Select("id", "name", "details").From("locations")
+	query := r.Repository.GoquDBWrapper.Select("id", "name", "details", "pavilion").From("locations")
 	if err := query.Executor().ScanStructs(&locations); err != nil {
 		return nil, fmt.Errorf("unable to execute SQL: %w", err)
 	}
@@ -53,8 +53,9 @@ func (r *LocationRepository) GetLocationEquipment(locationID string) (*models.Lo
 func (r *LocationRepository) PersistLocation(location *models.Location) error {
 	query := r.Repository.GoquDBWrapper.Insert("locations").
 		Rows(goqu.Record{
-			"name":    location.Name,
-			"details": location.Details,
+			"name":     location.Name,
+			"details":  location.Details,
+			"pavilion": location.Pavilion,
 		}).
 		Returning("id")
 
@@ -80,6 +81,9 @@ func (r *LocationRepository) UpdateLocation(locationID string, req UpdateLocatio
 	if req.Details != nil {
 		updates["details"] = *req.Details
 	}
+	if req.Pavilion != nil {
+		updates["pavilion"] = *req.Pavilion
+	}
 	if len(updates) == 0 {
 		return models.Location{}, fmt.Errorf("no fields to update")
 	}
@@ -88,7 +92,7 @@ func (r *LocationRepository) UpdateLocation(locationID string, req UpdateLocatio
 		Update("locations").
 		Set(updates).
 		Where(goqu.Ex{"id": locationID}).
-		Returning("id", "name", "details")
+		Returning("id", "name", "details", "pavilion")
 
 	var loc models.Location
 
@@ -265,7 +269,7 @@ func (r *LocationRepository) SearchLocationItems(locationID string, searchQuery 
 func (r *LocationRepository) GetLocationDetails(locationID string) (*models.Location, error) {
 	var location models.Location
 	query := r.Repository.GoquDBWrapper.
-		Select("id", "name", "details").
+		Select("id", "name", "details", "pavilion").
 		From("locations").
 		Where(goqu.Ex{"id": locationID})
 

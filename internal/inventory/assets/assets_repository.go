@@ -314,6 +314,7 @@ func (r *AssetsRepository) GetTransferAssets(transferID int) (*[]models.Asset, e
 			goqu.I("c.pyr_id").As("category_pyr_id"),
 			goqu.I("l.id").As("location_id"),
 			goqu.I("l.name").As("location_name"),
+			goqu.I("l.pavilion").As("location_pavilion"),
 		).
 		From(goqu.T("serialized_transfers").As("ta")).
 		LeftJoin(
@@ -438,6 +439,7 @@ func (r *AssetsRepository) getAssetQuery() *goqu.SelectDataset {
 		goqu.I("c.category_type").As("category_equipment_type"),
 		goqu.I("l.id").As("location_id"),
 		goqu.I("l.name").As("location_name"),
+		goqu.I("l.pavilion").As("location_pavilion"),
 	).
 		From(goqu.T("items").As("i")).
 		LeftJoin(

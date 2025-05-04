@@ -93,15 +93,27 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 		return nil, err
 	}
 
+	var pavilionFrom *string
+	if flatTransfer.FromLocationPavilion.Valid {
+		pavilionFrom = &flatTransfer.FromLocationPavilion.String
+	}
+
+	var pavilionTo *string
+	if flatTransfer.ToLocationPavilion.Valid {
+		pavilionTo = &flatTransfer.ToLocationPavilion.String
+	}
+
 	transfer := &models.Transfer{
 		ID: flatTransfer.ID,
 		FromLocation: models.Location{
-			ID:   flatTransfer.FromLocationID,
-			Name: flatTransfer.FromLocationName,
+			ID:       flatTransfer.FromLocationID,
+			Name:     flatTransfer.FromLocationName,
+			Pavilion: pavilionFrom,
 		},
 		ToLocation: models.Location{
-			ID:   flatTransfer.ToLocationID,
-			Name: flatTransfer.ToLocationName,
+			ID:       flatTransfer.ToLocationID,
+			Name:     flatTransfer.ToLocationName,
+			Pavilion: pavilionTo,
 		},
 		Status:       flatTransfer.Status,
 		TransferDate: flatTransfer.TransferDate,
@@ -157,12 +169,14 @@ func (s *TransferService) GetTransfers(req models.RetrieveTransferListQuery) (*[
 		transfers = append(transfers, models.Transfer{
 			ID: flatTransfer.ID,
 			FromLocation: models.Location{
-				ID:   flatTransfer.FromLocationID,
-				Name: flatTransfer.FromLocationName,
+				ID:       flatTransfer.FromLocationID,
+				Name:     flatTransfer.FromLocationName,
+				Pavilion: &flatTransfer.FromLocationPavilion.String,
 			},
 			ToLocation: models.Location{
-				ID:   flatTransfer.ToLocationID,
-				Name: flatTransfer.ToLocationName,
+				ID:       flatTransfer.ToLocationID,
+				Name:     flatTransfer.ToLocationName,
+				Pavilion: &flatTransfer.ToLocationPavilion.String,
 			},
 			TransferDate: flatTransfer.TransferDate,
 			Status:       flatTransfer.Status,

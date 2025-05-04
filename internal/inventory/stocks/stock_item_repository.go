@@ -107,6 +107,7 @@ func (r *StockRepository) GetStockItem(id int) (*models.StockItem, error) {
 			goqu.I("c.pyr_id").As("category_pyr_id"),
 			goqu.I("l.id").As("location_id"),
 			goqu.I("l.name").As("location_name"),
+			goqu.I("l.pavilion").As("location_pavilion"),
 		).
 		From(goqu.T("non_serialized_items").As("s")).
 		LeftJoin(
@@ -353,6 +354,7 @@ func (r *StockRepository) getStockItemQuery() *goqu.SelectDataset {
 			goqu.I("c.category_type").As("category_equipment_type"),
 			goqu.I("l.id").As("location_id"),
 			goqu.I("l.name").As("location_name"),
+			goqu.I("l.pavilion").As("location_pavilion"),
 		).
 		From(goqu.T("non_serialized_items").As("s")).
 		LeftJoin(

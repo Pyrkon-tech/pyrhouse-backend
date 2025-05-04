@@ -29,6 +29,7 @@ type FlatAssetRecord struct {
 	PyrCode               sql.NullString `db:"pyr_code"`
 	LocationId            int            `db:"location_id"`
 	LocationName          string         `db:"location_name"`
+	LocationPavilion      sql.NullString `db:"location_pavilion"`
 	CategoryId            int            `db:"category_id"`
 	CategoryType          string         `db:"category_type"`
 	CategoryLabel         string         `db:"category_label"`
@@ -45,6 +46,11 @@ func (fa *FlatAssetRecord) TransformToAsset() Asset {
 		serial = &fa.Serial.String
 	}
 
+	var pavilion *string
+	if fa.LocationPavilion.Valid {
+		pavilion = &fa.LocationPavilion.String
+	}
+
 	return Asset{
 		ID:      fa.ID,
 		Serial:  serial,
@@ -52,8 +58,9 @@ func (fa *FlatAssetRecord) TransformToAsset() Asset {
 		PyrCode: fa.PyrCode.String,
 		Origin:  origin,
 		Location: Location{
-			ID:   fa.LocationId,
-			Name: fa.LocationName,
+			ID:       fa.LocationId,
+			Name:     fa.LocationName,
+			Pavilion: pavilion,
 		},
 		Category: ItemCategory{
 			ID:    fa.CategoryId,

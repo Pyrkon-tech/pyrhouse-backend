@@ -1,0 +1,2 @@
+ALTER TABLE locations
+ADD COLUMN pavilion VARCHAR(255) NULL; 

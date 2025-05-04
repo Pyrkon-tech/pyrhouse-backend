@@ -1,6 +1,7 @@
 package transfers
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"time"
@@ -76,16 +77,18 @@ func (r *transferRepository) CanTransferNonSerializedItems(stocks []models.Stock
 }
 
 type FlatTransfer struct {
-	ID                int        `db:"transfer_id"`
-	FromLocationID    int        `db:"from_location_id"`
-	FromLocationName  string     `db:"from_location_name"`
-	ToLocationID      int        `db:"to_location_id"`
-	ToLocationName    string     `db:"to_location_name"`
-	TransferDate      time.Time  `db:"transfer_date"`
-	Status            string     `db:"transfer_status"`
-	DeliveryLatitude  *float64   `db:"delivery_latitude"`
-	DeliveryLongitude *float64   `db:"delivery_longitude"`
-	DeliveryTimestamp *time.Time `db:"delivery_timestamp"`
+	ID                   int            `db:"transfer_id"`
+	FromLocationID       int            `db:"from_location_id"`
+	FromLocationName     string         `db:"from_location_name"`
+	FromLocationPavilion sql.NullString `db:"from_location_pavilion"`
+	ToLocationID         int            `db:"to_location_id"`
+	ToLocationName       string         `db:"to_location_name"`
+	ToLocationPavilion   sql.NullString `db:"to_location_pavilion"`
+	TransferDate         time.Time      `db:"transfer_date"`
+	Status               string         `db:"transfer_status"`
+	DeliveryLatitude     *float64       `db:"delivery_latitude"`
+	DeliveryLongitude    *float64       `db:"delivery_longitude"`
+	DeliveryTimestamp    *time.Time     `db:"delivery_timestamp"`
 }
 
 func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, error) {
@@ -96,8 +99,10 @@ func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, erro
 			goqu.I("t.id").As("transfer_id"),
 			goqu.I("l1.id").As("from_location_id"),
 			goqu.I("l1.name").As("from_location_name"),
+			goqu.I("l1.pavilion").As("from_location_pavilion"),
 			goqu.I("l2.id").As("to_location_id"),
 			goqu.I("l2.name").As("to_location_name"),
+			goqu.I("l2.pavilion").As("to_location_pavilion"),
 			goqu.I("t.status").As("transfer_status"),
 			goqu.I("t.transfer_date").As("transfer_date"),
 			goqu.I("t.delivery_latitude").As("delivery_latitude"),
@@ -131,8 +136,10 @@ func (r *transferRepository) GetTransferRows(conditions repository.QueryBuilder)
 			goqu.I("t.id").As("transfer_id"),
 			goqu.I("l1.id").As("from_location_id"),
 			goqu.I("l1.name").As("from_location_name"),
+			goqu.I("l1.pavilion").As("from_location_pavilion"),
 			goqu.I("l2.id").As("to_location_id"),
 			goqu.I("l2.name").As("to_location_name"),
+			goqu.I("l2.pavilion").As("to_location_pavilion"),
 			goqu.I("t.status").As("transfer_status"),
 			goqu.I("t.transfer_date").As("transfer_date"),
 		).
@@ -387,8 +394,10 @@ func (r *transferRepository) GetTransfersByUserAndStatus(userID int, status stri
 			goqu.I("t.id").As("transfer_id"),
 			goqu.I("l1.id").As("from_location_id"),
 			goqu.I("l1.name").As("from_location_name"),
+			goqu.I("l1.pavilion").As("from_location_pavilion"),
 			goqu.I("l2.id").As("to_location_id"),
 			goqu.I("l2.name").As("to_location_name"),
+			goqu.I("l2.pavilion").As("to_location_pavilion"),
 			goqu.I("t.status").As("transfer_status"),
 			goqu.I("t.transfer_date").As("transfer_date"),
 		).
