@@ -48,3 +48,7 @@ func (q *retrieveItemListQuery) BuildConditions(aliases map[string]string) goqu.
 
 	return conditions
 }
+
+func (q *retrieveItemListQuery) HasConditions() bool {
+	return len(q.LocationIDs) > 0 || q.CategoryID != nil || q.CategoryLabel != ""
+}

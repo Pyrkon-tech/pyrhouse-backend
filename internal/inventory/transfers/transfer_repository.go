@@ -2,6 +2,7 @@ package transfers
 
 import (
 	"fmt"
+	"log"
 	"time"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
@@ -14,7 +15,7 @@ type TransferRepository interface {
 	CanTransferNonSerializedItems(assets []models.StockItemRequest, locationID int) (map[int]bool, error)
 	UpdateTransferStatus(transferID int, status string) error
 	GetTransferRow(transferID int) (*FlatTransfer, error)
-	GetTransferRows() (*[]FlatTransfer, error)
+	GetTransferRows(conditions repository.QueryBuilder) (*[]FlatTransfer, error)
 	GetTransfersByUserAndStatus(userID int, status string) ([]FlatTransfer, error)
 	InsertTransferRecord(tx *goqu.TxDatabase, req models.TransferRequest) (int, error)
 	GetTransferLocationById(tx *goqu.TxDatabase, transferID int) (int, error)
@@ -122,7 +123,7 @@ func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, erro
 	return &transfer, nil
 }
 
-func (r *transferRepository) GetTransferRows() (*[]FlatTransfer, error) {
+func (r *transferRepository) GetTransferRows(conditions repository.QueryBuilder) (*[]FlatTransfer, error) {
 	var flatTransfers []FlatTransfer
 
 	query := r.Repo.GoquDBWrapper.
@@ -134,7 +135,6 @@ func (r *transferRepository) GetTransferRows() (*[]FlatTransfer, error) {
 			goqu.I("l2.name").As("to_location_name"),
 			goqu.I("t.status").As("transfer_status"),
 			goqu.I("t.transfer_date").As("transfer_date"),
-			//TODO goqu.I("t.receiver").As("transfer_receiver"),
 		).
 		From(goqu.T("transfers").As("t")).
 		LeftJoin(
@@ -145,8 +145,25 @@ func (r *transferRepository) GetTransferRows() (*[]FlatTransfer, error) {
 			goqu.T("locations").As("l2"),
 			goqu.On(goqu.Ex{"t.to_location_id": goqu.I("l2.id")}),
 		)
-	err := query.Executor().ScanStructs(&flatTransfers)
 
+	if conditions.HasConditions() {
+		aliases := map[string]string{
+			"from_location_id": "t.from_location_id",
+			"to_location_id":   "t.to_location_id",
+			"status":           "t.status",
+		}
+
+		query = query.Where(conditions.BuildConditions(aliases))
+	}
+
+	sql, args, err := query.ToSQL()
+	if err != nil {
+		return nil, fmt.Errorf("error building SQL query: %w", err)
+	}
+
+	log.Printf("Executing SQL query: %s with args: %v", sql, args)
+
+	err = query.Executor().ScanStructs(&flatTransfers)
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}

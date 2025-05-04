@@ -139,16 +139,21 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 	return transfer, nil
 }
 
-func (s *TransferService) GetTransfers() (*[]models.Transfer, error) {
-	flatTransfers, err := s.tr.GetTransferRows()
+func (s *TransferService) GetTransfers(req models.RetrieveTransferListQuery) (*[]models.Transfer, error) {
+	log.Printf("GetTransfers called with query: %+v", req)
+
+	conditions := s.buildTransferConditions(req)
+	log.Printf("Built conditions: %+v", conditions)
+
+	flatTransfers, err := s.tr.GetTransferRows(conditions)
 	if err != nil {
+		log.Printf("Error getting transfer rows: %v", err)
 		return nil, err
 	}
 
 	var transfers []models.Transfer
 
 	for _, flatTransfer := range *flatTransfers {
-
 		transfers = append(transfers, models.Transfer{
 			ID: flatTransfer.ID,
 			FromLocation: models.Location{
@@ -162,8 +167,9 @@ func (s *TransferService) GetTransfers() (*[]models.Transfer, error) {
 			TransferDate: flatTransfer.TransferDate,
 			Status:       flatTransfer.Status,
 		})
-
 	}
+
+	log.Printf("Returning %d transfers", len(transfers))
 	return &transfers, nil
 }
 
@@ -447,4 +453,22 @@ func (s *TransferService) createDeliveryLocationAssetLog(transferID int, latitud
 	for _, asset := range *assets {
 		s.il.CreateDeliveryLocationAssetLog("last_known_location", &asset, latitude, longitude, timestamp)
 	}
+}
+
+func (s *TransferService) buildTransferConditions(req models.RetrieveTransferListQuery) repository.QueryBuilder {
+	conditions := repository.NewQueryBuilder()
+
+	if req.FromLocationID != nil {
+		conditions.AddCondition("from_location_id", *req.FromLocationID)
+	}
+
+	if req.ToLocationID != nil {
+		conditions.AddCondition("to_location_id", *req.ToLocationID)
+	}
+
+	if req.Status != nil {
+		conditions.AddCondition("status", *req.Status)
+	}
+
+	return conditions
 }

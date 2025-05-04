@@ -74,7 +74,14 @@ func (h *TransferHandler) GetTransfer(c *gin.Context) {
 }
 
 func (h *TransferHandler) RetrieveTransferList(c *gin.Context) {
-	transfers, err := h.Service.GetTransfers()
+	var transferQuery models.RetrieveTransferListQuery
+
+	if err := c.ShouldBindQuery(&transferQuery); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	transfers, err := h.Service.GetTransfers(transferQuery)
 	if err != nil {
 		log.Println("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to get transfer", "details": err.Error()})

@@ -29,3 +29,7 @@ func (q *queryBuilderImpl) BuildConditions(aliases map[string]string) goqu.Ex {
 	}
 	return conditions
 }
+
+func (q *queryBuilderImpl) HasConditions() bool {
+	return len(q.conditions) > 0
+}
