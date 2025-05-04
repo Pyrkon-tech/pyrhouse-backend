@@ -15,18 +15,18 @@ import (
 )
 
 type ItemCategoryHandler struct {
-	ar         *assets.AssetsRepository
-	sr         *stocks.StockRepository
-	repository *repository.Repository
-	AuditLog   *auditlog.Auditlog
+	service  *ItemCategoryService
+	ar       *assets.AssetsRepository
+	sr       *stocks.StockRepository
+	AuditLog *auditlog.Auditlog
 }
 
 func NewItemCategoryHandler(r *repository.Repository, ar *assets.AssetsRepository, sr *stocks.StockRepository, a *auditlog.Auditlog) *ItemCategoryHandler {
 	return &ItemCategoryHandler{
-		ar:         ar,
-		sr:         sr,
-		repository: r,
-		AuditLog:   a,
+		service:  NewItemCategoryService(r),
+		ar:       ar,
+		sr:       sr,
+		AuditLog: a,
 	}
 }
 
@@ -35,14 +35,13 @@ func (h *ItemCategoryHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/assets/categories", security.Authorize("moderator"), h.CreateItemCategory)
 	router.DELETE("/assets/categories/:id", security.Authorize("moderator"), h.RemoveItemCategory)
 	router.PATCH("/assets/categories/:id", security.Authorize("admin"), h.UpdateItemCategory)
-
 }
 
 func (h *ItemCategoryHandler) GetItemCategories(c *gin.Context) {
-	itemCategories, err := h.repository.GetCategories()
+	itemCategories, err := h.service.GetCategories()
 
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się pobrać kategorii", "details": err.Error()})
 		return
 	}
 
@@ -56,55 +55,64 @@ func (h *ItemCategoryHandler) CreateItemCategory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	req.GenerateNameFromLabel()
-	itemCategory, err := h.repository.PersistItemCategory(req)
 
+	itemCategory, err := h.service.CreateCategory(req)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się utworzyć kategorii", "details": err.Error()})
 		return
 	}
+
+	go h.AuditLog.Log(
+		"create",
+		map[string]interface{}{
+			"category_id": itemCategory.ID,
+			"msg":         "Kategoria utworzona pomyślnie",
+		},
+		itemCategory,
+	)
+
 	c.JSON(http.StatusCreated, itemCategory)
 }
 
 func (h *ItemCategoryHandler) RemoveItemCategory(c *gin.Context) {
-	CategoryID := c.Param("id")
+	categoryID := c.Param("id")
 
-	if _, err := strconv.Atoi(CategoryID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid id parameter, must be an integer"})
+	if _, err := strconv.Atoi(categoryID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID, musi być liczbą"})
 		return
 	}
 
-	hasRelatedItems := h.ar.HasRelatedItems(CategoryID)
-	hasRelatedItemsInStock := h.sr.HasRelatedItems(CategoryID)
+	hasRelatedItems := h.ar.HasRelatedItems(categoryID)
+	hasRelatedItemsInStock := h.sr.HasRelatedItems(categoryID)
 
 	if hasRelatedItems || hasRelatedItemsInStock {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "cannot delete category with id " + CategoryID + ": related items exist"})
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Nie można usunąć kategorii #" + categoryID + ": istnieją powiązane elementy"})
 		return
 	}
 
-	err := h.repository.DeleteItemCategoryByID(CategoryID)
+	err := h.service.DeleteCategory(categoryID)
 	if err != nil {
 		if _, ok := err.(*custom_error.ForeignKeyViolationError); ok {
-			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Nie mona usunąć kategorii #" + CategoryID + ": istnieje powiązany sprzęt"})
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Nie można usunąć kategorii #" + categoryID + ": istnieją powiązane elementy"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete asset category"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się usunąć kategorii"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Item category deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Kategoria została usunięta pomyślnie"})
 }
 
 func (h *ItemCategoryHandler) UpdateItemCategory(c *gin.Context) {
 	var req models.PatchItemCategoryRequest
 
 	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid URI parameters", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe parametry URI", "details": err.Error()})
 		return
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nie poprawne dane żądania", "details": err.Error(), "code": "invalid_request_payload"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe dane żądania", "details": err.Error(), "code": "invalid_request_payload"})
 		return
 	}
 
@@ -130,15 +138,18 @@ func (h *ItemCategoryHandler) UpdateItemCategory(c *gin.Context) {
 
 		updates["category_type"] = *req.Type
 	}
+	if req.PyrID != nil {
+		updates["pyr_id"] = *req.PyrID
+	}
 
 	if len(updates) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Brak pól do aktualizacji"})
 		return
 	}
 
-	err := h.repository.UpdateItemCategory(req.ID, updates)
+	err := h.service.UpdateCategory(req.ID, updates)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update item category", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się zaktualizować kategorii", "details": err.Error()})
 		return
 	}
 
@@ -146,10 +157,10 @@ func (h *ItemCategoryHandler) UpdateItemCategory(c *gin.Context) {
 		"update",
 		map[string]interface{}{
 			"category_id": req.ID,
-			"msg":         "Item category updated successfully",
+			"msg":         "Kategoria zaktualizowana pomyślnie",
 		},
 		&models.ItemCategory{ID: req.ID},
 	)
 
-	c.JSON(http.StatusOK, gin.H{"message": "Item category updated successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Kategoria została zaktualizowana pomyślnie"})
 }

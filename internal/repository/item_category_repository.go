@@ -30,16 +30,6 @@ func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
 }
 
 func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*models.ItemCategory, error) {
-	if itemCategory.PyrID == "" {
-		itemCategory.GeneratePyrID()
-	}
-
-	uniquePyrID, err := r.GenerateUniquePyrID(itemCategory.PyrID, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate unique PyrID: %w", err)
-	}
-	itemCategory.PyrID = uniquePyrID
-
 	query := r.GoquDBWrapper.Insert("item_category").
 		Rows(goqu.Record{
 			"item_category": itemCategory.Name,
@@ -140,14 +130,6 @@ func (r *Repository) UpdateItemCategory(categoryID int, updates map[string]inter
 		return fmt.Errorf("no fields to update")
 	}
 
-	if pyrID, ok := updates["pyr_id"].(string); ok {
-		uniquePyrID, err := r.GenerateUniquePyrID(pyrID, &categoryID)
-		if err != nil {
-			return fmt.Errorf("failed to generate unique PyrID: %w", err)
-		}
-		updates["pyr_id"] = uniquePyrID
-	}
-
 	query := r.GoquDBWrapper.Update("item_category").
 		Set(updates).
 		Where(goqu.Ex{"id": categoryID})
@@ -185,26 +167,4 @@ func (r *Repository) CheckPyrIDUniqueness(pyrID string, excludeID *int) (bool, e
 	}
 
 	return count == 0, nil
-}
-
-func (r *Repository) GenerateUniquePyrID(basePyrID string, excludeID *int) (string, error) {
-	counter := 1
-	pyrID := basePyrID
-
-	for {
-		isUnique, err := r.CheckPyrIDUniqueness(pyrID, excludeID)
-		if err != nil {
-			return "", fmt.Errorf("failed to check PyrID uniqueness: %w", err)
-		}
-		if isUnique {
-			return pyrID, nil
-		}
-
-		if counter > 9 {
-			return "", fmt.Errorf("could not generate unique PyrID after 9 attempts")
-		}
-
-		pyrID = fmt.Sprintf("%s%d", basePyrID, counter)
-		counter++
-	}
 }

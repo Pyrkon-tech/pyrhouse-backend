@@ -25,12 +25,37 @@ func (c *ItemCategory) GeneratePyrID() {
 	if c.PyrID != "" {
 		return
 	}
-	str := c.Name
-	if len(str) < 3 {
-		str = str + strings.Repeat("x", 3-len(str))
+
+	// Sprawdzamy czy w label występują znane skróty (3-4 litery wielkie)
+	words := strings.Fields(c.Label)
+	for _, word := range words {
+		if len(word) >= 3 && len(word) <= 4 && strings.ToUpper(word) == word {
+			c.PyrID = word
+			return
+		}
 	}
-	str = str[:3]
-	c.PyrID = strings.ToUpper(str) + "1"
+
+	// Jeśli nie znaleziono skrótu, generujemy standardowo
+	str := c.Name
+	words = strings.Fields(str)
+
+	if len(words) >= 3 {
+		// Jeśli mamy 3 lub więcej słów, bierzemy pierwszą literę z każdego słowa
+		var builder strings.Builder
+		for i := 0; i < 3; i++ {
+			if i < len(words) {
+				builder.WriteByte(words[i][0])
+			}
+		}
+		c.PyrID = strings.ToUpper(builder.String())
+	} else {
+		// Standardowa logika dla mniej niż 3 słów
+		if len(str) < 3 {
+			str = str + strings.Repeat("x", 3-len(str))
+		}
+		str = str[:3]
+		c.PyrID = strings.ToUpper(str)
+	}
 }
 
 func removeDiacritics(input string) string {
