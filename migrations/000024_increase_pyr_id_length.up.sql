@@ -1,0 +1,3 @@
+BEGIN;
+ALTER TABLE item_category ALTER COLUMN pyr_id TYPE VARCHAR(4);
+COMMIT; 

@@ -1,7 +1,6 @@
 package category
 
 import (
-	"log"
 	"net/http"
 	"strconv"
 	"warehouse/internal/inventory/assets"
@@ -58,12 +57,10 @@ func (h *ItemCategoryHandler) CreateItemCategory(c *gin.Context) {
 		return
 	}
 	req.GenerateNameFromLabel()
-	req.GeneratePyrID()
 	itemCategory, err := h.repository.PersistItemCategory(req)
 
 	if err != nil {
-		log.Fatal("Error executing SQL statement: ", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset", "details": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, itemCategory)

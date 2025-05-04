@@ -11,7 +11,7 @@ type ItemCategory struct {
 	ID    int    `json:"id,omitempty" db:"category_id"`
 	Name  string `json:"name,omitempty" db:"type"`
 	Label string `json:"label,omitempty" binding:"required" db:"label"`
-	PyrID string `json:"pyr_id" binding:"omitempty,alphanum,min=1,max=3" db:"pyr_id"`
+	PyrID string `json:"pyr_id" binding:"omitempty,alphanum,min=1,max=4" db:"pyr_id"`
 	Type  string `json:"type" binding:"alphanum,min=1,max=24" db:"category_type"`
 }
 
@@ -26,8 +26,11 @@ func (c *ItemCategory) GeneratePyrID() {
 		return
 	}
 	str := c.Name
+	if len(str) < 3 {
+		str = str + strings.Repeat("x", 3-len(str))
+	}
 	str = str[:3]
-	c.PyrID = strings.ToUpper(str)
+	c.PyrID = strings.ToUpper(str) + "1"
 }
 
 func removeDiacritics(input string) string {

@@ -30,6 +30,16 @@ func (r *Repository) GetCategories() (*[]models.ItemCategory, error) {
 }
 
 func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*models.ItemCategory, error) {
+	if itemCategory.PyrID == "" {
+		itemCategory.GeneratePyrID()
+	}
+
+	uniquePyrID, err := r.GenerateUniquePyrID(itemCategory.PyrID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate unique PyrID: %w", err)
+	}
+	itemCategory.PyrID = uniquePyrID
+
 	query := r.GoquDBWrapper.Insert("item_category").
 		Rows(goqu.Record{
 			"item_category": itemCategory.Name,
@@ -42,7 +52,7 @@ func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*mod
 	if _, err := query.Executor().ScanVal(&itemCategory.ID); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23505" {
-				return nil, custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
+				return nil, custom_error.WrapDBError("Zduplikowane PyrID", string(pqErr.Code))
 			}
 		}
 		return nil, fmt.Errorf("failed to insert item_category record: %w", err)
@@ -130,6 +140,14 @@ func (r *Repository) UpdateItemCategory(categoryID int, updates map[string]inter
 		return fmt.Errorf("no fields to update")
 	}
 
+	if pyrID, ok := updates["pyr_id"].(string); ok {
+		uniquePyrID, err := r.GenerateUniquePyrID(pyrID, &categoryID)
+		if err != nil {
+			return fmt.Errorf("failed to generate unique PyrID: %w", err)
+		}
+		updates["pyr_id"] = uniquePyrID
+	}
+
 	query := r.GoquDBWrapper.Update("item_category").
 		Set(updates).
 		Where(goqu.Ex{"id": categoryID})
@@ -149,4 +167,44 @@ func (r *Repository) UpdateItemCategory(categoryID int, updates map[string]inter
 	}
 
 	return nil
+}
+
+func (r *Repository) CheckPyrIDUniqueness(pyrID string, excludeID *int) (bool, error) {
+	var count int
+	query := r.GoquDBWrapper.Select(goqu.COUNT("*")).
+		From("item_category").
+		Where(goqu.Ex{"pyr_id": pyrID})
+
+	if excludeID != nil {
+		query = query.Where(goqu.Ex{"id": goqu.Op{"neq": *excludeID}})
+	}
+
+	_, err := query.Executor().ScanVal(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check PyrID uniqueness: %w", err)
+	}
+
+	return count == 0, nil
+}
+
+func (r *Repository) GenerateUniquePyrID(basePyrID string, excludeID *int) (string, error) {
+	counter := 1
+	pyrID := basePyrID
+
+	for {
+		isUnique, err := r.CheckPyrIDUniqueness(pyrID, excludeID)
+		if err != nil {
+			return "", fmt.Errorf("failed to check PyrID uniqueness: %w", err)
+		}
+		if isUnique {
+			return pyrID, nil
+		}
+
+		if counter > 9 {
+			return "", fmt.Errorf("could not generate unique PyrID after 9 attempts")
+		}
+
+		pyrID = fmt.Sprintf("%s%d", basePyrID, counter)
+		counter++
+	}
 }
