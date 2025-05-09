@@ -31,6 +31,12 @@ func RegisterProtectedRoutes(router *gin.Engine, container *container.Container)
 	} else {
 		log.Println("Google Sheets API routes not registered - handler is nil")
 	}
+	if container.JiraHandler != nil {
+		container.JiraHandler.RegisterRoutes(protectedRoutes)
+		log.Println("Jira API routes registered successfully")
+	} else {
+		log.Println("Jira API routes not registered - handler is nil")
+	}
 }
 
 func RegisterUtilityRoutes(router *gin.Engine) {

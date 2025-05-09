@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	auditLogRepo "warehouse/internal/auditlog"
 	"warehouse/internal/integrations/googlesheets"
+	"warehouse/internal/integrations/jira"
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/category"
 	"warehouse/internal/inventory/items"
@@ -28,6 +29,7 @@ type Container struct {
 	ItemHandler         *items.ItemHandler
 	GoogleSheetsHandler *googlesheets.GoogleSheetsHandler
 	ItemCategoryHandler *category.ItemCategoryHandler
+	JiraHandler         *jira.JiraHandler
 }
 
 func NewAppContainer(db *sql.DB) *Container {
@@ -54,6 +56,12 @@ func NewAppContainer(db *sql.DB) *Container {
 		googleSheetsHandler = nil
 	}
 
+	// Inicjalizacja handlera Jira
+	jiraHandler, err := jira.NewJiraHandler()
+	if err != nil {
+		jiraHandler = nil
+	}
+
 	return &Container{
 		Repository:          repo,
 		AuditLog:            auditLog,
@@ -66,5 +74,6 @@ func NewAppContainer(db *sql.DB) *Container {
 		ItemHandler:         itemsHandler,
 		GoogleSheetsHandler: googleSheetsHandler,
 		ItemCategoryHandler: itemCategoryHandler,
+		JiraHandler:         jiraHandler,
 	}
 }
