@@ -50,7 +50,6 @@ type CommentsResponse struct {
 }
 
 type Issue struct {
-	Expands       []string            `json:"_expands"`
 	IssueID       string              `json:"issueId"`
 	IssueKey      string              `json:"issueKey"`
 	Summary       string              `json:"summary"`
@@ -67,11 +66,10 @@ type Issue struct {
 }
 
 type JiraResponse struct {
-	Expands    []string `json:"_expands"`
-	Size       int      `json:"size"`
-	Start      int      `json:"start"`
-	Limit      int      `json:"limit"`
-	IsLastPage bool     `json:"isLastPage"`
+	Size       int  `json:"size"`
+	Start      int  `json:"start"`
+	Limit      int  `json:"limit"`
+	IsLastPage bool `json:"isLastPage"`
 	Links      struct {
 		Base    string `json:"base"`
 		Context string `json:"context"`

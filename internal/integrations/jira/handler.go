@@ -20,6 +20,7 @@ func NewJiraHandler() (*JiraHandler, error) {
 func (h *JiraHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/jira/tasks", security.Authorize("user"), h.getTasks)
 	router.GET("/jira/tasks/:id", security.Authorize("user"), h.getTaskWithComments)
+	router.PUT("/jira/tasks/:id/status", security.Authorize("user"), h.changeTaskStatus)
 }
 
 func (h *JiraHandler) getTasks(c *gin.Context) {
@@ -50,4 +51,30 @@ func (h *JiraHandler) getTaskWithComments(c *gin.Context) {
 	}
 
 	c.JSON(200, issue)
+}
+
+type ChangeStatusRequest struct {
+	Status string `json:"status" binding:"required"`
+}
+
+func (h *JiraHandler) changeTaskStatus(c *gin.Context) {
+	issueID := c.Param("id")
+	if issueID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "brak ID zadania"})
+		return
+	}
+
+	var req ChangeStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "nieprawidłowy format danych"})
+		return
+	}
+
+	response, err := h.JiraService.ChangeStatus(issueID, req.Status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "błąd zmiany statusu zadania"})
+		return
+	}
+
+	c.JSON(200, response)
 }

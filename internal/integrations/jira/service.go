@@ -1,6 +1,7 @@
 package jira
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -135,4 +136,55 @@ func (s *JiraService) getTask(issueID string) (*Issue, error) {
 	}
 
 	return &issue, nil
+}
+
+// StatusTransition reprezentuje zmianę statusu
+type StatusTransition struct {
+	Status string `json:"status"`
+}
+
+// TransitionResponse reprezentuje odpowiedź po zmianie statusu
+type TransitionResponse struct {
+	Status     string   `json:"status"`
+	StatusDate DateTime `json:"statusDate"`
+}
+
+// ChangeStatus zmienia status zadania
+func (s *JiraService) ChangeStatus(issueID string, newStatus string) (*TransitionResponse, error) {
+	url := fmt.Sprintf("%s/rest/servicedeskapi/request/%s/status", s.baseURL, issueID)
+
+	transition := StatusTransition{
+		Status: newStatus,
+	}
+
+	jsonData, err := json.Marshal(transition)
+	if err != nil {
+		return nil, fmt.Errorf("błąd marshalowania danych: %v", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+
+	req.SetBasicAuth(s.email, s.token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("jira returned %s", resp.Status)
+	}
+
+	var response TransitionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, err
+	}
+
+	return &response, nil
 }
