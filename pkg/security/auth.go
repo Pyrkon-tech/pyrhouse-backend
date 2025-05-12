@@ -1,6 +1,7 @@
 package security
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
@@ -63,4 +65,20 @@ func GenerateJWT(userID string, role string, username string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(jwtSecret)
+}
+
+func GetUserIDFromToken(c *gin.Context) (string, error) {
+	token, err := getTokenFromContext(c)
+
+	if err != nil {
+		return "", err
+	}
+
+	claims := token.Claims.(jwt.MapClaims)
+	userID, ok := claims["userID"].(string)
+	if !ok {
+		return "", fmt.Errorf("userID is not a string")
+	}
+
+	return userID, nil
 }

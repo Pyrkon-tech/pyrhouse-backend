@@ -12,6 +12,7 @@ import (
 	"warehouse/internal/inventory/transfers"
 	"warehouse/internal/locations"
 	"warehouse/internal/repository"
+	"warehouse/internal/service_desk"
 	"warehouse/internal/users"
 	"warehouse/pkg/auditlog"
 	"warehouse/pkg/security"
@@ -30,6 +31,7 @@ type Container struct {
 	GoogleSheetsHandler *googlesheets.GoogleSheetsHandler
 	ItemCategoryHandler *category.ItemCategoryHandler
 	JiraHandler         *jira.JiraHandler
+	ServiceDeskHandler  *service_desk.Handler
 }
 
 func NewAppContainer(db *sql.DB) *Container {
@@ -49,6 +51,7 @@ func NewAppContainer(db *sql.DB) *Container {
 	transferRepository := transfers.NewRepository(repo)
 	transferHandler := transfers.NewHandler(repo, transferRepository, assetRepo, auditLog)
 	itemsHandler := items.NewItemHandler(repo, stockRepo, assetRepo, auditLogRepo)
+	serviceDeskHandler := service_desk.NewHandler(repo)
 
 	// Inicjalizacja handlera Google Sheets
 	googleSheetsHandler, err := googlesheets.NewGoogleSheetsHandler()
@@ -75,5 +78,6 @@ func NewAppContainer(db *sql.DB) *Container {
 		GoogleSheetsHandler: googleSheetsHandler,
 		ItemCategoryHandler: itemCategoryHandler,
 		JiraHandler:         jiraHandler,
+		ServiceDeskHandler:  serviceDeskHandler,
 	}
 }

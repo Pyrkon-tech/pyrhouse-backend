@@ -12,6 +12,7 @@ import (
 
 func RegisterPublicRoutes(router *gin.Engine, container *container.Container) {
 	container.LoginHandler.RegisterRoutes(router)
+	container.ServiceDeskHandler.RegisterPublicRoutes(router)
 }
 
 func RegisterProtectedRoutes(router *gin.Engine, container *container.Container) {
@@ -25,6 +26,7 @@ func RegisterProtectedRoutes(router *gin.Engine, container *container.Container)
 	container.UserHandler.RegisterRoutes(protectedRoutes)
 	container.TransferHandler.RegisterRoutes(protectedRoutes)
 	container.LocationHandler.RegisterRoutes(protectedRoutes)
+	container.ServiceDeskHandler.RegisterRoutes(protectedRoutes)
 	if container.GoogleSheetsHandler != nil {
 		container.GoogleSheetsHandler.RegisterRoutes(protectedRoutes)
 		log.Println("Google Sheets API routes registered successfully")
