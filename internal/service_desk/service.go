@@ -2,7 +2,6 @@ package service_desk
 
 import (
 	"errors"
-	"log"
 	"time"
 )
 
@@ -57,29 +56,40 @@ func (s *Service) ChangeStatus(requestID int, newStatus string) error {
 }
 
 func (s *Service) AssignRequest(requestID int, userID int) error {
-	return errors.New("not implemented")
-	// req, err := s.repository.GetRequest(requestID)
-	// if err != nil {
-	// 	return err
-	// }
 
-	// req.AssignedTo = &userID
-	// req.UpdatedAt = time.Now()
-	// return s.UpdateRequest(req)
+	exists, err := s.repository.RequestsExists(requestID)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		return ErrRequestNotFound
+	}
+
+	UpdatedAt := time.Now()
+
+	return s.repository.UpdateRequestAssignedTo(requestID, userID, UpdatedAt)
 }
 
-func (s *Service) AddComment(requestID string, content string, userID int) error {
-	comment := &RequestComment{
+func (s *Service) AddComment(requestID int, content string, userID int) (*Comment, error) {
+	commentReq := &RequestComment{
 		RequestID: requestID,
 		Content:   content,
 		UserID:    userID,
 		CreatedAt: time.Now(),
 	}
 
-	log.Println(comment)
+	commentID, err := s.repository.CreateComment(commentReq)
+	if err != nil {
+		return nil, err
+	}
 
-	// TODO: Implementacja zapisywania komentarza
-	return nil
+	comment, err := s.repository.GetComment(commentID)
+	if err != nil {
+		return nil, err
+	}
+
+	return comment, nil
 }
 
 func (s *Service) GetRequestTypes() []RequestType {

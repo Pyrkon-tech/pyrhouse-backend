@@ -29,6 +29,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	{
 		serviceDesk.GET("/requests", security.Authorize("user"), h.getRequests)
 		serviceDesk.GET("/requests/:id", security.Authorize("user"), h.getRequest)
+		serviceDesk.GET("/requests/:id/comments", security.Authorize("user"), h.getComments)
 		serviceDesk.PUT("/requests/:id/status", security.Authorize("user"), h.changeStatus)
 		serviceDesk.PUT("/requests/:id/assign", security.Authorize("user"), h.assignRequest)
 		serviceDesk.POST("/requests/:id/comments", security.Authorize("user"), h.addComment)
@@ -43,7 +44,6 @@ func (h *Handler) RegisterPublicRoutes(router *gin.Engine) {
 	}
 }
 
-// TODO: Implementacja pobierania listy zgłoszeń z filtrowaniem
 func (h *Handler) getRequests(c *gin.Context) {
 	status := c.Query("status")
 	limitInt, offsetInt, err := h.getQueryPaginationParams(c)
@@ -103,6 +103,23 @@ func (h *Handler) createRequest(c *gin.Context) {
 	c.JSON(http.StatusCreated, req)
 }
 
+func (h *Handler) getComments(c *gin.Context) {
+	id := c.Param("id")
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID"})
+		return
+	}
+
+	comments, err := h.repository.GetComments(idInt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd pobierania komentarzy", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, comments)
+}
+
 func (h *Handler) changeStatus(c *gin.Context) {
 	reqID := c.Param("id")
 	id, err := strconv.Atoi(reqID)
@@ -129,9 +146,27 @@ func (h *Handler) changeStatus(c *gin.Context) {
 }
 
 func (h *Handler) assignRequest(c *gin.Context) {
-	// id := c.Param("id")
+	id := c.Param("id")
+
+	reqID, err := strconv.Atoi(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID"})
+		return
+	}
+
+	exists, err := h.repository.RequestsExists(reqID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd sprawdzania czy zgłoszenie istnieje", "details": err.Error()})
+		return
+	}
+
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Zgłoszenie nie znalezione"})
+		return
+	}
+
 	var req struct {
-		UserID string `json:"user_id" binding:"required"`
+		AssignedToID int `json:"assigned_to_id" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -139,19 +174,33 @@ func (h *Handler) assignRequest(c *gin.Context) {
 		return
 	}
 
-	// TODO: Pobierz użytkownika po ID
-	// user := getUserByID(req.UserID)
-
-	// if err := h.service.AssignRequest(id, user); err != nil {
-	//     c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd przypisania zgłoszenia"})
-	//     return
-	// }
+	if err := h.service.AssignRequest(reqID, req.AssignedToID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd przypisania zgłoszenia", "details": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Zgłoszenie przypisane"})
 }
 
 func (h *Handler) addComment(c *gin.Context) {
-	// id := c.Param("id")
+	id := c.Param("id")
+	reqID, err := strconv.Atoi(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID"})
+		return
+	}
+
+	exists, err := h.repository.RequestsExists(reqID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd sprawdzania czy zgłoszenie istnieje", "details": err.Error()})
+		return
+	}
+
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Zgłoszenie nie znalezione"})
+		return
+	}
+
 	var req struct {
 		Content string `json:"content" binding:"required"`
 	}
@@ -161,15 +210,26 @@ func (h *Handler) addComment(c *gin.Context) {
 		return
 	}
 
-	// TODO: Pobierz użytkownika z kontekstu
-	// user := getUserFromContext(c)
+	userIDstring, err := security.GetUserIDFromToken(c)
 
-	// if err := h.service.AddComment(id, req.Content, user); err != nil {
-	//     c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd dodawania komentarza"})
-	//     return
-	// }
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd pobierania ID użytkownika", "details": err.Error()})
+		return
+	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Komentarz dodany"})
+	userID, err := strconv.Atoi(userIDstring)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd konwersji ID użytkownika", "details": err.Error()})
+		return
+	}
+
+	comment, err := h.service.AddComment(reqID, req.Content, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd dodawania komentarza", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, comment)
 }
 
 func (h *Handler) getRequestTypes(c *gin.Context) {

@@ -27,11 +27,29 @@ type Request struct {
 }
 
 type RequestComment struct {
+	ID        int       `json:"id" db:"id"`
+	RequestID int       `json:"request_id" db:"request_id"`
+	Content   string    `json:"content" db:"comment"`
+	UserID    int       `json:"created_by" db:"user_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+}
+
+type Comment struct {
 	ID        int       `json:"id"`
-	RequestID string    `json:"request_id"`
+	RequestID int       `json:"request_id"`
 	Content   string    `json:"content"`
-	UserID    int       `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
+	User      *User     `json:"user"`
+}
+
+type FlatComment struct {
+	ID        int       `db:"id"`
+	RequestID int       `db:"request_id"`
+	Content   string    `db:"comment"`
+	CreatedAt time.Time `db:"created_at"`
+	UserID    int       `db:"user_id"`
+	Username  string    `db:"comment_user_username"`
+	Fullname  string    `db:"comment_user_fullname"`
 }
 
 type RequestResponse struct {
