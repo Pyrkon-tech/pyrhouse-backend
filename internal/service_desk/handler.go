@@ -3,6 +3,7 @@ package service_desk
 import (
 	"net/http"
 	"strconv"
+	"time"
 	"warehouse/internal/repository"
 	"warehouse/pkg/security"
 
@@ -10,17 +11,22 @@ import (
 )
 
 type Handler struct {
-	service    *Service
-	repository *ServiceDeskRepository
+	service     *Service
+	repository  *ServiceDeskRepository
+	rateLimiter *RateLimiter
 }
 
 func NewHandler(repository *repository.Repository) *Handler {
 	serviceDeskRepository := NewServiceDeskRepository(repository)
 	service := NewService(serviceDeskRepository)
 
+	// Inicjalizacja rate limitera: 100 requestów na minutę
+	rateLimiter := NewRateLimiter(15, time.Minute)
+
 	return &Handler{
-		service:    service,
-		repository: serviceDeskRepository,
+		service:     service,
+		repository:  serviceDeskRepository,
+		rateLimiter: rateLimiter,
 	}
 }
 
@@ -79,14 +85,34 @@ func (h *Handler) getRequest(c *gin.Context) {
 }
 
 func (h *Handler) createRequest(c *gin.Context) {
+	// Sprawdź czy użytkownik jest zalogowany
+	userID, err := security.GetUserIDFromToken(c)
+
+	// Jeśli użytkownik nie jest zalogowany, sprawdź rate limit
+	if err != nil || userID == "" {
+		clientIP := c.ClientIP()
+		if !h.rateLimiter.IsAllowed(clientIP) {
+			remaining := h.rateLimiter.GetRemainingRequests(clientIP)
+			c.Header("X-RateLimit-Limit", "15")
+			c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
+			c.Header("X-RateLimit-Reset", time.Now().Add(time.Minute).Format(time.RFC3339))
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":     "Przekroczono limit zapytań. Spróbuj ponownie później lub zaloguj się.",
+				"remaining": remaining,
+				"reset_at":  time.Now().Add(time.Minute).Format(time.RFC3339),
+			})
+			return
+		}
+	}
+
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format danych"})
 		return
 	}
 
-	userID, err := security.GetUserIDFromToken(c)
-	if err == nil {
+	// Jeśli użytkownik jest zalogowany, ustaw jego ID
+	if userID != "" {
 		id, err := strconv.Atoi(userID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd konwersji ID użytkownika"})
