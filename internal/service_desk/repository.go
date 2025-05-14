@@ -49,33 +49,30 @@ func (r *ServiceDeskRepository) CreateRequest(request *Request) error {
 }
 
 func (r *ServiceDeskRepository) UpdateRequestStatus(request *Request) error {
-	query := r.Repository.GoquDBWrapper.Update("service_desk_requests").
-		Set(goqu.Record{
-			"status":     request.Status,
-			"updated_at": request.UpdatedAt,
-		}).
-		Where(goqu.Ex{"id": request.ID})
-
-	if _, err := query.Executor().ScanVal(&request.ID); err != nil {
-		return fmt.Errorf("unable to execute SQL: %w", err)
+	dataSet := goqu.Record{
+		"status":     request.Status,
+		"updated_at": request.UpdatedAt,
 	}
 
-	return nil
+	return r.updateRequest(request.ID, dataSet)
 }
 
 func (r *ServiceDeskRepository) UpdateRequestAssignedTo(requestID int, assignedToID int, UpdatedAt time.Time) error {
-	query := r.Repository.GoquDBWrapper.Update("service_desk_requests").
-		Set(goqu.Record{
-			"assigned_to_id": assignedToID,
-			"updated_at":     UpdatedAt,
-		}).
-		Where(goqu.Ex{"id": requestID})
-
-	if _, err := query.Executor().ScanVal(&requestID); err != nil {
-		return fmt.Errorf("unable to execute SQL: %w", err)
+	dataSet := goqu.Record{
+		"assigned_to_id": assignedToID,
+		"updated_at":     UpdatedAt,
 	}
 
-	return nil
+	return r.updateRequest(requestID, dataSet)
+}
+
+func (r *ServiceDeskRepository) UpdateRequestPriority(requestID int, priority string) error {
+	dataSet := goqu.Record{
+		"priority":   priority,
+		"updated_at": time.Now(),
+	}
+
+	return r.updateRequest(requestID, dataSet)
 }
 
 func (r *ServiceDeskRepository) GetRequest(id int) (*RequestResponse, error) {
@@ -238,6 +235,18 @@ func (r *ServiceDeskRepository) GetComments(requestID int) ([]*Comment, error) {
 	}
 
 	return commentsResponse, nil
+}
+
+func (r *ServiceDeskRepository) updateRequest(requestID int, dataSet goqu.Record) error {
+	query := r.Repository.GoquDBWrapper.Update("service_desk_requests").
+		Set(dataSet).
+		Where(goqu.Ex{"id": requestID})
+
+	if _, err := query.Executor().ScanVal(&requestID); err != nil {
+		return fmt.Errorf("unable to execute SQL: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ServiceDeskRepository) prepareRequestQuery() *goqu.SelectDataset {

@@ -37,6 +37,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		serviceDesk.GET("/requests/:id/comments", security.Authorize("user"), h.getComments)
 		serviceDesk.PUT("/requests/:id/status", security.Authorize("user"), h.changeStatus)
 		serviceDesk.PUT("/requests/:id/assign", security.Authorize("user"), h.assignRequest)
+		serviceDesk.PUT("/requests/:id/priority", security.Authorize("user"), h.changePriority)
 		serviceDesk.POST("/requests/:id/comments", security.Authorize("user"), h.addComment)
 		serviceDesk.GET("/request-types", security.Authorize("user"), h.getRequestTypes)
 	}
@@ -205,6 +206,47 @@ func (h *Handler) assignRequest(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Zgłoszenie przypisane"})
+}
+
+func (h *Handler) changePriority(c *gin.Context) {
+	id := c.Param("id")
+	reqID, err := strconv.Atoi(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID"})
+		return
+	}
+
+	exists, err := h.repository.RequestsExists(reqID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd sprawdzania czy zgłoszenie istnieje", "details": err.Error()})
+		return
+	}
+
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Zgłoszenie nie znalezione"})
+		return
+	}
+
+	var req struct {
+		Priority string `json:"priority" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format danych"})
+		return
+	}
+
+	if req.Priority != "low" && req.Priority != "medium" && req.Priority != "high" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy priorytet"})
+		return
+	}
+
+	if err := h.repository.UpdateRequestPriority(reqID, req.Priority); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd zmiany priorytetu", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Priorytet zmieniony"})
 }
 
 func (h *Handler) addComment(c *gin.Context) {
