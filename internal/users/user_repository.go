@@ -58,7 +58,7 @@ func (r *userRepositoryImpl) GetUsers() ([]models.User, error) {
 
 func (r *userRepositoryImpl) GetUser(id int) (*models.User, error) {
 	var user models.User
-	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "password_hash", "role", "points").
+	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "password_hash", "role", "points", "active").
 		From("users").
 		Where(goqu.Ex{"id": id})
 
@@ -123,6 +123,10 @@ func (r *userRepositoryImpl) UpdateUser(id int, changes *models.UserChanges) err
 
 	if changes.Username != nil {
 		updateFields["username"] = *changes.Username
+	}
+
+	if changes.Active != nil {
+		updateFields["active"] = *changes.Active
 	}
 
 	query := r.repository.GoquDBWrapper.Update("users").
