@@ -1,4 +1,4 @@
-package service_desk
+package rate_limiter
 
 import (
 	"sync"

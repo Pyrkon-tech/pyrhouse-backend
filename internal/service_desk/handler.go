@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"warehouse/internal/rate_limiter"
 	"warehouse/internal/repository"
 	"warehouse/pkg/security"
 
@@ -13,15 +14,13 @@ import (
 type Handler struct {
 	service     *Service
 	repository  *ServiceDeskRepository
-	rateLimiter *RateLimiter
+	rateLimiter *rate_limiter.RateLimiter
 }
 
 func NewHandler(repository *repository.Repository) *Handler {
 	serviceDeskRepository := NewServiceDeskRepository(repository)
 	service := NewService(serviceDeskRepository)
-
-	// Inicjalizacja rate limitera: 100 requestów na minutę
-	rateLimiter := NewRateLimiter(15, time.Minute)
+	rateLimiter := rate_limiter.NewRateLimiter(15, time.Minute)
 
 	return &Handler{
 		service:     service,
