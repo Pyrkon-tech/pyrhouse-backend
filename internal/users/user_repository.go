@@ -31,6 +31,7 @@ func (r *userRepositoryImpl) PersistUser(req models.CreateUserRequest, hashedPas
 			"fullname":      req.Fullname,
 			"role":          req.Role,
 			"points":        req.Points,
+			"active":        req.Active,
 		})
 
 	_, err := query.Executor().Exec()
@@ -43,7 +44,7 @@ func (r *userRepositoryImpl) PersistUser(req models.CreateUserRequest, hashedPas
 
 func (r *userRepositoryImpl) GetUsers() ([]models.User, error) {
 	var users []models.User
-	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "role", "points").
+	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "role", "points", "active").
 		From("users")
 
 	err := query.Executor().ScanStructs(&users)
@@ -67,6 +68,15 @@ func (r *userRepositoryImpl) GetUser(id int) (*models.User, error) {
 	}
 
 	return &user, nil
+}
+
+func (r *userRepositoryImpl) SetUserActive(userID int, active bool) error {
+	query := r.repository.GoquDBWrapper.Update("users").
+		Set(goqu.Record{"active": active}).
+		Where(goqu.Ex{"id": userID})
+
+	_, err := query.Executor().Exec()
+	return err
 }
 
 func (r *userRepositoryImpl) IsUsernameUnique(username string) (bool, error) {

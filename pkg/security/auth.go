@@ -42,10 +42,14 @@ func init() {
 func AuthenticateUser(username, password string, repo *repository.Repository) (*models.User, error) {
 	var user models.User
 
-	query := repo.GoquDBWrapper.Select("id", "username", "password_hash", "role").From("users").Where(goqu.Ex{"username": username})
+	query := repo.GoquDBWrapper.Select("id", "username", "password_hash", "role", "active").From("users").Where(goqu.Ex{"username": username})
 
 	if _, err := query.Executor().ScanStruct(&user); err != nil {
 		return nil, err
+	}
+
+	if !user.Active {
+		return nil, fmt.Errorf("konto jest nieaktywne")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {

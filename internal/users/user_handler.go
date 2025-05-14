@@ -2,11 +2,11 @@ package users
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"warehouse/pkg/models"
+	"warehouse/pkg/roles"
 	"warehouse/pkg/security"
 
 	"github.com/gin-gonic/gin"
@@ -32,31 +32,66 @@ func (h *UsersHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.DELETE("/users/:id", security.Authorize("admin"), h.DeleteUser)
 }
 
-func (h *UsersHandler) RegisterUser(c *gin.Context) {
+func (h *UsersHandler) RegisterPublicRoutes(router *gin.Engine) {
+	router.POST("/users/register", h.RegisterPublicUser)
+}
+
+func (h *UsersHandler) RegisterPublicUser(c *gin.Context) {
 	var req models.CreateUserRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		log.Fatal(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe dane wejściowe", "details": err.Error()})
 		return
 	}
-	log.Println(req.Username)
 
+	req.Active = false
+	userRole := roles.Role("user")
+	req.Role = &userRole
+	err := h.createUser(req)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się utworzyć użytkownika", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Użytkownik zarejestrowany pomyślnie"})
+}
+
+func (h *UsersHandler) RegisterUser(c *gin.Context) {
+
+	var req models.CreateUserRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe dane wejściowe", "details": err.Error()})
+		return
+	}
+
+	req.Active = true
+
+	err := h.createUser(req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się utworzyć użytkownika", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Użytkownik zarejestrowany pomyślnie"})
+}
+
+func (h *UsersHandler) createUser(req models.CreateUserRequest) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
-		return
+		return err
+	}
+
+	if req.Role == nil {
+		defaultRole := roles.Role("user")
+		req.Role = &defaultRole
 	}
 
 	err = h.Repository.PersistUser(req, hashedPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to create user",
-			"details": err.Error(),
-		})
-		return
+		return err
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
+	return nil
 }
 
 type UpdateUserContext struct {
@@ -151,6 +186,10 @@ func (h *UsersHandler) validateAndApplyChanges(ctx *UpdateUserContext) error {
 	}
 
 	if err := h.validateUsernameChange(ctx); err != nil {
+		return err
+	}
+
+	if err := h.validateActiveChange(ctx); err != nil {
 		return err
 	}
 
@@ -259,6 +298,21 @@ func (h *UsersHandler) validateUsernameChange(ctx *UpdateUserContext) error {
 	}
 
 	ctx.changes.Username = ctx.req.Username
+	return nil
+}
+
+func (h *UsersHandler) validateActiveChange(ctx *UpdateUserContext) error {
+	if ctx.req.Active == nil {
+		return nil
+	}
+
+	if !ctx.isAdmin {
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Tylko administrator może zmienić aktywność użytkownika"})
+		return fmt.Errorf("unauthorized active change")
+	}
+
+	active := *ctx.req.Active
+	ctx.changes.Active = &active
 	return nil
 }
 

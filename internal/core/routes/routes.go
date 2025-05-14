@@ -13,6 +13,7 @@ import (
 func RegisterPublicRoutes(router *gin.Engine, container *container.Container) {
 	container.LoginHandler.RegisterRoutes(router)
 	container.ServiceDeskHandler.RegisterPublicRoutes(router)
+	container.UserHandler.RegisterPublicRoutes(router)
 }
 
 func RegisterProtectedRoutes(router *gin.Engine, container *container.Container) {
