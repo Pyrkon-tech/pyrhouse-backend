@@ -168,7 +168,10 @@ func NewRepository(r *repository.Repository) UserRepository {
 }
 
 func (r *userRepositoryImpl) UsersExists(userIDs []int) (bool, error) {
-	var dbUserIDs []int
+	type UserID struct {
+		ID int `db:"id"`
+	}
+	var dbUserIDs []UserID
 	query := r.repository.GoquDBWrapper.Select("id").From("users").Where(goqu.Ex{"id": userIDs})
 
 	err := query.Executor().ScanStructs(&dbUserIDs)

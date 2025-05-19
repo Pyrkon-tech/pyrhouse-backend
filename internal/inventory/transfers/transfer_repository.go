@@ -457,24 +457,26 @@ func (r *transferRepository) UpdateStockItemsTransferStatus(tx *goqu.TxDatabase,
 }
 
 func (r *transferRepository) SetTransferUsers(transferID int, userIDs []int) error {
-	deleteQuery := r.Repo.GoquDBWrapper.Delete("transfer_users").Where(goqu.Ex{"transfer_id": transferID})
+	return repository.WithTransaction(r.Repo.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		deleteQuery := tx.Delete("transfer_users").Where(goqu.Ex{"transfer_id": transferID})
 
-	_, err := deleteQuery.Executor().Exec()
-	if err != nil {
-		return fmt.Errorf("failed to delete transfer users: %w", err)
-	}
+		_, err := deleteQuery.Executor().Exec()
+		if err != nil {
+			return fmt.Errorf("failed to delete transfer users: %w", err)
+		}
 
-	var rows []goqu.Record
-	for _, userID := range userIDs {
-		rows = append(rows, goqu.Record{"transfer_id": transferID, "user_id": userID})
-	}
+		var rows []goqu.Record
+		for _, userID := range userIDs {
+			rows = append(rows, goqu.Record{"transfer_id": transferID, "user_id": userID})
+		}
 
-	insertQuery := r.Repo.GoquDBWrapper.Insert("transfer_users").Rows(rows)
+		insertQuery := tx.Insert("transfer_users").Rows(rows)
 
-	_, err = insertQuery.Executor().Exec()
-	if err != nil {
-		return fmt.Errorf("failed to set transfer user: %w", err)
-	}
+		_, err = insertQuery.Executor().Exec()
+		if err != nil {
+			return fmt.Errorf("failed to set transfer user: %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }
