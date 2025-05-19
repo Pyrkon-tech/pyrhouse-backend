@@ -83,10 +83,12 @@ func (s *InventoryLog) CreateTransferAuditLogEntry(action string, ts *models.Tra
 		s.a.Log(
 			action,
 			map[string]interface{}{
-				"transfer_id":      ts.ID,
-				"from_location_id": ts.FromLocation.ID,
-				"to_location_id":   ts.ToLocation.ID,
-				"msg":              messages["assetsMessage"],
+				"transfer_id":        ts.ID,
+				"from_location_id":   ts.FromLocation.ID,
+				"from_location_name": ts.FromLocation.Name,
+				"to_location_id":     ts.ToLocation.ID,
+				"to_location_name":   ts.ToLocation.Name,
+				"msg":                messages["assetsMessage"],
 			},
 			&asset,
 		)
