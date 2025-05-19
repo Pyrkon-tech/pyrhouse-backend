@@ -49,7 +49,7 @@ func NewAppContainer(db *sql.DB) *Container {
 	locationRepository := locations.NewLocationRepository(repo)
 	locationHandler := locations.NewLocationHandler(locationRepository)
 	transferRepository := transfers.NewRepository(repo)
-	transferHandler := transfers.NewHandler(repo, transferRepository, assetRepo, auditLog)
+	transferHandler := transfers.NewHandler(repo, transferRepository, assetRepo, userRepo, auditLog)
 	itemsHandler := items.NewItemHandler(repo, stockRepo, assetRepo, auditLogRepo)
 	serviceDeskHandler := service_desk.NewHandler(repo)
 

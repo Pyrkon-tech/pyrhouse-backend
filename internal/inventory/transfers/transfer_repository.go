@@ -29,6 +29,7 @@ type TransferRepository interface {
 	GetTransferUsers(transferID int) ([]models.User, error)
 	UpdateDeliveryLocation(transferID int, latitude float64, longitude float64, timestamp time.Time) error
 	UpdateStockItemsTransferStatus(tx *goqu.TxDatabase, transferID int, status string) error
+	SetTransferUsers(transferID int, userIDs []int) error
 }
 
 type transferRepository struct {
@@ -450,6 +451,29 @@ func (r *transferRepository) UpdateStockItemsTransferStatus(tx *goqu.TxDatabase,
 	_, err := query.Executor().Exec()
 	if err != nil {
 		return fmt.Errorf("failed to update stock items transfer status: %w", err)
+	}
+
+	return nil
+}
+
+func (r *transferRepository) SetTransferUsers(transferID int, userIDs []int) error {
+	deleteQuery := r.Repo.GoquDBWrapper.Delete("transfer_users").Where(goqu.Ex{"transfer_id": transferID})
+
+	_, err := deleteQuery.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to delete transfer users: %w", err)
+	}
+
+	var rows []goqu.Record
+	for _, userID := range userIDs {
+		rows = append(rows, goqu.Record{"transfer_id": transferID, "user_id": userID})
+	}
+
+	insertQuery := r.Repo.GoquDBWrapper.Insert("transfer_users").Rows(rows)
+
+	_, err = insertQuery.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to set transfer user: %w", err)
 	}
 
 	return nil

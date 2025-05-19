@@ -10,6 +10,7 @@ import (
 	inventorylog "warehouse/internal/inventory/inventory_log"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
+	"warehouse/internal/users"
 	"warehouse/pkg/auditlog"
 	"warehouse/pkg/metadata"
 	"warehouse/pkg/models"
@@ -32,13 +33,19 @@ type DeliveryLocationRequest struct {
 	} `json:"delivery_location" binding:"required"`
 }
 
-func NewHandler(r *repository.Repository, tr TransferRepository, ar *assets.AssetsRepository, a *auditlog.Auditlog) *TransferHandler {
+func NewHandler(
+	r *repository.Repository,
+	tr TransferRepository,
+	ar *assets.AssetsRepository,
+	ur users.UserRepository,
+	a *auditlog.Auditlog,
+) *TransferHandler {
 	stockRepo := stocks.NewRepository(r)
 	inventorylog := inventorylog.NewInventoryLog(a)
 
 	return &TransferHandler{
 		TransferRepository: tr,
-		Service:            &TransferService{r, tr, ar, stockRepo, inventorylog},
+		Service:            &TransferService{r, tr, ar, stockRepo, ur, inventorylog},
 		AssetRepo:          ar,
 	}
 }
@@ -53,6 +60,7 @@ func (h *TransferHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.PATCH("/transfers/:id/assets/:item_id/restore-to-location", h.RemoveAssetFromTransfer)
 	router.PATCH("/transfers/:id/categories/:category_id/restore-to-location", h.RemoveStockItemFromTransfer)
 	router.PATCH("/transfers/:id/delivery-location", h.UpdateDeliveryLocation)
+	router.PUT("/transfers/:id/users", h.UpdateTransferUsers)
 }
 
 func (h *TransferHandler) GetTransfer(c *gin.Context) {
@@ -169,7 +177,6 @@ func (h *TransferHandler) RemoveAssetFromTransfer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"transfer_id": req.ID})
 }
 
-// RemoveStockItemFromTransfer obsługuje zapytanie o usunięcie pozycji magazynowej z transferu
 func (h *TransferHandler) RemoveStockItemFromTransfer(c *gin.Context) {
 	var req stocks.RemoveStockItemFromTransferRequest
 
@@ -335,4 +342,30 @@ func (h *TransferHandler) UpdateDeliveryLocation(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Lokalizacja dostawy została zaktualizowana"})
+}
+
+func (h *TransferHandler) UpdateTransferUsers(c *gin.Context) {
+	transferID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid transfer ID parameter, must be an integer"})
+		return
+	}
+
+	var req struct {
+		Users []int `json:"users"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	err = h.Service.UpdateTransferUsers(transferID, req.Users)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się zaktualizować użytkowników transferu", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Użytkownicy transferu zaktualizowani pomyślnie"})
 }

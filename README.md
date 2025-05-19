@@ -51,6 +51,7 @@ Structure initially based on GoLang official docs
 - `docker-compose down -v` -> remove volume to repopulate sql
 
 ### Envs to run application:
+>Either to setup local .env or your the way your production infrastructure requires it
 ```
 # Core
 DATABASE_URL

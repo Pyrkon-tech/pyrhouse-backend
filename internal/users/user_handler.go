@@ -306,8 +306,16 @@ func (h *UsersHandler) validateActiveChange(ctx *UpdateUserContext) error {
 		return nil
 	}
 
-	if !ctx.isAdmin {
-		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Tylko administrator może zmienić aktywność użytkownika"})
+	switch true {
+	case ctx.isAdmin:
+		active := *ctx.req.Active
+		ctx.changes.Active = &active
+		return nil
+	case ctx.isModerator && ctx.user.Role != "user":
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Nie można zmienić aktywności użytkownika, który ma rolę inną niż użytkownik"})
+		return fmt.Errorf("unauthorized active change")
+	case !ctx.isAdmin && !ctx.isModerator:
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Tylko administrator lub moderator może zmienić aktywność użytkownika"})
 		return fmt.Errorf("unauthorized active change")
 	}
 

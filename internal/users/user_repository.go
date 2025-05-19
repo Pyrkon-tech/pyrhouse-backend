@@ -17,6 +17,7 @@ type UserRepository interface {
 	AddUserPoints(id int, points int) error
 	UpdateUser(id int, changes *models.UserChanges) error
 	DeleteUser(id int) error
+	UsersExists(userIDs []int) (bool, error)
 }
 
 type userRepositoryImpl struct {
@@ -164,4 +165,16 @@ func (r *userRepositoryImpl) DeleteUser(id int) error {
 
 func NewRepository(r *repository.Repository) UserRepository {
 	return &userRepositoryImpl{repository: r}
+}
+
+func (r *userRepositoryImpl) UsersExists(userIDs []int) (bool, error) {
+	var dbUserIDs []int
+	query := r.repository.GoquDBWrapper.Select("id").From("users").Where(goqu.Ex{"id": userIDs})
+
+	err := query.Executor().ScanStructs(&dbUserIDs)
+	if err != nil {
+		return false, fmt.Errorf("failed to get users: %w", err)
+	}
+
+	return len(dbUserIDs) == len(userIDs), nil
 }

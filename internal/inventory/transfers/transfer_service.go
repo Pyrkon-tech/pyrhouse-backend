@@ -8,6 +8,7 @@ import (
 	inventorylog "warehouse/internal/inventory/inventory_log"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/repository"
+	"warehouse/internal/users"
 	"warehouse/pkg/metadata"
 	"warehouse/pkg/models"
 
@@ -19,6 +20,7 @@ type TransferService struct {
 	tr        TransferRepository
 	ar        *assets.AssetsRepository
 	stockRepo *stocks.StockRepository
+	ur        users.UserRepository
 	il        *inventorylog.InventoryLog
 }
 
@@ -27,13 +29,21 @@ type ValidationError struct {
 	Property string `json:"property"`
 }
 
-func NewService(r *repository.Repository, tr TransferRepository, ar *assets.AssetsRepository, sr *stocks.StockRepository, il *inventorylog.InventoryLog) *TransferService {
+func NewService(
+	r *repository.Repository,
+	tr TransferRepository,
+	ar *assets.AssetsRepository,
+	sr *stocks.StockRepository,
+	ur users.UserRepository,
+	il *inventorylog.InventoryLog,
+) *TransferService {
 	return &TransferService{
 		r:         r,
 		tr:        tr,
 		ar:        ar,
 		stockRepo: sr,
 		il:        il,
+		ur:        ur,
 	}
 }
 
@@ -485,4 +495,22 @@ func (s *TransferService) buildTransferConditions(req models.RetrieveTransferLis
 	}
 
 	return conditions
+}
+
+func (s *TransferService) UpdateTransferUsers(transferID int, userIDs []int) error {
+	usersExists, err := s.ur.UsersExists(userIDs)
+	if err != nil {
+		return fmt.Errorf("failed to validate transfer users: %w", err)
+	}
+
+	if !usersExists {
+		return fmt.Errorf("some users do not exist")
+	}
+
+	err = s.tr.SetTransferUsers(transferID, userIDs)
+	if err != nil {
+		return fmt.Errorf("failed to update transfer users: %w", err)
+	}
+
+	return nil
 }
