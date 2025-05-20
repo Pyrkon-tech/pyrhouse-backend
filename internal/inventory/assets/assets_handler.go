@@ -227,15 +227,16 @@ func (h *ItemHandler) CreateBulkAssets(c *gin.Context) {
 
 	createdAssets, errors, err := h.assetService.CreateBulkAssets(req)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się utworzyć zasobów zbiorczo", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Wystąpił nieoczekiwany błąd podczas tworzenia zasobów zbiorczo", "details": err.Error()})
+		return
+	}
+	if len(errors) > 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Wystąpiły błędy podczas tworzenia zasobów zbiorczo, nie utworzono żadnych zasobów", "errors": errors})
 		return
 	}
 
 	response := gin.H{
 		"created": createdAssets,
-	}
-	if len(errors) > 0 {
-		response["errors"] = errors
 	}
 
 	c.JSON(http.StatusCreated, response)
