@@ -23,6 +23,10 @@ type DeliveryLocation struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+type DeliveryLocationRequest struct {
+	DeliveryLocation DeliveryLocation `json:"delivery_location" binding:"required"`
+}
+
 type TransferUser struct {
 	UserID int `json:"id" binding:"required" db:"user_id"`
 }

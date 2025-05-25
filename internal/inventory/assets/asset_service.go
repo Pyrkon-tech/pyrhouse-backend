@@ -156,3 +156,27 @@ func (s *AssetService) RemoveAssets(assets []models.Asset) error {
 	}
 	return nil
 }
+
+func (s *AssetService) UpdateAssetLocation(assetID int, req models.DeliveryLocation) error {
+	asset, err := s.assetsRepo.GetAsset(assetID)
+	if err != nil {
+		return fmt.Errorf("nie udało się pobrać zasobu: %v", err)
+	}
+
+	s.auditLog.Log(
+		"last_known_location",
+		map[string]interface{}{
+			"asset_id": asset.ID,
+			"msg":      "Ostatnia zarejestrowana lokalizacja",
+			"location": map[string]interface{}{
+				"location_id": asset.Location.ID,
+				"latitude":    req.Lat,
+				"longitude":   req.Lng,
+				"timestamp":   req.Timestamp,
+			},
+		},
+		asset,
+	)
+
+	return nil
+}

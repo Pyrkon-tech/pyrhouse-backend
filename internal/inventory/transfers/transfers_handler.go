@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 	"warehouse/internal/inventory/assets"
 	inventorylog "warehouse/internal/inventory/inventory_log"
 	"warehouse/internal/inventory/stocks"
@@ -23,14 +22,6 @@ type TransferHandler struct {
 	TransferRepository TransferRepository
 	Service            *TransferService
 	AssetRepo          *assets.AssetsRepository
-}
-
-type DeliveryLocationRequest struct {
-	DeliveryLocation struct {
-		Lat       float64   `json:"lat" binding:"required"`
-		Lng       float64   `json:"lng" binding:"required"`
-		Timestamp time.Time `json:"timestamp" binding:"required"`
-	} `json:"delivery_location" binding:"required"`
 }
 
 func NewHandler(
@@ -318,7 +309,7 @@ func (h *TransferHandler) UpdateDeliveryLocation(c *gin.Context) {
 		return
 	}
 
-	var req DeliveryLocationRequest
+	var req models.DeliveryLocationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe dane"})
 		return

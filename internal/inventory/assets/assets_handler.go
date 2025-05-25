@@ -34,12 +34,12 @@ func NewAssetHandler(r *repository.Repository, ar *AssetsRepository, a *auditlog
 
 func (h *ItemHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/assets/pyrcode/:serial", h.GetItemByPyrCode)
-
 	router.POST("/assets", security.Authorize("user"), h.CreateAsset)
 	router.POST("/assets/bulk", security.Authorize("user"), h.CreateBulkAssets)
 	router.POST("/assets/without-serial", security.Authorize("user"), h.CreateAssetWithoutSerial)
 	router.DELETE("/assets/:id", security.Authorize("moderator"), h.RemoveAsset)
 	router.PATCH("/assets/:id/serial", security.Authorize("moderator"), h.UpdateAssetSerial)
+	router.PATCH("/assets/:id/logs/location", security.Authorize("user"), h.UpdateAssetLocation)
 	router.GET("/assets/report", security.Authorize("moderator"), h.GetAssetsReport)
 	router.GET("/stocks/report", security.Authorize("moderator"), h.GetStockReport)
 }
@@ -434,4 +434,25 @@ func (h *ItemHandler) GetStockReport(c *gin.Context) {
 		}
 	}
 	writer.Flush()
+}
+
+func (h *ItemHandler) UpdateAssetLocation(c *gin.Context) {
+	assetID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID zasobu"})
+		return
+	}
+	var reqLocation models.DeliveryLocationRequest
+	if err := c.ShouldBindJSON(&reqLocation); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format żądania", "details": err.Error()})
+		return
+	}
+
+	err = h.assetService.UpdateAssetLocation(assetID, reqLocation.DeliveryLocation)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się zaktualizować lokalizacji zasobu", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Lokalizacja zasobu zaktualizowana"})
 }
