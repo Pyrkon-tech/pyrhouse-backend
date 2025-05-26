@@ -16,7 +16,8 @@ import (
 )
 
 type GoogleSheetsHandler struct {
-	sheetsService *sheets.Service
+	sheetsService       *sheets.Service
+	dutyScheduleService *DutyScheduleService
 }
 
 func NewGoogleSheetsHandler() (*GoogleSheetsHandler, error) {
@@ -53,12 +54,14 @@ func NewGoogleSheetsHandler() (*GoogleSheetsHandler, error) {
 	}
 
 	return &GoogleSheetsHandler{
-		sheetsService: sheetsService,
+		sheetsService:       sheetsService,
+		dutyScheduleService: NewDutyScheduleService(sheetsService),
 	}, nil
 }
 
 func (h *GoogleSheetsHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/sheets/quests", security.Authorize("user"), h.getQuests)
+	router.GET("/sheets/duty-schedule", h.getDutySchedule)
 }
 
 func (h *GoogleSheetsHandler) getQuests(c *gin.Context) {
@@ -123,4 +126,26 @@ func (h *GoogleSheetsHandler) ReadSpreadsheet(spreadsheetID string, readRange st
 	}
 
 	return resp.Values, nil
+}
+
+func (h *GoogleSheetsHandler) getDutySchedule(c *gin.Context) {
+	spreadsheetID := "11kikoxFRrhDiHJJNSvAky6kk8eblFO4jL6n3Hj3FPwo"
+	readRange := "G1:CH12" // Dostosuj zakres według potrzeb
+
+	values, err := h.ReadSpreadsheet(spreadsheetID, readRange)
+	if err != nil {
+		log.Printf("Błąd podczas pobierania danych: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	if values == nil {
+		log.Printf("Nie znaleziono danych w arkuszu")
+		c.JSON(http.StatusOK, [][]interface{}{})
+		return
+	}
+
+	c.JSON(http.StatusOK, values)
 }
