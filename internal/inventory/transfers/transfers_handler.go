@@ -87,6 +87,11 @@ func (h *TransferHandler) RetrieveTransferList(c *gin.Context) {
 		return
 	}
 
+	if len(*transfers) == 0 {
+		c.JSON(http.StatusOK, []models.Transfer{})
+		return
+	}
+
 	c.JSON(http.StatusOK, transfers)
 }
 
