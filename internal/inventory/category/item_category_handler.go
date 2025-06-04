@@ -45,6 +45,11 @@ func (h *ItemCategoryHandler) GetItemCategories(c *gin.Context) {
 		return
 	}
 
+	if len(*itemCategories) == 0 {
+		c.JSON(http.StatusOK, []models.ItemCategory{})
+		return
+	}
+
 	c.JSON(http.StatusOK, itemCategories)
 }
 
