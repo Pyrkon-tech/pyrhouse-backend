@@ -5,7 +5,7 @@ import (
 	"os"
 	"warehouse/internal/core/container"
 	"warehouse/internal/middleware"
-	"warehouse/pkg/security"
+	"warehouse/internal/security"
 
 	"github.com/gin-gonic/gin"
 )

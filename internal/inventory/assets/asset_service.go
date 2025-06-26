@@ -3,10 +3,10 @@ package assets
 import (
 	"fmt"
 	"log"
+	"warehouse/internal/auditlog"
+	custom_error "warehouse/internal/errors"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
-	"warehouse/pkg/auditlog"
-	custom_error "warehouse/pkg/errors"
-	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 )

@@ -2,7 +2,7 @@ package models
 
 import (
 	"database/sql"
-	"warehouse/pkg/metadata"
+	"warehouse/internal/metadata"
 )
 
 const (

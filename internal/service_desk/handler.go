@@ -6,7 +6,7 @@ import (
 	"time"
 	"warehouse/internal/rate_limiter"
 	"warehouse/internal/repository"
-	"warehouse/pkg/security"
+	"warehouse/internal/security"
 
 	"github.com/gin-gonic/gin"
 )

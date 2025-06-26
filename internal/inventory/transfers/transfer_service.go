@@ -7,10 +7,10 @@ import (
 	"warehouse/internal/inventory/assets"
 	inventorylog "warehouse/internal/inventory/inventory_log"
 	"warehouse/internal/inventory/stocks"
+	"warehouse/internal/metadata"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
 	"warehouse/internal/users"
-	"warehouse/pkg/metadata"
-	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 )

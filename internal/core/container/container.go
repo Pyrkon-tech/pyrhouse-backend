@@ -2,6 +2,7 @@ package container
 
 import (
 	"database/sql"
+	"warehouse/internal/auditlog"
 	auditLogRepo "warehouse/internal/auditlog"
 	"warehouse/internal/integrations/googlesheets"
 	"warehouse/internal/integrations/jira"
@@ -12,10 +13,9 @@ import (
 	"warehouse/internal/inventory/transfers"
 	"warehouse/internal/locations"
 	"warehouse/internal/repository"
+	"warehouse/internal/security"
 	"warehouse/internal/service_desk"
 	"warehouse/internal/users"
-	"warehouse/pkg/auditlog"
-	"warehouse/pkg/security"
 )
 
 type Container struct {

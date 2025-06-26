@@ -2,8 +2,8 @@ package category
 
 import (
 	"fmt"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
-	"warehouse/pkg/models"
 )
 
 type ItemCategoryService struct {

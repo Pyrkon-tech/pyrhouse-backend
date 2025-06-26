@@ -2,8 +2,8 @@ package users
 
 import (
 	"fmt"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
-	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/lib/pq"

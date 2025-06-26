@@ -2,9 +2,7 @@ package auditlog
 
 import (
 	"log"
-
-	"warehouse/internal/auditlog"
-	"warehouse/pkg/models"
+	"warehouse/internal/models"
 )
 
 type Persister interface {
@@ -34,7 +32,7 @@ func (a *Auditlog) Log(action string, data interface{}, item Auditable) {
 	log.Println("Created AuditLog entry for id ", auditLog.ResourceID)
 }
 
-func NewAuditLog(repository *auditlog.AuditLogRepository) *Auditlog {
+func NewAuditLog(repository *AuditLogRepository) *Auditlog {
 	a := Auditlog{r: repository}
 
 	return &a

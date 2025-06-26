@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"warehouse/pkg/security"
+	"warehouse/internal/security"
 
 	"google.golang.org/api/sheets/v4"
 

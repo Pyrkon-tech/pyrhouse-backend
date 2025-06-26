@@ -6,24 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"warehouse/pkg/roles"
+	"warehouse/internal/roles"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
-
-// TODO: Remove this and refactor the code to use the roles package
-const (
-	RoleUser      = 1
-	RoleModerator = 2
-	RoleAdmin     = 3
-)
-
-var roleHierarchy = map[string]int{
-	"user":      RoleUser,
-	"moderator": RoleModerator,
-	"admin":     RoleAdmin,
-}
 
 // JWTMiddleware validates JWT and extracts claims.
 func JWTMiddleware() gin.HandlerFunc {
@@ -65,10 +52,15 @@ func Authorize(requiredRole string) gin.HandlerFunc {
 			return
 		}
 
-		requiredRoleLevel, requiredExists := roleHierarchy[requiredRole]
-		userRoleLevel, userExists := roleHierarchy[userRole]
+		userRoleType := roles.Role(userRole)
+		requiredRoleType := roles.Role(requiredRole)
 
-		if !requiredExists || !userExists || userRoleLevel < requiredRoleLevel {
+		if !userRoleType.IsValid() || !requiredRoleType.IsValid() {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
+			return
+		}
+
+		if !userRoleType.HasPermission(requiredRoleType) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
 			return
 		}
@@ -88,14 +80,14 @@ func IsAllowed(c *gin.Context, requiredRole string) bool {
 		return false
 	}
 
-	requiredRoleLevel, requiredExists := roleHierarchy[requiredRole]
-	userRoleLevel, userExists := roleHierarchy[userRole]
+	userRoleType := roles.Role(userRole)
+	requiredRoleType := roles.Role(requiredRole)
 
-	if !requiredExists || !userExists || userRoleLevel < requiredRoleLevel {
+	if !userRoleType.IsValid() || !requiredRoleType.IsValid() {
 		return false
 	}
 
-	return true
+	return userRoleType.HasPermission(requiredRoleType)
 }
 
 // IsOwnerOrAllowed checks if the user is either the owner of the resource or has the required role.

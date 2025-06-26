@@ -2,8 +2,8 @@ package repository
 
 import (
 	"fmt"
-	custom_error "warehouse/pkg/errors"
-	"warehouse/pkg/models"
+	custom_error "warehouse/internal/errors"
+	"warehouse/internal/models"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/lib/pq"

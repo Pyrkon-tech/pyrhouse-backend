@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 	"time"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
-	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"

@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	custom_error "warehouse/internal/errors"
+	"warehouse/internal/metadata"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
-	custom_error "warehouse/pkg/errors"
-	"warehouse/pkg/metadata"
-	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"

@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"warehouse/pkg/models"
-	"warehouse/pkg/roles"
-	"warehouse/pkg/security"
+	"warehouse/internal/models"
+	"warehouse/internal/roles"
+	"warehouse/internal/security"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"

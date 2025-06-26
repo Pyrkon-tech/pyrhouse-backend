@@ -2,8 +2,8 @@ package inventorylog
 
 import (
 	"time"
-	"warehouse/pkg/auditlog"
-	"warehouse/pkg/models"
+	"warehouse/internal/auditlog"
+	"warehouse/internal/models"
 )
 
 type InventoryLog struct {

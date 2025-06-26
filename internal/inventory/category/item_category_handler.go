@@ -3,13 +3,13 @@ package category
 import (
 	"net/http"
 	"strconv"
+	"warehouse/internal/auditlog"
+	custom_error "warehouse/internal/errors"
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/stocks"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
-	"warehouse/pkg/auditlog"
-	custom_error "warehouse/pkg/errors"
-	"warehouse/pkg/models"
-	"warehouse/pkg/security"
+	"warehouse/internal/security"
 
 	"github.com/gin-gonic/gin"
 )

@@ -3,9 +3,9 @@ package locations
 import (
 	"fmt"
 	"log"
+	custom_error "warehouse/internal/errors"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
-	custom_error "warehouse/pkg/errors"
-	"warehouse/pkg/models"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/lib/pq"

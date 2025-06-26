@@ -2,7 +2,7 @@ package jira
 
 import (
 	"net/http"
-	"warehouse/pkg/security"
+	"warehouse/internal/security"
 
 	"github.com/gin-gonic/gin"
 )

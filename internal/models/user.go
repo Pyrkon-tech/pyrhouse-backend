@@ -1,6 +1,6 @@
 package models
 
-import "warehouse/pkg/roles"
+import "warehouse/internal/roles"
 
 type User struct {
 	ID           int        `json:"id" db:"id"`

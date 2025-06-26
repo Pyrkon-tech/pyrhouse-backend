@@ -6,12 +6,12 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"warehouse/internal/auditlog"
+	custom_error "warehouse/internal/errors"
+	"warehouse/internal/metadata"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
-	"warehouse/pkg/auditlog"
-	custom_error "warehouse/pkg/errors"
-	"warehouse/pkg/metadata"
-	"warehouse/pkg/models"
-	"warehouse/pkg/security"
+	"warehouse/internal/security"
 
 	"github.com/gin-gonic/gin"
 )

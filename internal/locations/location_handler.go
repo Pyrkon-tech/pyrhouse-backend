@@ -3,9 +3,9 @@ package locations
 import (
 	"log"
 	"net/http"
-	custom_error "warehouse/pkg/errors"
-	"warehouse/pkg/models"
-	"warehouse/pkg/security"
+	custom_error "warehouse/internal/errors"
+	"warehouse/internal/models"
+	"warehouse/internal/security"
 
 	"github.com/gin-gonic/gin"
 )
