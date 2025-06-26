@@ -11,10 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"warehouse/internal/core/container"
-	"warehouse/internal/core/routes"
 	"warehouse/internal/database"
+	di "warehouse/internal/di"
 	"warehouse/internal/middleware"
+	routes "warehouse/internal/routing"
 )
 
 func init() {
@@ -58,7 +58,7 @@ func main() {
 	}
 
 	// Start server
-	container := container.NewAppContainer(db)
+	container := di.NewAppContainer(db)
 	router := setupRouter(container)
 
 	// Ustawienie wersji aplikacji
@@ -75,7 +75,7 @@ func main() {
 	}
 }
 
-func setupRouter(container *container.Container) *gin.Engine {
+func setupRouter(container *di.Container) *gin.Engine {
 	router := gin.Default()
 
 	// Dodanie middleware do odzyskiwania po awariach

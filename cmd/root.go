@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"warehouse/internal/core/logger"
 	"warehouse/internal/database/migration"
+	logger "warehouse/internal/logging"
 
 	"github.com/spf13/cobra"
 )
