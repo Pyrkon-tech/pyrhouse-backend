@@ -193,13 +193,27 @@ Automatic dependency updates:
 - Update documentation
 - Use conventional commits
 
-## 📄 License
+## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) **with an additional restriction** that prohibits offering it as a hosted service (SaaS) to third parties.
+
+### ✅ What you can do
+
+- Self-host the app for your own use (even commercially)
+- Modify and use the code internally
+- Contribute to the open-source core
+
+### ❌ What you may not do
+
+- Offer this software or a modified version as a publicly accessible hosted service (SaaS) without a commercial license.
+
+### Commercial Offerings
+
+We offer hosted services, premium plugins, and commercial licenses. Contact us at [warrmag7@gmail.com] for details.
 
 ## 🆘 Support
 
 - Issues: [GitHub Issues](https://github.com/your-repo/issues)
 - Documentation: [Wiki](https://github.com/your-repo/wiki)
-- API Docs: [GitHub Pages](https://{username}.github.io/{repository-name}/)
-- Email: support@example.com
+- API Docs: [GitHub Pages](https://pyrkon-tech.github.io/pyrhouse-backend/)
+- Email: warrmag7@gmail.com
