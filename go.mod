@@ -4,7 +4,7 @@ go 1.23.8
 
 require (
 	github.com/doug-martin/goqu/v9 v9.19.0
-	github.com/gin-gonic/gin v1.10.0
+	github.com/gin-gonic/gin v1.10.1
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang-migrate/migrate/v4 v4.18.1
 	github.com/joho/godotenv v1.5.1
