@@ -1,5 +1,5 @@
 # Stage 1: Build the static HTML for OpenAPI using Redoc CLI
-FROM node:18-alpine AS redoc-builder
+FROM node:24-alpine AS redoc-builder
 
 RUN npm install -g redoc-cli
 WORKDIR /docs
