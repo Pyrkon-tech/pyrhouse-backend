@@ -1,9 +1,10 @@
 .env
 .air.toml
+main
 /tmp/*
 cmd/server/*
 !cmd/server/main.go
 __debug_bin*
-
+.vscode/*
 # Google credentials
 configs/google-credentials.json
