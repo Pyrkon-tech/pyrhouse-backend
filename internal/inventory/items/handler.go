@@ -5,7 +5,6 @@ import (
 	"warehouse/internal/auditlog"
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/stocks"
-	"warehouse/internal/models"
 	"warehouse/internal/repository"
 
 	"github.com/gin-gonic/gin"
@@ -40,7 +39,7 @@ func (h *ItemHandler) RegisterRoutes(router *gin.RouterGroup) {
 }
 
 func (h *ItemHandler) GetItem(c *gin.Context) {
-	var itemQuery models.RetrieveItemQuery
+	var itemQuery RetrieveItemQuery
 	if err := c.ShouldBindUri(&itemQuery); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid URI parameters"})
 		return
@@ -56,7 +55,7 @@ func (h *ItemHandler) GetItem(c *gin.Context) {
 }
 
 func (h *ItemHandler) GetItemList(c *gin.Context) {
-	var fetchItemsQuery models.RetrieveItemListQuery
+	var fetchItemsQuery RetrieveItemListQuery
 	if err := c.ShouldBindQuery(&fetchItemsQuery); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid query parameters"})
 		return

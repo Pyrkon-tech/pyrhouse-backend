@@ -5,7 +5,6 @@ import (
 	"warehouse/internal/auditlog"
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/stocks"
-	"warehouse/internal/models"
 	"warehouse/internal/repository"
 )
 
@@ -25,7 +24,7 @@ func NewItemService(r *repository.Repository, sr *stocks.StockRepository, ar *as
 	}
 }
 
-func (s *ItemService) fetchItem(query models.RetrieveItemQuery) (interface{}, error) {
+func (s *ItemService) fetchItem(query RetrieveItemQuery) (interface{}, error) {
 	switch query.CategoryType {
 	case "asset":
 		if query.ID == nil {
@@ -42,7 +41,7 @@ func (s *ItemService) fetchItem(query models.RetrieveItemQuery) (interface{}, er
 	}
 }
 
-func (s *ItemService) fetchItemList(conditions models.RetrieveItemListQuery) ([]interface{}, error) {
+func (s *ItemService) fetchItemList(conditions RetrieveItemListQuery) ([]interface{}, error) {
 	if conditions.CategoryType != "" {
 		return s.fetchByCategory(conditions, conditions.CategoryType)
 	}
@@ -50,7 +49,7 @@ func (s *ItemService) fetchItemList(conditions models.RetrieveItemListQuery) ([]
 	return s.fetchCombinedItems(conditions)
 }
 
-func (s *ItemService) fetchByCategory(conditions models.RetrieveItemListQuery, category string) ([]interface{}, error) {
+func (s *ItemService) fetchByCategory(conditions RetrieveItemListQuery, category string) ([]interface{}, error) {
 	switch category {
 	case "asset":
 		// Używamy warunków filtrowania jeśli są dostępne
@@ -123,7 +122,7 @@ func (s *ItemService) fetchByCategory(conditions models.RetrieveItemListQuery, c
 	}
 }
 
-func (s *ItemService) fetchCombinedItems(conditions models.RetrieveItemListQuery) ([]interface{}, error) {
+func (s *ItemService) fetchCombinedItems(conditions RetrieveItemListQuery) ([]interface{}, error) {
 	var result []interface{}
 
 	// Sprawdź czy są warunki filtrowania
