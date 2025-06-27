@@ -17,12 +17,6 @@ security:
 #       description: Find out more about...
 #       url: http://swagger.io
 paths:
-  /openapi.html:
-    get:
-      summary: Get docs
-      responses:
-        "200":
-          description: Serves docs in html format
   /health:
     get:
       summary: Health

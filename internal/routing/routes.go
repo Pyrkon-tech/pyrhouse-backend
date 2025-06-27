@@ -16,7 +16,7 @@ func RegisterPublicRoutes(router *gin.Engine, container *di.Container) {
 }
 
 func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
-	protectedRoutes := router.Group("/api")
+	protectedRoutes := router.Group("")
 	protectedRoutes.Use(security.JWTMiddleware())
 
 	container.AssetHandler.RegisterRoutes(protectedRoutes)
