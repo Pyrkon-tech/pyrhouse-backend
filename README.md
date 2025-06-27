@@ -1,90 +1,205 @@
-# Pyrhouse Management Service
-Pyrhouse is a dedicated backend platform written in go to serve as simple warehouse management platform  
+# Go Test Database
 
-Table of contents:  
-1. [Core funtionalities](#core-functionalities)  
-2. [Configuring and running application](#configuring-and-running-application)  
-    * Catalogue Structure  
-    * How to start?  
-    * How to create migration  
-    * Utility commands
-    * .env configuration
-3. [Production configuration](#production-configuration)
-    
-4. [Optional knowledge](#nice-to-know)
+A warehouse inventory management application with Google Sheets and Jira integrations.
 
-## Core functionalities
-### Base features:
-- Manage Equipment
-    - Assets - equipment with serial number like printer, laptop
-    - Stock Items - things you want to manage using quantity like powercord or cheap cables
-    - Category management to easilt
-- Location management - Default warehouse and equipment possible locations
-- Transfer Management - it allows you to send equipment to different location and track activity
-- User Management / Access Management - on a very basic level
+## 🚀 Features
 
-### Additional features:
-- Build in Service Desk, application was created for IT department on a convention, mass party, so simple service desk functionallity can help with helping users/customers with their issues
-- Google Sheets support, dedicated for a specific spreadsheet table format to get lsit of expected tasks/transfers
+- Asset management
+- Item categories management
+- Stock management
+- Location transfers
+- Google Sheets integration
+- Jira integration
+- Role-based access control
+- Audit logging
+- Service desk functionality
 
-## Configuring and running application:
+## 🛠️ Technologies
 
-### Catalogue Structure
-Structure initially based on GoLang official docs
+- **Backend**: Go 1.21+
+- **Database**: PostgreSQL 15
+- **Migrations**: golang-migrate
+- **Containerization**: Docker & Docker Compose
+- **CI/CD**: GitHub Actions
+- **API Documentation**: OpenAPI 3.1.0 with Redoc
 
-### How to start?
-1. Setup `.env` according to a recomendation below
-2. `docker-compose up -d` (*there is only DB container, so you can always* `docker run...`)
-3. `go run main.go`
-4. *Test if applications works by simply calling* `[GET] {app-url}/health`
+## 📋 Requirements
 
-> that's all folks, check `/docs/openapi.yaml` for additional endpoints specification
+- Go 1.21+
+- PostgreSQL 15+
+- Docker & Docker Compose
 
-### How to create migration
-- `brew install golang-migrate` *(optional) on mac if never installed*
-- `migrate create -ext sql -dir ./migrations -seq name-init_table`
+## 🚀 Quick Start
 
-### Useful commands
-- `make migrate` - manually execute db migrations
-- `go mod tidy` - after adding module/need a package  
-- `go build cmd/server` + `./cmd/server/` (`server.main`) - manual application build
-- `docker-compose down -v` -> remove volume to repopulate sql
+### With Docker Compose
 
-### Envs to run application:
->Either to setup local .env or your the way your production infrastructure requires it
-```
-# Core
-DATABASE_URL
-APP_ROOT_PATH // just set . in that case
+```bash
+# Clone repository
+git clone <repository-url>
+cd go-test-db
 
-# Recommended, if IT Form to request purchases/order equipment will be still in Google Sheets
-GOOGLE_SHEETS_CREDENTIALS_JSON // Json file to startup quest board capabilites to spreadsheet, usually provided by google in a form {"type":"service_account","project_id":"...}
+# Start with Docker Compose
+docker-compose up -d
 
-# Specific, if you want to continue developing integration with jira service desk
-JIRA_API_TOKEN
-JIRA_BASE_URL
-JIRA_EMAIL
-JIRA_SERVICE_DESK_ID
-JWT_SECRET
-
-# Optional
-PORT // on which port to setup app, default 8080
-REQUEST_TIMEOUT
+# Application will be available at http://localhost:8080
 ```
 
-## Production configuration
-Application infrastructure was originally setup on digital ocean for build and run we are using `./Dockerfile`  
-Build runs `./start.sh` to execute migration upon container start
-> There was no CI/CD pipeline build, app utilizes digital ocean hook on github push 
+### Locally
 
+```bash
+# Install dependencies
+go mod download
 
-### Nice to know
-Jira service is only initialize in container and in case of any error, it has silent kill in `internal/core/container/container.go`
+# Configure database
+export DATABASE_URL="postgres://username:password@localhost:5432/dbname?sslmode=disable"
+
+# Run migrations
+go run cmd/migrate/main.go
+
+# Start application
+go run main.go
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+DATABASE_URL=postgres://username:password@localhost:5432/dbname?sslmode=disable
+GOOGLE_CREDENTIALS_FILE=path/to/credentials.json
+JIRA_URL=https://your-domain.atlassian.net
+JIRA_USERNAME=your-email
+JIRA_API_TOKEN=your-api-token
+```
+
+### Google Sheets API
+
+1. Create a project in Google Cloud Console
+2. Enable Google Sheets API
+3. Create a service account and download credentials.json
+4. Place the file in `configs/` and set the path in environment variables
+
+## 📚 API Documentation
+
+API documentation is automatically generated and published to GitHub Pages when the OpenAPI specification is updated:
+
+- **Documentation**: Available at `https://{username}.github.io/{repository-name}/`
+- **OpenAPI Spec**: Located at `docs/openapi.yaml`
+- **Generation**: Uses Redoc CLI to create beautiful, interactive documentation
+
+The documentation is automatically updated when changes are pushed to the `main` branch.
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run specific test
+go test ./internal/inventory/assets/...
+```
+
+## 📊 CI Pipeline
+
+The project uses GitHub Actions for automation:
+
+### Workflows
+
+1. **CI Pipeline** (`.github/workflows/ci.yml`)
+   - Unit and integration tests
+   - Security analysis (Trivy, govulncheck)
+   - Docker image building
+   - Code coverage reporting
+
+2. **API Documentation** (`.github/workflows/docs.yml`)
+   - Generates API documentation using Redoc CLI
+   - Publishes to GitHub Pages
+   - Triggers on changes to OpenAPI specification
+
+3. **Dependency Review** (`.github/workflows/dependency-review.yml`)
+   - Automatic dependency checking in PRs
+
+4. **CodeQL** (`.github/workflows/codeql.yml`)
+   - Advanced code security analysis
+
+### Dependabot
+
+Automatic dependency updates:
+- Go modules (weekly)
+- GitHub Actions (weekly)
+- Docker images (weekly)
+
+## 📁 Project Structure
 
 ```
-jiraHandler, err := jira.NewJiraHandler()
-
-if err != nil {
-    jiraHandler = nil
-}
+├── cmd/                    # Application entry points
+│   ├── dev/               # Development server
+│   ├── migrate/           # Migration tool
+│   └── server/            # Production server
+├── docs/                  # Documentation
+│   ├── openapi.yaml       # OpenAPI specification
+│   └── index.html         # Generated API documentation
+├── internal/              # Internal application code
+│   ├── auditlog/          # Audit logs
+│   ├── database/          # Database configuration
+│   ├── di/                # Dependency injection
+│   ├── inventory/         # Inventory module
+│   ├── integrations/      # External integrations
+│   ├── locations/         # Location management
+│   ├── logging/           # Logging system
+│   ├── middleware/        # HTTP middleware
+│   ├── models/            # Data models
+│   ├── repository/        # Data access layer
+│   ├── roles/             # Role system
+│   ├── routing/           # HTTP routing
+│   ├── security/          # Security and authorization
+│   ├── service_desk/      # Service desk
+│   └── users/             # User management
+├── migrations/            # Database migrations
+├── postgres/              # PostgreSQL configuration
+└── .github/               # GitHub Actions configuration
 ```
+
+## 🔒 Security
+
+- Dependency vulnerability analysis (Dependabot)
+- Code scanning (CodeQL)
+- Docker image scanning (Trivy)
+- Audit logging for all operations
+- Role-based access control
+
+## 📈 Monitoring
+
+- Health check endpoint: `/health`
+- Application metrics
+- Structured logging
+- Audit trail
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Code Standards
+
+- Use `gofmt` for formatting
+- Add tests for new features
+- Update documentation
+- Use conventional commits
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- Issues: [GitHub Issues](https://github.com/your-repo/issues)
+- Documentation: [Wiki](https://github.com/your-repo/wiki)
+- API Docs: [GitHub Pages](https://{username}.github.io/{repository-name}/)
+- Email: support@example.com

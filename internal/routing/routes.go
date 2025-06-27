@@ -2,7 +2,6 @@ package routes
 
 import (
 	"log"
-	"os"
 	"warehouse/internal/di"
 	"warehouse/internal/middleware"
 	"warehouse/internal/security"
@@ -44,14 +43,4 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 
 func RegisterUtilityRoutes(router *gin.Engine) {
 	router.GET("/health", middleware.HealthCheckMiddleware())
-
-	openapiFilePath := "./docs/index.html"
-	if _, err := os.Stat(openapiFilePath); err == nil {
-		router.GET("/openapi.html", func(c *gin.Context) {
-			c.File(openapiFilePath)
-		})
-		log.Println("Route docs/index.html registered successfully.")
-	} else {
-		log.Printf("Warning: %s not found. Route /openapi.html will not be registered.\n", openapiFilePath)
-	}
 }

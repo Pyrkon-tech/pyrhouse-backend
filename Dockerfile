@@ -1,18 +1,8 @@
-# Stage 1: Build the static HTML for OpenAPI using Redoc CLI
-FROM node:18-alpine AS redoc-builder
-
-RUN npm install -g redoc-cli
-WORKDIR /docs
-COPY docs/openapi.yaml .
-RUN redoc-cli bundle openapi.yaml -o index.html
-
-# Stage 2: Build the Go application
+# Build the Go application
 FROM golang:1.23.8 AS go
 
 # Set the working directory inside the container
 WORKDIR /app
-# Copy docs
-COPY --from=redoc-builder /docs/index.html ./docs/index.html
 
 # Copy go.mod and go.sum files first
 COPY go.mod go.sum ./
