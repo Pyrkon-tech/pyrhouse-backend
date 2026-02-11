@@ -1,35 +1,47 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
+	"net/http"
 	"os"
-	"strconv"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
+	"warehouse/internal/config"
 	"warehouse/internal/database"
 	di "warehouse/internal/di"
 	"warehouse/internal/middleware"
 	routes "warehouse/internal/routing"
+	"warehouse/internal/security"
 )
 
-func init() {
+func main() {
 	log.Println("Inicjalizacja aplikacji...")
-	// Load .env file, but don't overwrite system environment variables
+
+	// Load .env file
 	if err := godotenv.Load(); err != nil {
 		log.Printf("Ostrzeżenie: Nie znaleziono pliku .env: %v", err)
 	} else {
 		log.Println("Plik .env załadowany pomyślnie")
-		log.Printf("JWT_SECRET ustawiony: %v", os.Getenv("JWT_SECRET") != "")
 	}
-}
 
-func main() {
-	var err error
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Error loading configuration: %v", err)
+	}
+
+	// Validate required config
+	if cfg.Database.URL == "" {
+		log.Fatal("DATABASE_URL environment variable is not set")
+	}
 
 	// Parse command line flags
 	migrateOnly := flag.Bool("migrate", false, "run only migrations without starting the server")
@@ -37,11 +49,7 @@ func main() {
 	flag.Parse()
 
 	// Setup DB
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		log.Fatal("DATABASE_URL environment variable is not set")
-	}
-	db, err := database.NewPostgresConnection(dbURL)
+	db, err := database.NewPostgresConnection(cfg.Database)
 	if err != nil {
 		log.Fatalf("Error connecting to database: %v", err)
 	}
@@ -57,48 +65,63 @@ func main() {
 		return
 	}
 
-	// Start server
-	container := di.NewAppContainer(db)
-	router := setupRouter(container)
-
-	// Ustawienie wersji aplikacji
-	middleware.SetVersion("1.0.0")
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	// Initialize security module
+	if err := security.Initialize(cfg.JWT); err != nil {
+		log.Fatalf("Error initializing security: %v", err)
 	}
 
-	log.Printf("Server starting on port %s", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	// Setup server
+	container := di.NewAppContainer(db, cfg)
+	router := setupRouter(container, cfg)
+	middleware.SetVersion(cfg.Server.Version)
+
+	srv := &http.Server{
+		Addr:    ":" + cfg.Server.Port,
+		Handler: router,
 	}
+
+	// Start server in goroutine
+	go func() {
+		log.Printf("Server starting on port %s", cfg.Server.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server...")
+
+	// Give outstanding requests 10 seconds to complete
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server exited gracefully")
 }
 
-func setupRouter(container *di.Container) *gin.Engine {
+func setupRouter(container *di.Container, cfg *config.Config) *gin.Engine {
 	router := gin.Default()
 
-	// Dodanie middleware do odzyskiwania po awariach
 	router.Use(middleware.RecoveryMiddleware())
 
-	// Timeout tylko jeśli REQUEST_TIMEOUT jest ustawiony
-	timeoutStr := os.Getenv("REQUEST_TIMEOUT")
-	if timeoutStr != "" {
-		if timeoutSeconds, err := strconv.Atoi(timeoutStr); err == nil && timeoutSeconds > 0 {
-			timeout := time.Duration(timeoutSeconds) * time.Second
-			router.Use(middleware.TimeoutMiddleware(timeout))
-		}
+	if cfg.Server.RequestTimeout > 0 {
+		router.Use(middleware.TimeoutMiddleware(cfg.Server.RequestTimeout * time.Second))
 	}
 
-	// Endpoint /health jest już zarejestrowany w routes.RegisterUtilityRoutes
-
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5000", "https://pyrhouse-frontend-p2sbw.ondigitalocean.app"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
+		AllowOrigins:     cfg.CORS.AllowedOrigins,
+		AllowMethods:     cfg.CORS.AllowedMethods,
+		AllowHeaders:     cfg.CORS.AllowedHeaders,
+		ExposeHeaders:    cfg.CORS.ExposedHeaders,
+		AllowCredentials: cfg.CORS.AllowCredentials,
+		MaxAge:           cfg.CORS.MaxAge,
 	}))
 
 	routes.RegisterPublicRoutes(router, container)

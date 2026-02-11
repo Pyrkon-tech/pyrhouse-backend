@@ -6,10 +6,15 @@ type User struct {
 	ID           int        `json:"id" db:"id"`
 	Username     string     `json:"username" db:"username"`
 	Fullname     string     `json:"fullname" db:"fullname"`
-	PasswordHash string     `json:"-" db:"password_hash"`
+	PasswordHash *string    `json:"-" db:"password_hash"`
 	Role         roles.Role `json:"role" db:"role"`
 	Points       int        `json:"points" db:"points"`
 	Active       bool       `json:"active" db:"active"`
+	// Discord OAuth fields
+	DiscordID       *string `json:"discord_id,omitempty" db:"discord_id"`
+	DiscordUsername *string `json:"discord_username,omitempty" db:"discord_username"`
+	AvatarURL       *string `json:"avatar_url,omitempty" db:"avatar_url"`
+	AuthProvider    string  `json:"auth_provider" db:"auth_provider"`
 }
 
 type CreateUserRequest struct {

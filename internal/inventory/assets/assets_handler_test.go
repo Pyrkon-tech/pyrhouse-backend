@@ -49,7 +49,7 @@ type AssetsRepositoryInterface interface {
 	GetAssetList() (*[]models.Asset, error)
 	GetAssetsBy(conditions repository.QueryBuilder) (*[]models.Asset, error)
 	FindItemByPyrCode(pyrCode string) (*models.Asset, error)
-	HasRelatedItems(categoryID string) bool
+	HasRelatedItems(categoryID string) (bool, error)
 	HasItemsInLocation(assetIDs []int, fromLocationId int) (bool, error)
 	PersistItem(req models.ItemRequest) (*models.Asset, error)
 	CanRemoveAsset(id int) (bool, error)
@@ -123,9 +123,9 @@ func (m *MockAssetsRepository) FindItemByPyrCode(pyrCode string) (*models.Asset,
 	return args.Get(0).(*models.Asset), args.Error(1)
 }
 
-func (m *MockAssetsRepository) HasRelatedItems(categoryID string) bool {
+func (m *MockAssetsRepository) HasRelatedItems(categoryID string) (bool, error) {
 	args := m.Called(categoryID)
-	return args.Bool(0)
+	return args.Bool(0), args.Error(1)
 }
 
 func (m *MockAssetsRepository) HasItemsInLocation(assetIDs []int, fromLocationId int) (bool, error) {
@@ -737,7 +737,7 @@ func (h *TestItemHandler) CreateAssetWithoutSerial(c *gin.Context) {
 		asset.PyrCode = pyrCode
 		createdAssets = append(createdAssets, *asset)
 
-		go h.AuditLog.Log(
+		h.AuditLog.Log(
 			"create",
 			map[string]interface{}{
 				"pyr_code":    asset.PyrCode,
@@ -826,11 +826,12 @@ func TestCreateAssetWithoutSerial_Success(t *testing.T) {
 	}
 
 	for i, asset := range assets {
+		asset := asset // Create local copy to avoid loop variable capture issue
 		mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
 			return req.Serial == nil && req.LocationId == 1 && req.Status == "available"
-		})).Return(asset, nil)
+		})).Return(asset, nil).Once()
 
-		mockAssetsRepo.On("UpdatePyrCode", i+1, fmt.Sprintf("PYR-L%d", i+1)).Return(nil)
+		mockAssetsRepo.On("UpdatePyrCode", i+1, fmt.Sprintf("PYR-L%d", i+1)).Return(nil).Once()
 	}
 
 	mockAuditLog.On("Log", "create", mock.Anything, mock.Anything).Return(nil).Times(3)

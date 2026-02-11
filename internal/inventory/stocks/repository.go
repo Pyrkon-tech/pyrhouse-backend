@@ -2,7 +2,6 @@ package stocks
 
 import (
 	"fmt"
-	"log"
 	custom_error "warehouse/internal/errors"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
@@ -130,16 +129,14 @@ func (r *StockRepository) GetStockItem(id int) (*models.StockItem, error) {
 	return &stock, nil
 }
 
-func (r *StockRepository) HasRelatedItems(categoryID string) bool {
+func (r *StockRepository) HasRelatedItems(categoryID string) (bool, error) {
 	query := `SELECT COUNT(*) FROM non_serialized_items WHERE item_category_id = $1`
 	var count int
 	err := r.repository.DB.QueryRow(query, categoryID).Scan(&count)
 	if err != nil {
-		log.Fatal("failed to check related assets: ", err)
-
-		return false
+		return false, fmt.Errorf("failed to check related stock items: %w", err)
 	}
-	return count > 0
+	return count > 0, nil
 }
 
 func (r *StockRepository) UpdateStock(stockRequest *models.PatchStockItemRequest) (*models.StockItem, error) {
@@ -259,7 +256,7 @@ func (r *StockRepository) DecreaseStockItemsQuantity(tx *goqu.TxDatabase, stocks
 		}
 
 		if fromLocationID == 1 {
-			log.Println("cannot decrease quantity form main warehouse")
+			// Skip deletion from main warehouse
 			return nil
 		}
 		deleteQuery := tx.Delete("non_serialized_items").

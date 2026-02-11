@@ -2,7 +2,6 @@ package locations
 
 import (
 	"fmt"
-	"log"
 	custom_error "warehouse/internal/errors"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
@@ -109,10 +108,9 @@ func (r *LocationRepository) RemoveLocation(locationID string) error {
 
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
-			return custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
+			return custom_error.WrapDBError("Cannot delete location due to foreign key constraint", string(pqErr.Code))
 		}
-		log.Fatal("failed to delete location: ", err)
-		return err
+		return fmt.Errorf("failed to delete location: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()

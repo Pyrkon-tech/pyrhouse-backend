@@ -3,7 +3,6 @@ package assets
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	custom_error "warehouse/internal/errors"
 	"warehouse/internal/metadata"
 	"warehouse/internal/models"
@@ -78,16 +77,14 @@ func (r *AssetsRepository) FindItemByPyrCode(pyrCode string) (*models.Asset, err
 	return r.fetchFlatAssetByCondition(goqu.Ex{"i.pyr_code": pyrCode})
 }
 
-func (r *AssetsRepository) HasRelatedItems(categoryID string) bool {
+func (r *AssetsRepository) HasRelatedItems(categoryID string) (bool, error) {
 	query := `SELECT COUNT(*) FROM items WHERE item_category_id = $1`
 	var count int
 	err := r.repository.DB.QueryRow(query, categoryID).Scan(&count)
 	if err != nil {
-		log.Fatal("failed to check related assets: ", err)
-
-		return false
+		return false, fmt.Errorf("failed to check related assets: %w", err)
 	}
-	return count > 0
+	return count > 0, nil
 }
 
 func (r *AssetsRepository) HasItemsInLocation(assetIDs []int, fromLocationId int) (bool, error) {
@@ -97,7 +94,7 @@ func (r *AssetsRepository) HasItemsInLocation(assetIDs []int, fromLocationId int
 	}).ToSQL()
 
 	if err != nil {
-		log.Fatalf("Failed to build query: %v", err)
+		return false, fmt.Errorf("failed to build query: %w", err)
 	}
 
 	var count int
@@ -178,8 +175,7 @@ func (r *AssetsRepository) RemoveAsset(assetID int) (int, error) {
 	_, err := query.Executor().ScanVal(&id)
 
 	if err != nil {
-		log.Fatal("failed to delete asset category: ", err)
-		return 0, err
+		return 0, fmt.Errorf("failed to delete asset: %w", err)
 	}
 
 	return id, nil

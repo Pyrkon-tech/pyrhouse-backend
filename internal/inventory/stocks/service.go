@@ -73,3 +73,31 @@ func (s *StockService) GetStockItems() (*[]models.StockItem, error) {
 func (s *StockService) GetStockItemByID(id int) (*models.StockItem, error) {
 	return s.stockRepo.GetStockItem(id)
 }
+
+// GetStockItemsBy pobiera elementy magazynowe spełniające warunki
+func (s *StockService) GetStockItemsBy(conditions repository.QueryBuilder) (*[]models.StockItem, error) {
+	return s.stockRepo.GetStockItemsBy(conditions)
+}
+
+// DeleteStock usuwa element magazynowy
+func (s *StockService) DeleteStock(id int) error {
+	stock, _ := s.stockRepo.GetStockItem(id)
+
+	err := s.stockRepo.DeleteStock(id)
+	if err != nil {
+		return err
+	}
+
+	if stock != nil {
+		go s.auditLog.Log(
+			"delete",
+			map[string]interface{}{
+				"stock_id": id,
+				"msg":      "Stock item deleted",
+			},
+			stock,
+		)
+	}
+
+	return nil
+}

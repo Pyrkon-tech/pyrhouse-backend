@@ -96,7 +96,7 @@ func (h *StockHandler) GetStocks(c *gin.Context) {
 		conditions.AddCondition("category_label", query.CategoryLabel)
 	}
 
-	stockItems, err := h.StockRepository.GetStockItemsBy(conditions)
+	stockItems, err := h.stockService.GetStockItemsBy(conditions)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch stock items"})
 		return
@@ -113,7 +113,7 @@ func (h *StockHandler) DeleteStock(c *gin.Context) {
 		return
 	}
 
-	err = h.StockRepository.DeleteStock(idInt)
+	err = h.stockService.DeleteStock(idInt)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete stock", "details": err.Error()})
 		return

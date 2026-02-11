@@ -3,7 +3,6 @@ package assets
 import (
 	"encoding/csv"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"warehouse/internal/auditlog"
@@ -52,7 +51,7 @@ func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {
 		return
 	}
 
-	asset, err := h.r.FindItemByPyrCode(serial)
+	asset, err := h.assetService.FindByPyrCode(serial)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to get asset", "details": err.Error()})
@@ -66,7 +65,6 @@ func (h *ItemHandler) GetItemByPyrCode(c *gin.Context) {
 }
 
 func (h *ItemHandler) CreateAsset(c *gin.Context) {
-
 	req := models.ItemRequest{
 		LocationId: 1,
 		Status:     "available",
@@ -102,76 +100,37 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 		return
 	}
 
-	asset, err := h.r.PersistItem(req)
-
+	asset, err := h.assetService.CreateAsset(req)
 	if err != nil {
 		switch err.(type) {
 		case *custom_error.UniqueViolationError:
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Item serial number already registered"})
 			return
 		default:
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset"})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create asset", "details": err.Error()})
 			return
 		}
 	}
-
-	pyrCode, err := h.r.GenerateUniquePyrCode(asset.Category.ID, asset.Category.PyrID)
-	if err != nil {
-		log.Printf("Failed to generate PYR code: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to generate unique PYR code",
-			"details": err.Error(),
-		})
-		if _, err := h.r.RemoveAsset(asset.ID); err != nil {
-			log.Printf("Failed to remove asset after PYR code generation failure: %v", err)
-		}
-		return
-	}
-
-	asset.PyrCode = pyrCode
-	if err := h.r.UpdatePyrCode(asset.ID, asset.PyrCode); err != nil {
-		log.Printf("Failed to update PYR code: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to update asset with PYR code",
-			"details": err.Error(),
-		})
-		if _, err := h.r.RemoveAsset(asset.ID); err != nil {
-			log.Printf("Failed to remove asset after PYR code update failure: %v", err)
-		}
-		return
-	}
-
-	go h.AuditLog.Log(
-		"create",
-		map[string]interface{}{
-			"serial":      asset.Serial,
-			"pyr_code":    asset.PyrCode,
-			"location_id": asset.Location.ID,
-			"msg":         "Asset created successfully",
-		},
-		asset,
-	)
 
 	c.JSON(http.StatusCreated, asset)
 }
 
 func (h *ItemHandler) RemoveAsset(c *gin.Context) {
-	var asset models.Asset
-	var err error
-	asset.ID, err = strconv.Atoi(c.Param("id"))
-	if asset.ID == 0 || err != nil {
+	assetID, err := strconv.Atoi(c.Param("id"))
+	if assetID == 0 || err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unable to bind serial number, value must be asset ID"})
 		return
 	}
 
-	res, err := h.r.CanRemoveAsset(asset.ID)
+	canRemove, err := h.assetService.CanRemoveAsset(assetID)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error":   "Unable to validate asset",
 			"details": err.Error(),
 		})
 		return
-	} else if !res {
+	}
+	if !canRemove {
 		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
 			"message": "Asset cannot be removed",
 			"details": "Asset is either moved from stock or in dissalloved status",
@@ -179,20 +138,11 @@ func (h *ItemHandler) RemoveAsset(c *gin.Context) {
 		return
 	}
 
-	_, err = h.r.RemoveAsset(asset.ID)
+	_, err = h.assetService.RemoveAsset(assetID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete asset category", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete asset", "details": err.Error()})
 		return
 	}
-
-	go h.AuditLog.Log(
-		"remove",
-		map[string]interface{}{
-			"serial": asset.Serial,
-			"msg":    "Remove asset from warehouse",
-		},
-		&asset,
-	)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Asset deleted successfully"})
 }
@@ -320,15 +270,8 @@ func (h *ItemHandler) UpdateAssetSerial(c *gin.Context) {
 		return
 	}
 
-	// Pobierz aktualny zasób do logowania
-	asset, err := h.r.GetAsset(assetID)
+	updatedAsset, err := h.assetService.UpdateAssetSerial(assetID, req.Serial)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się pobrać zasobu", "details": err.Error()})
-		return
-	}
-
-	// Aktualizuj numer seryjny
-	if err := h.r.UpdateAssetSerial(assetID, req.Serial); err != nil {
 		switch err.(type) {
 		case *custom_error.UniqueViolationError:
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Numer seryjny już istnieje"})
@@ -339,29 +282,11 @@ func (h *ItemHandler) UpdateAssetSerial(c *gin.Context) {
 		}
 	}
 
-	// Pobierz zaktualizowany zasób
-	updatedAsset, err := h.r.GetAsset(assetID)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się pobrać zaktualizowanego zasobu", "details": err.Error()})
-		return
-	}
-
-	// Zaloguj zmianę
-	go h.AuditLog.Log(
-		"update",
-		map[string]interface{}{
-			"old_serial": asset.Serial,
-			"new_serial": updatedAsset.Serial,
-			"msg":        "Zaktualizowano numer seryjny zasobu",
-		},
-		updatedAsset,
-	)
-
 	c.JSON(http.StatusOK, updatedAsset)
 }
 
 func (h *ItemHandler) GetAssetsReport(c *gin.Context) {
-	assets, err := h.r.GetAssetsForReport()
+	assets, err := h.assetService.GetAssetsForReport()
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się wygenerować raportu", "details": err.Error()})
 		return
@@ -402,7 +327,7 @@ func (h *ItemHandler) GetAssetsReport(c *gin.Context) {
 }
 
 func (h *ItemHandler) GetStockReport(c *gin.Context) {
-	stock, err := h.r.GetStockForReport()
+	stock, err := h.assetService.GetStockForReport()
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się wygenerować raportu", "details": err.Error()})
 		return

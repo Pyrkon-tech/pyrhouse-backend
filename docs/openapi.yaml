@@ -38,7 +38,7 @@ paths:
       tags:
         - auth
       summary: Authorize & generate jwt
-      description: ""
+      description: "Logowanie za pomocą username i password"
       operationId: auth
       requestBody:
         content:
@@ -62,6 +62,79 @@ paths:
                 properties:
                   token:
                     type: string
+  /auth/discord:
+    get:
+      tags:
+        - auth
+      summary: Logowanie przez Discord OAuth2
+      description: |
+        Przekierowuje użytkownika do strony autoryzacji Discord.
+        Po pomyślnej autoryzacji Discord przekieruje z powrotem do `/auth/discord/callback`.
+      operationId: discordLogin
+      responses:
+        "307":
+          description: Przekierowanie do Discord OAuth
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URL autoryzacji Discord
+  /auth/discord/callback:
+    get:
+      tags:
+        - auth
+      summary: Callback Discord OAuth2
+      description: |
+        Endpoint wywoływany przez Discord po autoryzacji.
+        Wymienia code na token i tworzy/znajduje użytkownika.
+        Nowi użytkownicy Discord mają `active=false` i wymagają ręcznej aktywacji przez admina.
+      operationId: discordCallback
+      parameters:
+        - in: query
+          name: code
+          schema:
+            type: string
+          required: true
+          description: Authorization code z Discord
+        - in: query
+          name: state
+          schema:
+            type: string
+          required: true
+          description: State parameter dla CSRF protection
+      responses:
+        "200":
+          description: Logowanie udane
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT token
+        "400":
+          description: Nieprawidłowy state lub brak code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Konto jest nieaktywne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Konto jest nieaktywne. Skontaktuj się z administratorem."
+        "500":
+          description: Błąd serwera
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /items:
     get:
       tags:
@@ -1174,6 +1247,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /users/{id}/link-discord:
+    parameters:
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      tags:
+        - users
+      summary: Połącz konto z Discord
+      description: |
+        Łączy istniejące konto użytkownika z kontem Discord.
+        Wymaga autoryzacji - tylko właściciel konta lub admin może wykonać tę operację.
+        Frontend musi najpierw uzyskać code i state z Discord OAuth flow.
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+                - state
+              properties:
+                code:
+                  type: string
+                  description: Authorization code z Discord OAuth
+                state:
+                  type: string
+                  description: State parameter z Discord OAuth
+        required: true
+      responses:
+        "200":
+          description: Konto Discord zostało połączone
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Konto Discord zostało połączone"
+        "400":
+          description: Nieprawidłowe dane
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Brak uprawnień
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Konto Discord jest już połączone z innym użytkownikiem
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "To konto Discord jest już połączone z innym użytkownikiem"
+        "500":
+          description: Błąd serwera
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /transfers/{transferID}/delivery-location:
     patch:
       tags:
@@ -1521,6 +1668,32 @@ components:
           type: integer
           description: User's points
           example: 0
+        active:
+          type: boolean
+          description: Czy konto jest aktywne
+          example: true
+        discord_id:
+          type: string
+          nullable: true
+          description: ID użytkownika Discord (jeśli połączony)
+          example: "123456789012345678"
+        discord_username:
+          type: string
+          nullable: true
+          description: Nazwa użytkownika Discord
+          example: "user#1234"
+        avatar_url:
+          type: string
+          nullable: true
+          description: URL avatara Discord
+          example: "https://cdn.discordapp.com/avatars/123/abc.png"
+        auth_provider:
+          type: string
+          description: Metoda autoryzacji
+          enum:
+            - local
+            - discord
+          example: local
     StockItem:
       type: object
       properties:

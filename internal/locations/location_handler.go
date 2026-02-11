@@ -1,7 +1,6 @@
 package locations
 
 import (
-	"log"
 	"net/http"
 	custom_error "warehouse/internal/errors"
 	"warehouse/internal/models"
@@ -110,8 +109,7 @@ func (h *LocationHandler) CreateLocation(c *gin.Context) {
 	var location models.Location
 	var err error
 	if err = c.BindJSON(&location); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		log.Fatal(err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
 		return
 	}
 

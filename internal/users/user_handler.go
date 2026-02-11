@@ -153,8 +153,21 @@ func (h *UsersHandler) prepareUpdateContext(c *gin.Context) (*UpdateUserContext,
 		return nil, err
 	}
 
-	authID, _ := c.Get("userID")
-	authIDInt, _ := strconv.Atoi(authID.(string))
+	authID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Brak autoryzacji"})
+		return nil, fmt.Errorf("userID not found in context")
+	}
+	authIDStr, ok := authID.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd wewnętrzny"})
+		return nil, fmt.Errorf("userID is not a string")
+	}
+	authIDInt, err := strconv.Atoi(authIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd wewnętrzny"})
+		return nil, fmt.Errorf("invalid userID format: %w", err)
+	}
 
 	return &UpdateUserContext{
 		c:           c,

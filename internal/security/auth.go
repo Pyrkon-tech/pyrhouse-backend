@@ -3,40 +3,32 @@ package security
 import (
 	"fmt"
 	"log"
-	"os"
 	"time"
+	"warehouse/internal/config"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtSecret []byte
+var (
+	jwtSecret     []byte
+	jwtExpiration time.Duration
+)
 
-func init() {
-	log.Println("Inicjalizacja modułu security...")
-	secret := os.Getenv("JWT_SECRET")
-	log.Printf("Odczytana wartość JWT_SECRET: %v", secret != "")
-
-	if secret == "" {
-		log.Println("Próba ponownego załadowania zmiennych środowiskowych...")
-		if err := godotenv.Load(); err != nil {
-			log.Printf("Błąd ładowania .env: %v", err)
-		}
-		secret = os.Getenv("JWT_SECRET")
-		log.Printf("Ponowna próba odczytu JWT_SECRET: %v", secret != "")
+func Initialize(cfg config.JWTConfig) error {
+	if cfg.Secret == "" {
+		return fmt.Errorf("JWT_SECRET is not configured")
 	}
 
-	if secret == "" {
-		log.Fatal("JWT_SECRET environment variable is not set")
-	}
+	jwtSecret = []byte(cfg.Secret)
+	jwtExpiration = cfg.Expiration
 
-	jwtSecret = []byte(secret)
 	log.Println("Moduł security zainicjalizowany pomyślnie")
+	return nil
 }
 
 func AuthenticateUser(username, password string, repo *repository.Repository) (*models.User, error) {
@@ -52,7 +44,12 @@ func AuthenticateUser(username, password string, repo *repository.Repository) (*
 		return nil, fmt.Errorf("konto jest nieaktywne")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	// Sprawdź czy użytkownik ma hasło (użytkownicy Discord mogą nie mieć)
+	if user.PasswordHash == nil {
+		return nil, fmt.Errorf("konto nie ma ustawionego hasła - użyj logowania przez Discord")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(password)); err != nil {
 		return nil, err
 	}
 
@@ -64,7 +61,7 @@ func GenerateJWT(userID string, role string, username string) (string, error) {
 		"userID":   userID,
 		"role":     role,
 		"username": username,
-		"exp":      time.Now().Add(time.Hour * 120).Unix(), // 4 DAYS
+		"exp":      time.Now().Add(jwtExpiration).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

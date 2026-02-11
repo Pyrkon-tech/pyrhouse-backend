@@ -13,6 +13,12 @@ func RegisterPublicRoutes(router *gin.Engine, container *di.Container) {
 	container.LoginHandler.RegisterRoutes(router)
 	container.ServiceDeskHandler.RegisterPublicRoutes(router)
 	container.UserHandler.RegisterPublicRoutes(router)
+
+	// Discord OAuth (publiczne endpointy)
+	if container.DiscordHandler != nil {
+		container.DiscordHandler.RegisterRoutes(router.Group(""))
+		log.Println("[Discord OAuth]: Public routes registered")
+	}
 }
 
 func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
@@ -38,6 +44,12 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 		log.Println("Jira API routes registered successfully")
 	} else {
 		log.Println("Jira API routes not registered - handler is nil")
+	}
+
+	// Discord OAuth (chronione endpointy - link-discord)
+	if container.DiscordHandler != nil {
+		container.DiscordHandler.RegisterProtectedRoutes(protectedRoutes)
+		log.Println("[Discord OAuth]: Protected routes registered")
 	}
 }
 

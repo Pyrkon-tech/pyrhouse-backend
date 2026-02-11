@@ -18,6 +18,11 @@ type UserRepository interface {
 	UpdateUser(id int, changes *models.UserChanges) error
 	DeleteUser(id int) error
 	UsersExists(userIDs []int) (bool, error)
+	// Discord OAuth methods
+	FindUserByDiscordID(discordID string) (*models.User, error)
+	CreateDiscordUser(user *models.User) (*models.User, error)
+	UpdateDiscordInfo(userID int, username string, avatarURL string) error
+	LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error
 }
 
 type userRepositoryImpl struct {
@@ -180,4 +185,79 @@ func (r *userRepositoryImpl) UsersExists(userIDs []int) (bool, error) {
 	}
 
 	return len(dbUserIDs) == len(userIDs), nil
+}
+
+// FindUserByDiscordID znajduje użytkownika po jego Discord ID
+func (r *userRepositoryImpl) FindUserByDiscordID(discordID string) (*models.User, error) {
+	var user models.User
+	query := r.repository.GoquDBWrapper.Select(
+		"id", "username", "fullname", "password_hash", "role", "points", "active",
+		"discord_id", "discord_username", "avatar_url", "auth_provider",
+	).From("users").Where(goqu.Ex{"discord_id": discordID})
+
+	found, err := query.Executor().ScanStruct(&user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find user by discord_id: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &user, nil
+}
+
+// CreateDiscordUser tworzy nowego użytkownika z danymi Discord
+func (r *userRepositoryImpl) CreateDiscordUser(user *models.User) (*models.User, error) {
+	query := r.repository.GoquDBWrapper.Insert("users").
+		Rows(goqu.Record{
+			"username":         user.Username,
+			"discord_id":       user.DiscordID,
+			"discord_username": user.DiscordUsername,
+			"avatar_url":       user.AvatarURL,
+			"auth_provider":    user.AuthProvider,
+			"role":             user.Role,
+			"active":           user.Active,
+		}).
+		Returning("id")
+
+	var id int
+	_, err := query.Executor().ScanVal(&id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create discord user: %w", err)
+	}
+
+	user.ID = id
+	return user, nil
+}
+
+// UpdateDiscordInfo aktualizuje dane Discord użytkownika
+func (r *userRepositoryImpl) UpdateDiscordInfo(userID int, username string, avatarURL string) error {
+	query := r.repository.GoquDBWrapper.Update("users").
+		Set(goqu.Record{
+			"discord_username": username,
+			"avatar_url":       avatarURL,
+		}).
+		Where(goqu.Ex{"id": userID})
+
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update discord info: %w", err)
+	}
+	return nil
+}
+
+// LinkDiscord łączy istniejące konto z kontem Discord
+func (r *userRepositoryImpl) LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error {
+	query := r.repository.GoquDBWrapper.Update("users").
+		Set(goqu.Record{
+			"discord_id":       discordID,
+			"discord_username": discordUsername,
+			"avatar_url":       avatarURL,
+		}).
+		Where(goqu.Ex{"id": userID})
+
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to link discord: %w", err)
+	}
+	return nil
 }

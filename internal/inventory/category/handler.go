@@ -87,15 +87,24 @@ func (h *ItemCategoryHandler) RemoveItemCategory(c *gin.Context) {
 		return
 	}
 
-	hasRelatedItems := h.ar.HasRelatedItems(categoryID)
-	hasRelatedItemsInStock := h.sr.HasRelatedItems(categoryID)
+	hasRelatedItems, err := h.ar.HasRelatedItems(categoryID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas sprawdzania powiązanych elementów", "details": err.Error()})
+		return
+	}
+
+	hasRelatedItemsInStock, err := h.sr.HasRelatedItems(categoryID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas sprawdzania powiązanych elementów magazynowych", "details": err.Error()})
+		return
+	}
 
 	if hasRelatedItems || hasRelatedItemsInStock {
 		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Nie można usunąć kategorii #" + categoryID + ": istnieją powiązane elementy"})
 		return
 	}
 
-	err := h.service.DeleteCategory(categoryID)
+	err = h.service.DeleteCategory(categoryID)
 	if err != nil {
 		if _, ok := err.(*custom_error.ForeignKeyViolationError); ok {
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Nie można usunąć kategorii #" + categoryID + ": istnieją powiązane elementy"})
@@ -126,7 +135,11 @@ func (h *ItemCategoryHandler) UpdateItemCategory(c *gin.Context) {
 		updates["label"] = *req.Label
 	}
 	if req.Type != nil {
-		hasRelatedItems := h.ar.HasRelatedItems(strconv.Itoa(req.ID))
+		hasRelatedItems, err := h.ar.HasRelatedItems(strconv.Itoa(req.ID))
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas sprawdzania powiązanych elementów", "details": err.Error()})
+			return
+		}
 		if hasRelatedItems {
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
 				"error": "Nie można zmienić typu kategorii, ponieważ ma przypisane przedmioty",
@@ -134,7 +147,12 @@ func (h *ItemCategoryHandler) UpdateItemCategory(c *gin.Context) {
 			return
 		}
 
-		if h.sr.HasRelatedItems(strconv.Itoa(req.ID)) {
+		hasRelatedStock, err := h.sr.HasRelatedItems(strconv.Itoa(req.ID))
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas sprawdzania powiązanych elementów magazynowych", "details": err.Error()})
+			return
+		}
+		if hasRelatedStock {
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
 				"error": "Nie można zmienić typu kategorii, ponieważ ma przypisane przedmioty",
 			})

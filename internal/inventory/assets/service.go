@@ -163,7 +163,7 @@ func (s *AssetService) UpdateAssetLocation(assetID int, req models.DeliveryLocat
 		return fmt.Errorf("nie udało się pobrać zasobu: %v", err)
 	}
 
-	s.auditLog.Log(
+	go s.auditLog.Log(
 		"last_known_location",
 		map[string]interface{}{
 			"asset_id": asset.ID,
@@ -179,4 +179,111 @@ func (s *AssetService) UpdateAssetLocation(assetID int, req models.DeliveryLocat
 	)
 
 	return nil
+}
+
+func (s *AssetService) FindByPyrCode(pyrCode string) (*models.Asset, error) {
+	return s.assetsRepo.FindItemByPyrCode(pyrCode)
+}
+
+func (s *AssetService) GetAsset(id int) (*models.Asset, error) {
+	return s.assetsRepo.GetAsset(id)
+}
+
+func (s *AssetService) CreateAsset(req models.ItemRequest) (*models.Asset, error) {
+	asset, err := s.assetsRepo.PersistItem(req)
+	if err != nil {
+		return nil, err
+	}
+
+	pyrCode, err := s.assetsRepo.GenerateUniquePyrCode(asset.Category.ID, asset.Category.PyrID)
+	if err != nil {
+		if _, removeErr := s.assetsRepo.RemoveAsset(asset.ID); removeErr != nil {
+			log.Printf("Failed to remove asset after PYR code generation failure: %v", removeErr)
+		}
+		return nil, fmt.Errorf("failed to generate PYR code: %w", err)
+	}
+
+	if err := s.assetsRepo.UpdatePyrCode(asset.ID, pyrCode); err != nil {
+		if _, removeErr := s.assetsRepo.RemoveAsset(asset.ID); removeErr != nil {
+			log.Printf("Failed to remove asset after PYR code update failure: %v", removeErr)
+		}
+		return nil, fmt.Errorf("failed to update PYR code: %w", err)
+	}
+
+	asset.PyrCode = pyrCode
+
+	go s.auditLog.Log(
+		"create",
+		map[string]interface{}{
+			"serial":      asset.Serial,
+			"pyr_code":    asset.PyrCode,
+			"location_id": asset.Location.ID,
+			"msg":         "Asset created successfully",
+		},
+		asset,
+	)
+
+	return asset, nil
+}
+
+func (s *AssetService) CanRemoveAsset(id int) (bool, error) {
+	return s.assetsRepo.CanRemoveAsset(id)
+}
+
+func (s *AssetService) RemoveAsset(id int) (int, error) {
+	asset, _ := s.assetsRepo.GetAsset(id)
+
+	removedID, err := s.assetsRepo.RemoveAsset(id)
+	if err != nil {
+		return 0, err
+	}
+
+	if asset != nil {
+		go s.auditLog.Log(
+			"remove",
+			map[string]interface{}{
+				"serial": asset.Serial,
+				"msg":    "Remove asset from warehouse",
+			},
+			asset,
+		)
+	}
+
+	return removedID, nil
+}
+
+func (s *AssetService) UpdateAssetSerial(id int, serial string) (*models.Asset, error) {
+	oldAsset, err := s.assetsRepo.GetAsset(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get asset: %w", err)
+	}
+
+	if err := s.assetsRepo.UpdateAssetSerial(id, serial); err != nil {
+		return nil, err
+	}
+
+	updatedAsset, err := s.assetsRepo.GetAsset(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get updated asset: %w", err)
+	}
+
+	go s.auditLog.Log(
+		"update",
+		map[string]interface{}{
+			"old_serial": oldAsset.Serial,
+			"new_serial": updatedAsset.Serial,
+			"msg":        "Zaktualizowano numer seryjny zasobu",
+		},
+		updatedAsset,
+	)
+
+	return updatedAsset, nil
+}
+
+func (s *AssetService) GetAssetsForReport() ([]models.FlatAssetRecord, error) {
+	return s.assetsRepo.GetAssetsForReport()
+}
+
+func (s *AssetService) GetStockForReport() ([]models.FlatStockRecord, error) {
+	return s.assetsRepo.GetStockForReport()
 }
