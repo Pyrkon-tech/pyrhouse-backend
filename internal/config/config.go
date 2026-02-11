@@ -47,6 +47,7 @@ type DiscordConfig struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURI  string
+	FrontendURL  string // URL frontendu do przekierowania po logowaniu
 }
 
 func Load() (*Config, error) {
@@ -79,6 +80,7 @@ func Load() (*Config, error) {
 			ClientID:     os.Getenv("DISCORD_CLIENT_ID"),
 			ClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
 			RedirectURI:  os.Getenv("DISCORD_REDIRECT_URI"),
+			FrontendURL:  os.Getenv("DISCORD_FRONTEND_URL"),
 		},
 	}
 

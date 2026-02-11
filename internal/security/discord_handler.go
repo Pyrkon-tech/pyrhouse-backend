@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"net/url"
 	"strconv"
 	"warehouse/internal/models"
 	"warehouse/internal/oauth"
@@ -42,56 +43,75 @@ func (h *DiscordHandler) DiscordLogin(c *gin.Context) {
 
 // DiscordCallback obsługuje callback z Discord
 func (h *DiscordHandler) DiscordCallback(c *gin.Context) {
+	frontendURL := h.oauth.GetFrontendURL()
+
+	// Helper do przekierowania z błędem
+	redirectWithError := func(errorMsg string) {
+		if frontendURL != "" {
+			redirectURL := frontendURL + "?error=" + url.QueryEscape(errorMsg)
+			c.Redirect(http.StatusTemporaryRedirect, redirectURL)
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": errorMsg})
+		}
+	}
+
 	// 1. Weryfikacja state (CSRF protection)
 	state := c.Query("state")
 	savedState, _ := c.Cookie("oauth_state")
 	if state != savedState {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid state parameter"})
+		redirectWithError("Invalid state parameter")
 		return
 	}
 
 	// 2. Pobranie code
 	code := c.Query("code")
 	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing authorization code"})
+		redirectWithError("Missing authorization code")
 		return
 	}
 
 	// 3. Wymiana code na token
 	token, err := h.oauth.ExchangeCode(code)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange code", "details": err.Error()})
+		redirectWithError("Failed to exchange code")
 		return
 	}
 
 	// 4. Pobranie danych użytkownika z Discord
 	discordUser, err := h.oauth.GetUser(token.AccessToken)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Discord user", "details": err.Error()})
+		redirectWithError("Failed to get Discord user")
 		return
 	}
 
 	// 5. Znalezienie lub utworzenie użytkownika
 	user, err := h.findOrCreateUser(discordUser)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process user", "details": err.Error()})
+		redirectWithError("Failed to process user")
 		return
 	}
 
 	// 6. Sprawdzenie czy konto aktywne
 	if !user.Active {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Konto jest nieaktywne. Skontaktuj się z administratorem."})
+		redirectWithError("Konto jest nieaktywne. Skontaktuj się z administratorem.")
 		return
 	}
 
 	// 7. Generowanie JWT
 	jwtToken, err := GenerateJWT(strconv.Itoa(user.ID), string(user.Role), user.Username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		redirectWithError("Failed to generate token")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": jwtToken})
+	// 8. Przekierowanie na frontend z tokenem
+	if frontendURL != "" {
+		redirectURL := frontendURL + "?token=" + jwtToken
+		c.Redirect(http.StatusTemporaryRedirect, redirectURL)
+	} else {
+		// Fallback - zwróć JSON jeśli brak frontendURL
+		c.JSON(http.StatusOK, gin.H{"token": jwtToken})
+	}
 }
 
 func (h *DiscordHandler) findOrCreateUser(discordUser *oauth.DiscordUser) (*models.User, error) {

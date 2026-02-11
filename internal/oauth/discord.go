@@ -118,3 +118,8 @@ func (d *DiscordOAuth) GetAvatarURL(user *DiscordUser) string {
 func (d *DiscordOAuth) IsConfigured() bool {
 	return d.config.ClientID != "" && d.config.ClientSecret != "" && d.config.RedirectURI != ""
 }
+
+// GetFrontendURL zwraca URL frontendu do przekierowania po logowaniu
+func (d *DiscordOAuth) GetFrontendURL() string {
+	return d.config.FrontendURL
+}

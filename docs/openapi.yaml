@@ -87,6 +87,16 @@ paths:
       description: |
         Endpoint wywoływany przez Discord po autoryzacji.
         Wymienia code na token i tworzy/znajduje użytkownika.
+
+        **Zachowanie zależne od konfiguracji:**
+        - Jeśli `DISCORD_FRONTEND_URL` jest ustawiony: przekierowuje na frontend z tokenem lub błędem jako query param
+          - Sukces: `{DISCORD_FRONTEND_URL}?token=eyJhbG...`
+          - Błąd: `{DISCORD_FRONTEND_URL}?error=Konto+jest+nieaktywne`
+        - Jeśli `DISCORD_FRONTEND_URL` nie jest ustawiony: zwraca JSON response
+
+        **Auto-linking:** Jeśli istnieje konto z taką samą nazwą użytkownika (bez połączenia z Discord),
+        zostanie automatycznie połączone z kontem Discord.
+
         Nowi użytkownicy Discord mają `active=false` i wymagają ręcznej aktywacji przez admina.
       operationId: discordCallback
       parameters:
@@ -103,8 +113,15 @@ paths:
           required: true
           description: State parameter dla CSRF protection
       responses:
+        "307":
+          description: Przekierowanie na frontend (gdy DISCORD_FRONTEND_URL skonfigurowany)
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URL frontendu z tokenem lub błędem
         "200":
-          description: Logowanie udane
+          description: Logowanie udane (fallback gdy brak DISCORD_FRONTEND_URL)
           content:
             application/json:
               schema:
@@ -114,23 +131,7 @@ paths:
                     type: string
                     description: JWT token
         "400":
-          description: Nieprawidłowy state lub brak code
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "403":
-          description: Konto jest nieaktywne
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "Konto jest nieaktywne. Skontaktuj się z administratorem."
-        "500":
-          description: Błąd serwera
+          description: Nieprawidłowy state lub brak code (gdy brak DISCORD_FRONTEND_URL)
           content:
             application/json:
               schema:
