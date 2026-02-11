@@ -15,6 +15,7 @@ import (
 // DiscordUserRepository definiuje metody repozytorium wymagane przez DiscordHandler
 type DiscordUserRepository interface {
 	FindUserByDiscordID(discordID string) (*models.User, error)
+	FindUserByUsername(username string) (*models.User, error)
 	CreateDiscordUser(user *models.User) (*models.User, error)
 	UpdateDiscordInfo(userID int, username string, avatarURL string) error
 	LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error
@@ -107,6 +108,24 @@ func (h *DiscordHandler) findOrCreateUser(discordUser *oauth.DiscordUser) (*mode
 			// Logujemy błąd, ale kontynuujemy
 		}
 		return user, nil
+	}
+
+	// Sprawdź czy istnieje konto z taką samą nazwą użytkownika (bez połączenia z Discord)
+	existingUser, err := h.userRepo.FindUserByUsername(discordUser.Username)
+	if err != nil {
+		return nil, err
+	}
+	if existingUser != nil && existingUser.DiscordID == nil {
+		// Istnieje konto z taką nazwą - automatycznie połącz z Discord
+		avatarURL := h.oauth.GetAvatarURL(discordUser)
+		if err := h.userRepo.LinkDiscord(existingUser.ID, discordUser.ID, discordUser.Username, avatarURL); err != nil {
+			return nil, err
+		}
+		// Pobierz zaktualizowanego użytkownika
+		existingUser.DiscordID = &discordUser.ID
+		existingUser.DiscordUsername = &discordUser.Username
+		existingUser.AvatarURL = &avatarURL
+		return existingUser, nil
 	}
 
 	// Utwórz nowego użytkownika

@@ -2,6 +2,7 @@ package users
 
 import (
 	"fmt"
+	"time"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
 
@@ -20,6 +21,7 @@ type UserRepository interface {
 	UsersExists(userIDs []int) (bool, error)
 	// Discord OAuth methods
 	FindUserByDiscordID(discordID string) (*models.User, error)
+	FindUserByUsername(username string) (*models.User, error)
 	CreateDiscordUser(user *models.User) (*models.User, error)
 	UpdateDiscordInfo(userID int, username string, avatarURL string) error
 	LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error
@@ -205,11 +207,46 @@ func (r *userRepositoryImpl) FindUserByDiscordID(discordID string) (*models.User
 	return &user, nil
 }
 
+// FindUserByUsername znajduje użytkownika po nazwie użytkownika
+func (r *userRepositoryImpl) FindUserByUsername(username string) (*models.User, error) {
+	var user models.User
+	query := r.repository.GoquDBWrapper.Select(
+		"id", "username", "fullname", "password_hash", "role", "points", "active",
+		"discord_id", "discord_username", "avatar_url", "auth_provider",
+	).From("users").Where(goqu.Ex{"username": username})
+
+	found, err := query.Executor().ScanStruct(&user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find user by username: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &user, nil
+}
+
 // CreateDiscordUser tworzy nowego użytkownika z danymi Discord
 func (r *userRepositoryImpl) CreateDiscordUser(user *models.User) (*models.User, error) {
+	// Sprawdź czy username jest unikalna, jeśli nie - wygeneruj unikalną
+	username := user.Username
+	isUnique, err := r.IsUsernameUnique(username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check username uniqueness: %w", err)
+	}
+
+	if !isUnique {
+		// Username zajęta - dodaj Discord ID jako sufiks
+		if user.DiscordID != nil {
+			username = fmt.Sprintf("%s_%s", user.Username, *user.DiscordID)
+		} else {
+			// Fallback - dodaj losowy sufiks
+			username = fmt.Sprintf("%s_%d", user.Username, r.generateRandomSuffix())
+		}
+	}
+
 	query := r.repository.GoquDBWrapper.Insert("users").
 		Rows(goqu.Record{
-			"username":         user.Username,
+			"username":         username,
 			"discord_id":       user.DiscordID,
 			"discord_username": user.DiscordUsername,
 			"avatar_url":       user.AvatarURL,
@@ -220,13 +257,18 @@ func (r *userRepositoryImpl) CreateDiscordUser(user *models.User) (*models.User,
 		Returning("id")
 
 	var id int
-	_, err := query.Executor().ScanVal(&id)
+	_, err = query.Executor().ScanVal(&id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discord user: %w", err)
 	}
 
 	user.ID = id
+	user.Username = username
 	return user, nil
+}
+
+func (r *userRepositoryImpl) generateRandomSuffix() int64 {
+	return time.Now().UnixNano() % 100000
 }
 
 // UpdateDiscordInfo aktualizuje dane Discord użytkownika
