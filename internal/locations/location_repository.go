@@ -36,7 +36,6 @@ func (r *LocationRepository) GetLocations() (*[]models.Location, error) {
 func (r *LocationRepository) GetLocationEquipment(locationID string) (*models.LocationEquipment, error) {
 	var locationEquipment models.LocationEquipment
 	var err error
-	// TODO error handling
 	locationEquipment.Assets, err = r.getLocationAssets(locationID)
 	if err != nil {
 		return nil, err
@@ -58,11 +57,10 @@ func (r *LocationRepository) PersistLocation(location *models.Location) error {
 		}).
 		Returning("id")
 
-	// TODO Value cannot be unique, there's a bug, no unique key in location table
 	if _, err := query.Executor().ScanVal(&location.ID); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23505" {
-				return apperrors.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
+				return apperrors.WrapDBError("Duplicate location name", string(pqErr.Code))
 			}
 		}
 		return fmt.Errorf("failed to insert location record: %w", err)

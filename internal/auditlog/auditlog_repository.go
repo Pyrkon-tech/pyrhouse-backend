@@ -71,7 +71,9 @@ func (r *AuditLogRepository) GetResourceLog(id int, resourceType string) (*[]mod
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan audit log row: %w", err)
 		}
-		log.LoadFromDB()
+		if err := log.LoadFromDB(); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal audit log data: %w", err)
+		}
 		auditLogs = append(auditLogs, log)
 	}
 

@@ -283,3 +283,5 @@ Run: `go test ./...`
 - **Migrations:** Always create both `.up.sql` and `.down.sql` files
 - **goqu:** Use `goqu.Ex{}` for WHERE conditions, not raw strings
 - **Transactions:** Always use `repository.WithTransaction()` for multi-step DB operations
+- **Error package:** Use `apperrors` package (not `custom_error`) for DB error wrapping
+- **Language:** All code, comments, and error messages must be in English

@@ -16,8 +16,11 @@ type AuditLog struct {
 	UserID       *int                   `json:"user_id,omitempty" db:"user_id"`
 }
 
-func (a *AuditLog) LoadFromDB() {
+func (a *AuditLog) LoadFromDB() error {
 	if a.DataRaw != "" {
-		_ = json.Unmarshal([]byte(a.DataRaw), &a.Data)
+		if err := json.Unmarshal([]byte(a.DataRaw), &a.Data); err != nil {
+			return err
+		}
 	}
+	return nil
 }
