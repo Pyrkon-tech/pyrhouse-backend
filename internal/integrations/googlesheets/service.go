@@ -143,6 +143,31 @@ func (s *DutyScheduleService) GetDutyScheduleForPerson(personName string) ([]Dut
 	return result, nil
 }
 
+// FetchSheet fetches all rows from a sheet (generic method)
+func (s *DutyScheduleService) FetchSheet(spreadsheetID, sheetName string) ([][]string, error) {
+	readRange := sheetName // Fetch all data from sheet
+	resp, err := s.sheetsService.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
+	if err != nil {
+		return nil, fmt.Errorf("unable to read spreadsheet: %v", err)
+	}
+
+	if len(resp.Values) == 0 {
+		log.Printf("No data found in sheet %s", sheetName)
+		return [][]string{}, nil
+	}
+
+	// Convert [][]interface{} to [][]string
+	result := make([][]string, len(resp.Values))
+	for i, row := range resp.Values {
+		result[i] = make([]string, len(row))
+		for j, cell := range row {
+			result[i][j] = toString(cell)
+		}
+	}
+
+	return result, nil
+}
+
 func (s *DutyScheduleService) readSpreadsheet(spreadsheetID string, readRange string) ([][]interface{}, error) {
 	resp, err := s.sheetsService.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
 	if err != nil {

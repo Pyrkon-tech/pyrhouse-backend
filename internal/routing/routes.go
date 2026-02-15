@@ -39,6 +39,13 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 		log.Println("Google Sheets API routes not registered - handler is nil")
 	}
 
+	if container.EquipmentRequestHandler != nil {
+		container.EquipmentRequestHandler.RegisterRoutes(protectedRoutes)
+		log.Println("[Equipment Requests]: Routes registered successfully")
+	} else {
+		log.Println("[Equipment Requests]: Routes not registered - handler is nil")
+	}
+
 	if container.DiscordHandler != nil {
 		container.DiscordHandler.RegisterProtectedRoutes(protectedRoutes)
 		log.Println("[Discord OAuth]: Protected routes registered")

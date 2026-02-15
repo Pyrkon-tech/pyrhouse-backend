@@ -17,7 +17,7 @@ import (
 
 type GoogleSheetsHandler struct {
 	sheetsService       *sheets.Service
-	dutyScheduleService *DutyScheduleService
+	DutyScheduleService *DutyScheduleService
 }
 
 func NewGoogleSheetsHandler() (*GoogleSheetsHandler, error) {
@@ -55,7 +55,7 @@ func NewGoogleSheetsHandler() (*GoogleSheetsHandler, error) {
 
 	return &GoogleSheetsHandler{
 		sheetsService:       sheetsService,
-		dutyScheduleService: NewDutyScheduleService(sheetsService),
+		DutyScheduleService: NewDutyScheduleService(sheetsService),
 	}, nil
 }
 

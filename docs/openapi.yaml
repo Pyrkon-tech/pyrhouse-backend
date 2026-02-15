@@ -28,6 +28,8 @@ tags:
     description: Asset and stock transfers between locations
   - name: users
     description: User account management and RBAC
+  - name: equipment-requests
+    description: Equipment request form integration - Google Sheets sync and quest aggregation
 
 paths:
   /health:
@@ -1412,6 +1414,117 @@ paths:
         "500":
           $ref: "#/components/responses/DefaultError"
 
+  /api/equipment-requests/sync:
+    post:
+      tags:
+        - equipment-requests
+      summary: Manual sync from Google Sheets
+      description: |
+        Triggers manual synchronization from the equipment request Google Sheet.
+        Fetches all rows from the configured sheet, aggregates them into quests based on
+        destination, recipient, delivery date, and pickup time. Returns the aggregated quests.
+
+        Phase 1: Results are cached in-memory (not persisted to DB).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Sync completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Sync completed successfully"
+                  count:
+                    type: integer
+                    example: 2
+                  quests:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EquipmentRequestQuest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          description: Sync failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to sync equipment requests"
+                  details:
+                    type: string
+                    example: "unable to read spreadsheet: API error"
+
+  /api/equipment-requests/quests:
+    get:
+      tags:
+        - equipment-requests
+      summary: List all equipment request quests
+      description: |
+        Returns all cached equipment request quests. In Phase 1, these are stored in-memory
+        and populated by the last sync operation.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of quests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 2
+                  quests:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EquipmentRequestQuest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/equipment-requests/quests/{id}:
+    get:
+      tags:
+        - equipment-requests
+      summary: Get single quest by ID
+      description: Retrieves details of a specific equipment request quest by its ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Quest ID (generated hash)
+          schema:
+            type: string
+            example: "quest-f6c39c6c14716069"
+      responses:
+        "200":
+          description: Quest details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipmentRequestQuest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Quest not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Quest not found"
+
 servers:
   - url: https://pyrhouse-backend-f26ml.ondigitalocean.app/api
     description: Production
@@ -1433,6 +1546,17 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+
+    Unauthorized:
+      description: Authentication required or invalid token
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid token"
 
   schemas:
     Error:
@@ -1608,3 +1732,101 @@ components:
         - moderator
         - admin
       example: user
+
+    EquipmentRequestQuest:
+      type: object
+      description: Aggregated equipment request quest from Google Sheets form
+      properties:
+        id:
+          type: string
+          description: Generated quest ID (MD5 hash of quest key)
+          example: "quest-f6c39c6c14716069"
+        destination:
+          $ref: "#/components/schemas/QuestDestination"
+        recipient:
+          type: string
+          description: Person who will receive the equipment
+          example: "Jan Kowalski"
+        delivery_date:
+          type: string
+          format: date
+          description: When equipment should be delivered
+          example: "2025-06-13"
+        pickup_time:
+          type: string
+          nullable: true
+          description: When to pick up equipment (flexible format)
+          example: "17-18"
+        budget_owner:
+          type: string
+          description: Person responsible for budget approval
+          example: "Anna Nowak"
+        items:
+          type: array
+          description: List of requested items in this quest
+          items:
+            $ref: "#/components/schemas/QuestItem"
+        status:
+          type: string
+          description: Quest processing status
+          enum:
+            - pending
+            - in_progress
+            - completed
+          example: "pending"
+        source_rows:
+          type: array
+          description: Source spreadsheet row numbers for debugging
+          items:
+            type: integer
+          example: [115, 116]
+        last_synced:
+          type: string
+          format: date-time
+          description: When this quest was last synced from sheet
+          example: "2026-02-15T23:40:24Z"
+
+    QuestDestination:
+      type: object
+      description: Equipment delivery destination
+      properties:
+        pavilion:
+          type: string
+          description: Destination pavilion
+          example: "PCC"
+        location:
+          type: string
+          description: Specific location within pavilion
+          example: "Maskarada"
+
+    QuestItem:
+      type: object
+      description: Individual item in an equipment request quest
+      properties:
+        name:
+          type: string
+          description: Item name from spreadsheet
+          example: "Laptop"
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantity requested
+          example: 4
+        category_id:
+          type: integer
+          nullable: true
+          description: Matched item category ID (if found)
+          example: 123
+        category_match:
+          type: string
+          description: How the category was matched
+          enum:
+            - exact
+            - fuzzy
+            - none
+          example: "exact"
+        notes:
+          type: string
+          nullable: true
+          description: Additional notes from requestor
+          example: "Must have good battery life"

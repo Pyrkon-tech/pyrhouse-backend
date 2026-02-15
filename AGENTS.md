@@ -232,7 +232,13 @@ Fields: `id`, `name` (auto-normalized), `label`, `pyr_id` (3-char auto-generated
 
 1. Add handler method to the module's `handler.go`
 2. Register route in `internal/routing/routes.go`
-3. Update `docs/openapi.yaml` with the new endpoint specification
+3. **⚠️ MANDATORY:** Update `docs/openapi.yaml` with:
+   - Tag (if new module)
+   - Path with HTTP method
+   - Parameters (path, query, body)
+   - Request schema (if applicable)
+   - Response schemas (success + error cases)
+   - Security requirements (bearerAuth if protected)
 
 ### Adding a new migration
 
@@ -276,6 +282,7 @@ Run: `go test ./...`
 
 ## Common Pitfalls
 
+- **OpenAPI Docs:** ⚠️ **CRITICAL** — Always update `docs/openapi.yaml` when adding or modifying endpoints. Add tag, path, parameters, request/response schemas. Keep in English.
 - **CORS:** Production frontend domain must be in `CORS_ALLOWED_ORIGINS` env var on DigitalOcean
 - **Discord OAuth:** `DISCORD_REDIRECT_URI` must match exactly what's registered in Discord Developer Portal
 - **FRONTEND_URL:** Must include protocol (`https://pyrhouse.space`, not `pyrhouse.space`)

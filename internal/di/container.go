@@ -5,6 +5,7 @@ import (
 	"warehouse/internal/auditlog"
 	auditLogRepo "warehouse/internal/auditlog"
 	"warehouse/internal/config"
+	"warehouse/internal/equipment_requests"
 	"warehouse/internal/integrations/googlesheets"
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/category"
@@ -20,19 +21,20 @@ import (
 )
 
 type Container struct {
-	Repository          *repository.Repository
-	AuditLog            *auditlog.Auditlog
-	LoginHandler        *security.LoginHandler
-	AssetHandler        *assets.ItemHandler
-	StockHandler        *stocks.StockHandler
-	LocationHandler     *locations.LocationHandler
-	TransferHandler     *transfers.TransferHandler
-	UserHandler         *users.UsersHandler
-	ItemHandler         *items.ItemHandler
-	GoogleSheetsHandler *googlesheets.GoogleSheetsHandler
-	ItemCategoryHandler *category.ItemCategoryHandler
-	ServiceDeskHandler  *service_desk.Handler
-	DiscordHandler      *security.DiscordHandler
+	Repository               *repository.Repository
+	AuditLog                 *auditlog.Auditlog
+	LoginHandler             *security.LoginHandler
+	AssetHandler             *assets.ItemHandler
+	StockHandler             *stocks.StockHandler
+	LocationHandler          *locations.LocationHandler
+	TransferHandler          *transfers.TransferHandler
+	UserHandler              *users.UsersHandler
+	ItemHandler              *items.ItemHandler
+	GoogleSheetsHandler      *googlesheets.GoogleSheetsHandler
+	ItemCategoryHandler      *category.ItemCategoryHandler
+	ServiceDeskHandler       *service_desk.Handler
+	DiscordHandler           *security.DiscordHandler
+	EquipmentRequestHandler  *equipment_requests.Handler
 }
 
 func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
@@ -66,19 +68,33 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		discordHandler = security.NewDiscordHandler(discordOAuth, userRepo)
 	}
 
+	var equipmentRequestHandler *equipment_requests.Handler
+	if cfg.EquipmentRequest.SheetID != "" && googleSheetsHandler != nil {
+		categoryRepo := category.NewCategoryRepository(repo)
+		equipmentRequestService := equipment_requests.NewService(
+			googleSheetsHandler.DutyScheduleService,
+			categoryRepo,
+			cfg.EquipmentRequest.SheetID,
+			cfg.EquipmentRequest.SheetName,
+			cfg.EquipmentRequest.FuzzyThreshold,
+		)
+		equipmentRequestHandler = equipment_requests.NewHandler(equipmentRequestService)
+	}
+
 	return &Container{
-		Repository:          repo,
-		AuditLog:            auditLog,
-		LoginHandler:        loginHandler,
-		AssetHandler:        assetHandler,
-		StockHandler:        stockHandler,
-		LocationHandler:     locationHandler,
-		TransferHandler:     transferHandler,
-		UserHandler:         userHandler,
-		ItemHandler:         itemsHandler,
-		GoogleSheetsHandler: googleSheetsHandler,
-		ItemCategoryHandler: itemCategoryHandler,
-		ServiceDeskHandler:  serviceDeskHandler,
-		DiscordHandler:      discordHandler,
+		Repository:              repo,
+		AuditLog:                auditLog,
+		LoginHandler:            loginHandler,
+		AssetHandler:            assetHandler,
+		StockHandler:            stockHandler,
+		LocationHandler:         locationHandler,
+		TransferHandler:         transferHandler,
+		UserHandler:             userHandler,
+		ItemHandler:             itemsHandler,
+		GoogleSheetsHandler:     googleSheetsHandler,
+		ItemCategoryHandler:     itemCategoryHandler,
+		ServiceDeskHandler:      serviceDeskHandler,
+		DiscordHandler:          discordHandler,
+		EquipmentRequestHandler: equipmentRequestHandler,
 	}
 }

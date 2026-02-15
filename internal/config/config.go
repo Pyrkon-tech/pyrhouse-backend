@@ -8,11 +8,20 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	JWT      JWTConfig
-	CORS     CORSConfig
-	Discord  DiscordConfig
+	Server           ServerConfig
+	Database         DatabaseConfig
+	JWT              JWTConfig
+	CORS             CORSConfig
+	Discord          DiscordConfig
+	EquipmentRequest EquipmentRequestConfig
+}
+
+type EquipmentRequestConfig struct {
+	SheetID        string
+	SheetName      string
+	SyncEnabled    bool
+	SyncInterval   time.Duration
+	FuzzyThreshold int
 }
 
 type ServerConfig struct {
@@ -82,9 +91,25 @@ func Load() (*Config, error) {
 			RedirectURI:  os.Getenv("DISCORD_REDIRECT_URI"),
 			FrontendURL:  os.Getenv("FRONTEND_URL"),
 		},
+		EquipmentRequest: EquipmentRequestConfig{
+			SheetID:        os.Getenv("EQUIPMENT_REQUEST_SHEET_ID"),
+			SheetName:      getEnv("EQUIPMENT_REQUEST_SHEET_NAME", "Zamówienia"),
+			SyncEnabled:    getEnv("EQUIPMENT_REQUEST_SYNC_ENABLED", "false") == "true",
+			SyncInterval:   parseDurationEnv("EQUIPMENT_REQUEST_SYNC_INTERVAL", 15*time.Minute),
+			FuzzyThreshold: getIntEnv("EQUIPMENT_REQUEST_FUZZY_THRESHOLD", 3),
+		},
 	}
 
 	return cfg, nil
+}
+
+func parseDurationEnv(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if duration, err := time.ParseDuration(value); err == nil {
+			return duration
+		}
+	}
+	return defaultValue
 }
 
 func getEnv(key, defaultValue string) string {
