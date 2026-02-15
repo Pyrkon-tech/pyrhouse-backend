@@ -6,7 +6,6 @@ import (
 	auditLogRepo "warehouse/internal/auditlog"
 	"warehouse/internal/config"
 	"warehouse/internal/integrations/googlesheets"
-	"warehouse/internal/integrations/jira"
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/category"
 	"warehouse/internal/inventory/items"
@@ -32,7 +31,6 @@ type Container struct {
 	ItemHandler         *items.ItemHandler
 	GoogleSheetsHandler *googlesheets.GoogleSheetsHandler
 	ItemCategoryHandler *category.ItemCategoryHandler
-	JiraHandler         *jira.JiraHandler
 	ServiceDeskHandler  *service_desk.Handler
 	DiscordHandler      *security.DiscordHandler
 }
@@ -57,19 +55,11 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	itemsHandler := items.NewItemHandler(repo, stockRepo, assetRepo, auditLog)
 	serviceDeskHandler := service_desk.NewHandler(repo)
 
-	// Initialize the Google Sheets handler
 	googleSheetsHandler, err := googlesheets.NewGoogleSheetsHandler()
 	if err != nil {
 		googleSheetsHandler = nil
 	}
 
-	// Initialize the Jira handler
-	jiraHandler, err := jira.NewJiraHandler()
-	if err != nil {
-		jiraHandler = nil
-	}
-
-	// Initialize the Discord OAuth handler
 	var discordHandler *security.DiscordHandler
 	if cfg.Discord.ClientID != "" && cfg.Discord.ClientSecret != "" {
 		discordOAuth := oauth.NewDiscordOAuth(cfg.Discord)
@@ -88,7 +78,6 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		ItemHandler:         itemsHandler,
 		GoogleSheetsHandler: googleSheetsHandler,
 		ItemCategoryHandler: itemCategoryHandler,
-		JiraHandler:         jiraHandler,
 		ServiceDeskHandler:  serviceDeskHandler,
 		DiscordHandler:      discordHandler,
 	}

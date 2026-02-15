@@ -34,14 +34,12 @@ func NewDiscordHandler(oauth *oauth.DiscordOAuth, userRepo DiscordUserRepository
 	}
 }
 
-// DiscordLogin redirects to the Discord authorization page
 func (h *DiscordHandler) DiscordLogin(c *gin.Context) {
 	state := generateState()
 	c.SetCookie("oauth_state", state, 600, "/", "", false, true)
 	c.Redirect(http.StatusTemporaryRedirect, h.oauth.GetAuthURL(state))
 }
 
-// DiscordCallback handles the callback from Discord
 func (h *DiscordHandler) DiscordCallback(c *gin.Context) {
 	frontendURL := h.oauth.GetFrontendURL()
 
@@ -168,18 +166,15 @@ func (h *DiscordHandler) findOrCreateUser(discordUser *oauth.DiscordUser) (*mode
 	return createdUser, nil
 }
 
-// RegisterRoutes registers Discord OAuth endpoints
 func (h *DiscordHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/auth/discord", h.DiscordLogin)
 	router.GET("/auth/discord/callback", h.DiscordCallback)
 }
 
-// RegisterProtectedRoutes registers protected Discord endpoints
 func (h *DiscordHandler) RegisterProtectedRoutes(router *gin.RouterGroup) {
 	router.POST("/users/:id/link-discord", Authorize("user"), h.LinkDiscord)
 }
 
-// LinkDiscord links an existing account with Discord
 func (h *DiscordHandler) LinkDiscord(c *gin.Context) {
 	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -202,28 +197,24 @@ func (h *DiscordHandler) LinkDiscord(c *gin.Context) {
 		return
 	}
 
-	// Exchange code for token
 	token, err := h.oauth.ExchangeCode(req.Code)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Discord authorization error", "details": err.Error()})
 		return
 	}
 
-	// Fetch Discord data
 	discordUser, err := h.oauth.GetUser(token.AccessToken)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch Discord data", "details": err.Error()})
 		return
 	}
 
-	// Check if discord_id is already assigned to another account
 	existingUser, _ := h.userRepo.FindUserByDiscordID(discordUser.ID)
 	if existingUser != nil && existingUser.ID != userID {
 		c.JSON(http.StatusConflict, gin.H{"error": "This Discord account is already linked to another user"})
 		return
 	}
 
-	// Link accounts
 	avatarURL := h.oauth.GetAvatarURL(discordUser)
 	if err := h.userRepo.LinkDiscord(userID, discordUser.ID, discordUser.Username, avatarURL); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link accounts", "details": err.Error()})

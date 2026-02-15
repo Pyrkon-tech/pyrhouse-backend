@@ -39,7 +39,7 @@ func (h *UsersHandler) RegisterPublicRoutes(router *gin.Engine) {
 func (h *UsersHandler) RegisterPublicUser(c *gin.Context) {
 	var req models.CreateUserRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe dane wejściowe", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data", "details": err.Error()})
 		return
 	}
 
@@ -49,18 +49,18 @@ func (h *UsersHandler) RegisterPublicUser(c *gin.Context) {
 	err := h.createUser(req)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się utworzyć użytkownika", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user", "details": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Użytkownik zarejestrowany pomyślnie"})
+	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
 }
 
 func (h *UsersHandler) RegisterUser(c *gin.Context) {
 
 	var req models.CreateUserRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe dane wejściowe", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data", "details": err.Error()})
 		return
 	}
 
@@ -68,11 +68,11 @@ func (h *UsersHandler) RegisterUser(c *gin.Context) {
 
 	err := h.createUser(req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się utworzyć użytkownika", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user", "details": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Użytkownik zarejestrowany pomyślnie"})
+	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
 }
 
 func (h *UsersHandler) createUser(req models.CreateUserRequest) error {
@@ -121,13 +121,13 @@ func (h *UsersHandler) UpdateUser(c *gin.Context) {
 	}
 
 	if err := h.Repository.UpdateUser(ctx.userID, ctx.changes); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas aktualizacji użytkownika", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user", "details": err.Error()})
 		return
 	}
 
 	updatedUser, err := h.Repository.GetUser(ctx.userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas pobierania zaktualizowanego użytkownika", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching updated user", "details": err.Error()})
 		return
 	}
 
@@ -137,35 +137,35 @@ func (h *UsersHandler) UpdateUser(c *gin.Context) {
 func (h *UsersHandler) prepareUpdateContext(c *gin.Context) (*UpdateUserContext, error) {
 	var req models.UpdateUserRequest
 	if err := c.BindJSON(&req); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe dane wejściowe", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid input data", "details": err.Error()})
 		return nil, err
 	}
 
 	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe ID użytkownika", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID", "details": err.Error()})
 		return nil, err
 	}
 
 	user, err := h.Repository.GetUser(userID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Nie znaleziono użytkownika", "details": err.Error(), "code": "USER_NOT_FOUND"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found", "details": err.Error(), "code": "USER_NOT_FOUND"})
 		return nil, err
 	}
 
 	authID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Brak autoryzacji"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return nil, fmt.Errorf("userID not found in context")
 	}
 	authIDStr, ok := authID.(string)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd wewnętrzny"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal error"})
 		return nil, fmt.Errorf("userID is not a string")
 	}
 	authIDInt, err := strconv.Atoi(authIDStr)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd wewnętrzny"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal error"})
 		return nil, fmt.Errorf("invalid userID format: %w", err)
 	}
 
@@ -215,18 +215,18 @@ func (h *UsersHandler) validatePasswordChange(ctx *UpdateUserContext) error {
 	}
 
 	if !ctx.isOwner && !ctx.isAdmin {
-		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Tylko właściciel konta lub administrator może zmienić hasło"})
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "Only account owner or admin can change password"})
 		return fmt.Errorf("unauthorized password change")
 	}
 
 	if len(*ctx.req.Password) < 6 {
-		ctx.c.JSON(http.StatusBadRequest, gin.H{"error": "Hasło musi mieć co najmniej 6 znaków"})
+		ctx.c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters"})
 		return fmt.Errorf("password too short")
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(*ctx.req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		ctx.c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas hashowania hasła"})
+		ctx.c.JSON(http.StatusInternalServerError, gin.H{"error": "Error hashing password"})
 		return err
 	}
 
@@ -241,7 +241,7 @@ func (h *UsersHandler) validateRoleChange(ctx *UpdateUserContext) error {
 	}
 
 	if !ctx.isAdmin {
-		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Tylko administrator może zmienić rolę użytkownika"})
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "Only admin can change user role"})
 		return fmt.Errorf("unauthorized role change")
 	}
 
@@ -256,12 +256,12 @@ func (h *UsersHandler) validateFullnameChange(ctx *UpdateUserContext) error {
 	}
 
 	if !ctx.isOwner && !ctx.isModerator {
-		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Tylko właściciel konta lub moderator może zmienić imię i nazwisko"})
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "Only account owner or moderator can change fullname"})
 		return fmt.Errorf("unauthorized fullname change")
 	}
 
 	if *ctx.req.Fullname == "" {
-		ctx.c.JSON(http.StatusBadRequest, gin.H{"error": "Imię i nazwisko nie może być puste"})
+		ctx.c.JSON(http.StatusBadRequest, gin.H{"error": "Fullname cannot be empty"})
 		return fmt.Errorf("empty fullname")
 	}
 
@@ -277,7 +277,7 @@ func (h *UsersHandler) validatePointsChange(ctx *UpdateUserContext) error {
 	}
 
 	if !ctx.isModerator {
-		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Tylko moderator może zmienić punkty użytkownika"})
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "Only moderator can change user points"})
 		return fmt.Errorf("unauthorized points change")
 	}
 
@@ -292,21 +292,21 @@ func (h *UsersHandler) validateUsernameChange(ctx *UpdateUserContext) error {
 	}
 
 	if !ctx.isOwner && !ctx.isAdmin {
-		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Tylko właściciel konta lub administrator może zmienić nazwę użytkownika"})
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "Only account owner or admin can change username"})
 		return fmt.Errorf("unauthorized username change")
 	}
 
 	if *ctx.req.Username == "" {
-		ctx.c.JSON(http.StatusBadRequest, gin.H{"error": "Nazwa użytkownika nie może być pusta"})
+		ctx.c.JSON(http.StatusBadRequest, gin.H{"error": "Username cannot be empty"})
 		return fmt.Errorf("empty username")
 	}
 
 	isUnique, err := h.Repository.IsUsernameUnique(*ctx.req.Username)
 	if err != nil {
-		ctx.c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd podczas sprawdzania unikalności nazwy użytkownika", "details": err.Error()})
+		ctx.c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking username uniqueness", "details": err.Error()})
 	}
 	if !isUnique {
-		ctx.c.JSON(http.StatusConflict, gin.H{"error": "Nazwa użytkownika jest już zajęta", "details": "Nazwa użytkownika jest już zajęta"})
+		ctx.c.JSON(http.StatusConflict, gin.H{"error": "Username already taken", "details": "Username already taken"})
 		return fmt.Errorf("username already exists")
 	}
 
@@ -325,10 +325,10 @@ func (h *UsersHandler) validateActiveChange(ctx *UpdateUserContext) error {
 		ctx.changes.Active = &active
 		return nil
 	case ctx.isModerator && ctx.user.Role != "user":
-		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Nie można zmienić aktywności użytkownika, który ma rolę inną niż użytkownik"})
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "Cannot change active status of user with role other than user"})
 		return fmt.Errorf("unauthorized active change")
 	case !ctx.isAdmin && !ctx.isModerator:
-		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Tylko administrator lub moderator może zmienić aktywność użytkownika"})
+		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "Only admin or moderator can change user active status"})
 		return fmt.Errorf("unauthorized active change")
 	}
 
@@ -415,24 +415,24 @@ func (h *UsersHandler) GetUserList(c *gin.Context) {
 func (h *UsersHandler) DeleteUser(c *gin.Context) {
 	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe ID użytkownika", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID", "details": err.Error()})
 		return
 	}
 
 	if !security.IsOwnerOrAllowed(c, userID, "admin") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Brak dostępu", "details": "Nie masz uprawnień do wykonania tej operacji"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "You don't have permission to perform this operation"})
 		return
 	}
 
 	err = h.Repository.DeleteUser(userID)
 	if err != nil {
-		if strings.Contains(err.Error(), "nie można usunąć użytkownika, ponieważ ma przypisane transfery") {
-			c.JSON(http.StatusConflict, gin.H{"error": "Nie można usunąć użytkownika", "details": err.Error()})
+		if strings.Contains(err.Error(), "cannot delete user, has assigned transfers") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Cannot delete user", "details": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie można usunąć użytkownika", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Cannot delete user", "details": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Użytkownik został usunięty"})
+	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }

@@ -19,6 +19,7 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 		window:   window,
 	}
 
+	// Start a goroutine for cleaning up old IPs
 	go rl.cleanupLoop()
 
 	return rl
@@ -78,7 +79,6 @@ func (rl *RateLimiter) IsAllowed(ip string) bool {
 	return true
 }
 
-// GetRemainingRequests returns the number of remaining requests for a given IP
 func (rl *RateLimiter) GetRemainingRequests(ip string) int {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()

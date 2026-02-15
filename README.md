@@ -1,6 +1,6 @@
 # Go Test Database
 
-A warehouse inventory management application with Google Sheets and Jira integrations.
+A warehouse inventory management application with Google Sheets integration.
 
 ## 🚀 Features
 
@@ -9,7 +9,6 @@ A warehouse inventory management application with Google Sheets and Jira integra
 - Stock management
 - Location transfers
 - Google Sheets integration
-- Jira integration
 - Role-based access control
 - Audit logging
 - Service desk functionality
@@ -67,9 +66,6 @@ go run main.go
 ```bash
 DATABASE_URL=postgres://username:password@localhost:5432/dbname?sslmode=disable
 GOOGLE_CREDENTIALS_FILE=path/to/credentials.json
-JIRA_URL=https://your-domain.atlassian.net
-JIRA_USERNAME=your-email
-JIRA_API_TOKEN=your-api-token
 ```
 
 ### Google Sheets API

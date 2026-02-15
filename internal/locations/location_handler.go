@@ -140,7 +140,7 @@ func (h *LocationHandler) RemoveLocation(c *gin.Context) {
 	err := h.Repository.RemoveLocation(c.Param("id"))
 
 	if _, ok := err.(*apperrors.ForeignKeyViolationError); ok {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Nie można usunąć lokalizacji, ponieważ ma przypisane elementy", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Cannot delete location, it has assigned items", "details": err.Error()})
 		return
 	} else if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not delete location", "details": err.Error()})

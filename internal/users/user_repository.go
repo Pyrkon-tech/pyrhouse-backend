@@ -180,7 +180,6 @@ func (r *userRepositoryImpl) UsersExists(userIDs []int) (bool, error) {
 	return len(dbUserIDs) == len(userIDs), nil
 }
 
-// FindUserByDiscordID finds a user by their Discord ID
 func (r *userRepositoryImpl) FindUserByDiscordID(discordID string) (*models.User, error) {
 	var user models.User
 	query := r.repository.GoquDBWrapper.Select(
@@ -198,7 +197,6 @@ func (r *userRepositoryImpl) FindUserByDiscordID(discordID string) (*models.User
 	return &user, nil
 }
 
-// FindUserByUsername finds a user by their username
 func (r *userRepositoryImpl) FindUserByUsername(username string) (*models.User, error) {
 	var user models.User
 	query := r.repository.GoquDBWrapper.Select(
@@ -216,9 +214,7 @@ func (r *userRepositoryImpl) FindUserByUsername(username string) (*models.User, 
 	return &user, nil
 }
 
-// CreateDiscordUser creates a new user with Discord data
 func (r *userRepositoryImpl) CreateDiscordUser(user *models.User) (*models.User, error) {
-	// Check if the username is unique; if not, generate a unique one
 	username := user.Username
 	isUnique, err := r.IsUsernameUnique(username)
 	if err != nil {
@@ -226,11 +222,9 @@ func (r *userRepositoryImpl) CreateDiscordUser(user *models.User) (*models.User,
 	}
 
 	if !isUnique {
-		// Username taken - add Discord ID as suffix
 		if user.DiscordID != nil {
 			username = fmt.Sprintf("%s_%s", user.Username, *user.DiscordID)
 		} else {
-			// Fallback - add random suffix
 			username = fmt.Sprintf("%s_%d", user.Username, r.generateRandomSuffix())
 		}
 	}
@@ -262,7 +256,6 @@ func (r *userRepositoryImpl) generateRandomSuffix() int64 {
 	return time.Now().UnixNano() % 100000
 }
 
-// UpdateDiscordInfo updates a user's Discord data
 func (r *userRepositoryImpl) UpdateDiscordInfo(userID int, username string, avatarURL string) error {
 	query := r.repository.GoquDBWrapper.Update("users").
 		Set(goqu.Record{
@@ -278,7 +271,6 @@ func (r *userRepositoryImpl) UpdateDiscordInfo(userID int, username string, avat
 	return nil
 }
 
-// LinkDiscord links an existing account with a Discord account
 func (r *userRepositoryImpl) LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error {
 	query := r.repository.GoquDBWrapper.Update("users").
 		Set(goqu.Record{

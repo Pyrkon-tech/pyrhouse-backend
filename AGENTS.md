@@ -56,7 +56,6 @@
     ├── users/                   # User CRUD + points system
     ├── integrations/
     │   ├── googlesheets/        # Google Sheets API integration
-    │   └── jira/                # Jira API integration
     └── service_desk/            # Support ticket handling
 ```
 
@@ -75,7 +74,7 @@ HTTP Request
 
 ### DI Container
 
-`internal/di/container.go` — manual dependency injection. All handlers, services, and repositories are wired in `NewAppContainer(db, cfg)`. Optional integrations (Google Sheets, Jira, Discord) degrade gracefully if config is missing.
+`internal/di/container.go` — manual dependency injection. All handlers, services, and repositories are wired in `NewAppContainer(db, cfg)`. Optional integrations (Google Sheets, Discord) degrade gracefully if config is missing.
 
 ### Middleware Chain (applied in order)
 
