@@ -52,7 +52,7 @@ func (s *ItemService) fetchItemList(conditions RetrieveItemListQuery) ([]interfa
 func (s *ItemService) fetchByCategory(conditions RetrieveItemListQuery, category string) ([]interface{}, error) {
 	switch category {
 	case "asset":
-		// Używamy warunków filtrowania jeśli są dostępne
+		// Use filter conditions if available
 		if conditions.HasConditions() {
 			queryBuilder := repository.NewQueryBuilder()
 			queryBuilder.AddCondition("location_ids", conditions.LocationIDs)
@@ -73,7 +73,7 @@ func (s *ItemService) fetchByCategory(conditions RetrieveItemListQuery, category
 			}
 			return result, nil
 		} else {
-			// Jeśli brak warunków, pobieramy wszystkie
+			// If no conditions, fetch all
 			assets, err := s.ar.GetAssetList()
 			if err != nil {
 				return nil, err
@@ -85,7 +85,7 @@ func (s *ItemService) fetchByCategory(conditions RetrieveItemListQuery, category
 			return result, nil
 		}
 	case "stock":
-		// Używamy warunków filtrowania jeśli są dostępne
+		// Use filter conditions if available
 		if conditions.HasConditions() {
 			queryBuilder := repository.NewQueryBuilder()
 			queryBuilder.AddCondition("location_ids", conditions.LocationIDs)
@@ -106,7 +106,7 @@ func (s *ItemService) fetchByCategory(conditions RetrieveItemListQuery, category
 			}
 			return result, nil
 		} else {
-			// Jeśli brak warunków, pobieramy wszystkie
+			// If no conditions, fetch all
 			stocks, err := s.sr.GetStockItems()
 			if err != nil {
 				return nil, err
@@ -125,9 +125,9 @@ func (s *ItemService) fetchByCategory(conditions RetrieveItemListQuery, category
 func (s *ItemService) fetchCombinedItems(conditions RetrieveItemListQuery) ([]interface{}, error) {
 	var result []interface{}
 
-	// Sprawdź czy są warunki filtrowania
+	// Check if there are filter conditions
 	if conditions.HasConditions() {
-		// Używamy warunków filtrowania dla obu typów
+		// Use filter conditions for both types
 		queryBuilder := repository.NewQueryBuilder()
 		queryBuilder.AddCondition("location_ids", conditions.LocationIDs)
 		if conditions.CategoryID != nil {
@@ -137,7 +137,7 @@ func (s *ItemService) fetchCombinedItems(conditions RetrieveItemListQuery) ([]in
 			queryBuilder.AddCondition("category_label", conditions.CategoryLabel)
 		}
 
-		// Pobierz zasoby z filtrowaniem
+		// Fetch assets with filtering
 		assets, err := s.ar.GetAssetsBy(queryBuilder)
 		if err != nil {
 			return nil, err
@@ -146,7 +146,7 @@ func (s *ItemService) fetchCombinedItems(conditions RetrieveItemListQuery) ([]in
 			result = append(result, asset)
 		}
 
-		// Pobierz elementy magazynowe z filtrowaniem
+		// Fetch stock items with filtering
 		stocks, err := s.sr.GetStockItemsBy(queryBuilder)
 		if err != nil {
 			return nil, err
@@ -155,8 +155,8 @@ func (s *ItemService) fetchCombinedItems(conditions RetrieveItemListQuery) ([]in
 			result = append(result, stock)
 		}
 	} else {
-		// Jeśli brak warunków, pobieramy wszystkie elementy
-		// Pobierz zasoby
+		// If no conditions, fetch all items
+		// Fetch assets
 		assets, err := s.ar.GetAssetList()
 		if err != nil {
 			return nil, err
@@ -165,7 +165,7 @@ func (s *ItemService) fetchCombinedItems(conditions RetrieveItemListQuery) ([]in
 			result = append(result, asset)
 		}
 
-		// Pobierz elementy magazynowe
+		// Fetch stock items
 		stocks, err := s.sr.GetStockItems()
 		if err != nil {
 			return nil, err

@@ -2,7 +2,7 @@ package repository
 
 import (
 	"fmt"
-	custom_error "warehouse/internal/errors"
+	apperrors "warehouse/internal/errors"
 	"warehouse/internal/models"
 
 	"github.com/doug-martin/goqu/v9"
@@ -42,7 +42,7 @@ func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*mod
 	if _, err := query.Executor().ScanVal(&itemCategory.ID); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23505" {
-				return nil, custom_error.WrapDBError("Zduplikowane PyrID", string(pqErr.Code))
+				return nil, apperrors.WrapDBError("Duplicate PyrID", string(pqErr.Code))
 			}
 		}
 		return nil, fmt.Errorf("failed to insert item_category record: %w", err)
@@ -52,7 +52,7 @@ func (r *Repository) PersistItemCategory(itemCategory models.ItemCategory) (*mod
 }
 
 func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
-	// Sprawdź czy są przypisane elementy w non_serialized_items
+	// Check if there are assigned items in non_serialized_items
 	var nonSerializedCount int
 	query := r.GoquDBWrapper.Select(goqu.COUNT("*")).
 		From("non_serialized_items").
@@ -63,7 +63,7 @@ func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
 		return fmt.Errorf("failed to check if category has non-serialized items: %w", err)
 	}
 
-	// Sprawdź czy są przypisane elementy w items
+	// Check if there are assigned items in items
 	var itemsCount int
 	query = r.GoquDBWrapper.Select(goqu.COUNT("*")).
 		From("items").
@@ -75,8 +75,8 @@ func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
 	}
 
 	if nonSerializedCount > 0 || itemsCount > 0 {
-		return custom_error.WrapDBError(
-			"Nie można usunąć kategorii, ponieważ ma przypisane elementy",
+		return apperrors.WrapDBError(
+			"Cannot delete category because it has assigned items",
 			"23503",
 		)
 	}
@@ -89,8 +89,8 @@ func (r *Repository) DeleteItemCategoryByID(categoryID string) error {
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23503" { // foreign key violation
-				return custom_error.WrapDBError(
-					"Nie można usunąć kategorii, ponieważ ma przypisane elementy",
+				return apperrors.WrapDBError(
+					"Cannot delete category because it has assigned items",
 					string(pqErr.Code),
 				)
 			}

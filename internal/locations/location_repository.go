@@ -2,7 +2,7 @@ package locations
 
 import (
 	"fmt"
-	custom_error "warehouse/internal/errors"
+	apperrors "warehouse/internal/errors"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
 
@@ -62,7 +62,7 @@ func (r *LocationRepository) PersistLocation(location *models.Location) error {
 	if _, err := query.Executor().ScanVal(&location.ID); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23505" {
-				return custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
+				return apperrors.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
 			}
 		}
 		return fmt.Errorf("failed to insert location record: %w", err)
@@ -108,7 +108,7 @@ func (r *LocationRepository) RemoveLocation(locationID string) error {
 
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
-			return custom_error.WrapDBError("Cannot delete location due to foreign key constraint", string(pqErr.Code))
+			return apperrors.WrapDBError("Cannot delete location due to foreign key constraint", string(pqErr.Code))
 		}
 		return fmt.Errorf("failed to delete location: %w", err)
 	}

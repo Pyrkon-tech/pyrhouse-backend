@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"warehouse/internal/auditlog"
-	custom_error "warehouse/internal/errors"
+	apperrors "warehouse/internal/errors"
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/models"
@@ -106,7 +106,7 @@ func (h *ItemCategoryHandler) RemoveItemCategory(c *gin.Context) {
 
 	err = h.service.DeleteCategory(categoryID)
 	if err != nil {
-		if _, ok := err.(*custom_error.ForeignKeyViolationError); ok {
+		if _, ok := err.(*apperrors.ForeignKeyViolationError); ok {
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Nie można usunąć kategorii #" + categoryID + ": istnieją powiązane elementy"})
 			return
 		}

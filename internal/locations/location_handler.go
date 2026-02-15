@@ -2,7 +2,7 @@ package locations
 
 import (
 	"net/http"
-	custom_error "warehouse/internal/errors"
+	apperrors "warehouse/internal/errors"
 	"warehouse/internal/models"
 	"warehouse/internal/security"
 
@@ -114,7 +114,7 @@ func (h *LocationHandler) CreateLocation(c *gin.Context) {
 	}
 
 	err = h.Repository.PersistLocation(&location)
-	if _, ok := err.(*custom_error.UniqueViolationError); ok {
+	if _, ok := err.(*apperrors.UniqueViolationError); ok {
 		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Could not insert, location, name not unique", "details": err.Error()})
 		return
 	} else if err != nil {
@@ -139,7 +139,7 @@ func (h *LocationHandler) GetLocationItems(c *gin.Context) {
 func (h *LocationHandler) RemoveLocation(c *gin.Context) {
 	err := h.Repository.RemoveLocation(c.Param("id"))
 
-	if _, ok := err.(*custom_error.ForeignKeyViolationError); ok {
+	if _, ok := err.(*apperrors.ForeignKeyViolationError); ok {
 		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Nie można usunąć lokalizacji, ponieważ ma przypisane elementy", "details": err.Error()})
 		return
 	} else if err != nil {

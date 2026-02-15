@@ -1,6 +1,6 @@
 package roles
 
-// Role reprezentuje poziom uprawnień użytkownika
+// Role represents a user's permission level
 type Role string
 
 const (
@@ -9,7 +9,7 @@ const (
 	Admin     Role = "admin"
 )
 
-// HierarchyLevel określa poziom w hierarchii ról
+// HierarchyLevel defines the level in the role hierarchy
 type HierarchyLevel int
 
 const (
@@ -18,7 +18,7 @@ const (
 	AdminLevel     HierarchyLevel = 3
 )
 
-// GetHierarchyLevel zwraca poziom hierarchii dla danej roli
+// GetHierarchyLevel returns the hierarchy level for the given role
 func (r Role) GetHierarchyLevel() HierarchyLevel {
 	switch r {
 	case User:
@@ -32,12 +32,12 @@ func (r Role) GetHierarchyLevel() HierarchyLevel {
 	}
 }
 
-// HasPermission sprawdza, czy rola ma wymagane uprawnienia
+// HasPermission checks whether the role has the required permissions
 func (r Role) HasPermission(requiredRole Role) bool {
 	return r.GetHierarchyLevel() >= requiredRole.GetHierarchyLevel()
 }
 
-// IsValid sprawdza, czy rola jest prawidłowa
+// IsValid checks whether the role is valid
 func (r Role) IsValid() bool {
 	switch r {
 	case User, Moderator, Admin:
@@ -47,7 +47,7 @@ func (r Role) IsValid() bool {
 	}
 }
 
-// String zwraca stringową reprezentację roli
+// String returns the string representation of the role
 func (r Role) String() string {
 	return string(r)
 }

@@ -80,7 +80,7 @@ func Load() (*Config, error) {
 			ClientID:     os.Getenv("DISCORD_CLIENT_ID"),
 			ClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
 			RedirectURI:  os.Getenv("DISCORD_REDIRECT_URI"),
-			FrontendURL:  os.Getenv("DISCORD_FRONTEND_URL"),
+			FrontendURL:  os.Getenv("FRONTEND_URL"),
 		},
 	}
 

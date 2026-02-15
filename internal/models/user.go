@@ -35,7 +35,6 @@ type UpdateUserRequest struct {
 	Active   *bool       `json:"active"`
 }
 
-// UserChanges reprezentuje pola użytkownika, które mogą być zmienione
 type UserChanges struct {
 	PasswordHash *string `db:"password_hash"`
 	Role         *string `db:"role"`
@@ -45,7 +44,6 @@ type UserChanges struct {
 	Active       *bool   `db:"active"`
 }
 
-// HasChanges sprawdza, czy jakiekolwiek pole zostało zmienione
 func (c *UserChanges) HasChanges() bool {
 	return c.PasswordHash != nil || c.Role != nil || c.Points != nil || c.Fullname != nil || c.Username != nil || c.Active != nil
 }

@@ -12,23 +12,23 @@ import (
 )
 
 func RunMigrations(db *sql.DB, migrationsDir string) error {
-	// Pobierz URL bazy danych z połączenia
+	// Get the database URL from the connection
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		return fmt.Errorf("DATABASE_URL environment variable is not set")
 	}
 
-	// Utwórz logger
+	// Create logger
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	// Konwertuj ścieżkę na URL z prefiksem file://
+	// Convert the path to a URL with file:// prefix
 	absPath, err := filepath.Abs(migrationsDir)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 	migrationsURL := "file://" + absPath
 
-	// Uruchom migracje
+	// Run migrations
 	return migration.Migrate(dbURL, migrationsURL, true, logger)
 }

@@ -5,7 +5,6 @@ import (
 	"warehouse/internal/roles"
 )
 
-// User reprezentuje użytkownika w systemie
 type User struct {
 	ID           string            `json:"id" db:"id"`
 	Username     string            `json:"username" db:"username"`
@@ -17,7 +16,6 @@ type User struct {
 	Metadata     map[string]string `json:"metadata,omitempty" db:"metadata"`
 }
 
-// UserRequest reprezentuje żądanie utworzenia/aktualizacji użytkownika
 type UserRequest struct {
 	Username string            `json:"username" binding:"required"`
 	Password string            `json:"password,omitempty"`
@@ -26,7 +24,6 @@ type UserRequest struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// UserResponse reprezentuje odpowiedź z danymi użytkownika
 type UserResponse struct {
 	ID        string            `json:"id"`
 	Username  string            `json:"username"`

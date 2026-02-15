@@ -2,7 +2,7 @@ package stocks
 
 import (
 	"fmt"
-	custom_error "warehouse/internal/errors"
+	apperrors "warehouse/internal/errors"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
 
@@ -40,7 +40,7 @@ func (r *StockRepository) PersistStockItem(stockRequest models.CreateStockItemRe
 
 	if _, err := query.Executor().ScanVal(&stockItem.ID); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
-			return nil, custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
+			return nil, apperrors.WrapDBError("Duplicate entry for stock item", string(pqErr.Code))
 		}
 		return nil, fmt.Errorf("failed to insert stock item record: %w", err)
 	}

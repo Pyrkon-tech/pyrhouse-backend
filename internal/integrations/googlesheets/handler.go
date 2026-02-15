@@ -23,34 +23,34 @@ type GoogleSheetsHandler struct {
 func NewGoogleSheetsHandler() (*GoogleSheetsHandler, error) {
 	ctx := context.Background()
 
-	// Sprawdź, czy mamy poświadczenia w zmiennej środowiskowej
+	// Check if we have credentials in the environment variable
 	credentialsJSON := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON")
 	var credentials *google.Credentials
 	var err error
 
 	if credentialsJSON != "" {
-		// Użyj poświadczeń z zmiennej środowiskowej
-		log.Println("Używam poświadczeń Google z zmiennej środowiskowej")
+		// Use credentials from environment variable
+		log.Println("Using Google credentials from environment variable")
 		credentials, err = google.CredentialsFromJSON(ctx, []byte(credentialsJSON), sheets.SpreadsheetsScope)
 	} else {
-		// Użyj pliku lokalnego (tylko dla środowiska deweloperskiego)
-		log.Println("Używam poświadczeń Google z pliku lokalnego")
+		// Use local file (development environment only)
+		log.Println("Using Google credentials from local file")
 		credentialsFile := "configs/google-credentials.json"
 		b, err := os.ReadFile(credentialsFile)
 		if err != nil {
-			return nil, fmt.Errorf("nie można odczytać pliku z danymi uwierzytelniającymi: %v", err)
+			return nil, fmt.Errorf("unable to read credentials file: %v", err)
 		}
 		credentials, err = google.CredentialsFromJSON(ctx, b, sheets.SpreadsheetsScope)
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("nie można załadować poświadczeń Google: %v", err)
+		return nil, fmt.Errorf("unable to load Google credentials: %v", err)
 	}
 
 	client := oauth2.NewClient(ctx, credentials.TokenSource)
 	sheetsService, err := sheets.New(client)
 	if err != nil {
-		return nil, fmt.Errorf("nie można utworzyć klienta Google Sheets: %v", err)
+		return nil, fmt.Errorf("unable to create Google Sheets client: %v", err)
 	}
 
 	return &GoogleSheetsHandler{
@@ -70,7 +70,7 @@ func (h *GoogleSheetsHandler) getQuests(c *gin.Context) {
 
 	if spreadsheetID == "" || readRange == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Wymagane parametry spreadsheet_id i range",
+			"error": "Required parameters: spreadsheet_id and range",
 		})
 		return
 	}
@@ -78,7 +78,7 @@ func (h *GoogleSheetsHandler) getQuests(c *gin.Context) {
 	filterStatus := c.Query("status")
 	values, err := h.ReadSpreadsheet(spreadsheetID, readRange)
 	if err != nil {
-		log.Printf("Błąd podczas pobierania danych: %v", err)
+		log.Printf("Error fetching data: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
@@ -86,7 +86,7 @@ func (h *GoogleSheetsHandler) getQuests(c *gin.Context) {
 	}
 
 	if values == nil {
-		log.Printf("Nie znaleziono danych w arkuszu")
+		log.Printf("No data found in the spreadsheet")
 		c.JSON(http.StatusOK, []Quest{})
 		return
 	}
@@ -117,11 +117,11 @@ func filterQuestsByStatus(quests []Quest, status string) []Quest {
 func (h *GoogleSheetsHandler) ReadSpreadsheet(spreadsheetID string, readRange string) ([][]interface{}, error) {
 	resp, err := h.sheetsService.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
 	if err != nil {
-		return nil, fmt.Errorf("nie można odczytać arkusza: %v", err)
+		return nil, fmt.Errorf("unable to read spreadsheet: %v", err)
 	}
 
 	if len(resp.Values) == 0 {
-		log.Printf("Nie znaleziono danych w zakresie %s", readRange)
+		log.Printf("No data found in range %s", readRange)
 		return nil, nil
 	}
 
@@ -130,11 +130,11 @@ func (h *GoogleSheetsHandler) ReadSpreadsheet(spreadsheetID string, readRange st
 
 func (h *GoogleSheetsHandler) getDutySchedule(c *gin.Context) {
 	spreadsheetID := "11kikoxFRrhDiHJJNSvAky6kk8eblFO4jL6n3Hj3FPwo"
-	readRange := "G1:CH12" // Dostosuj zakres według potrzeb
+	readRange := "G1:CH12" // Adjust range as needed
 
 	values, err := h.ReadSpreadsheet(spreadsheetID, readRange)
 	if err != nil {
-		log.Printf("Błąd podczas pobierania danych: %v", err)
+		log.Printf("Error fetching data: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
@@ -142,7 +142,7 @@ func (h *GoogleSheetsHandler) getDutySchedule(c *gin.Context) {
 	}
 
 	if values == nil {
-		log.Printf("Nie znaleziono danych w arkuszu")
+		log.Printf("No data found in the spreadsheet")
 		c.JSON(http.StatusOK, [][]interface{}{})
 		return
 	}

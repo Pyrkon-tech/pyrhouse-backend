@@ -19,7 +19,6 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 		window:   window,
 	}
 
-	// Uruchom goroutine do czyszczenia starych IP
 	go rl.cleanupLoop()
 
 	return rl
@@ -58,7 +57,7 @@ func (rl *RateLimiter) IsAllowed(ip string) bool {
 	now := time.Now()
 	windowStart := now.Add(-rl.window)
 
-	// Usuń stare requesty
+	// Remove old requests
 	if times, exists := rl.requests[ip]; exists {
 		var validTimes []time.Time
 		for _, t := range times {
@@ -69,17 +68,17 @@ func (rl *RateLimiter) IsAllowed(ip string) bool {
 		rl.requests[ip] = validTimes
 	}
 
-	// Sprawdź czy limit został przekroczony
+	// Check if the limit has been exceeded
 	if len(rl.requests[ip]) >= rl.limit {
 		return false
 	}
 
-	// Dodaj nowy request
+	// Add new request
 	rl.requests[ip] = append(rl.requests[ip], now)
 	return true
 }
 
-// GetRemainingRequests zwraca liczbę pozostałych requestów dla danego IP
+// GetRemainingRequests returns the number of remaining requests for a given IP
 func (rl *RateLimiter) GetRemainingRequests(ip string) int {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()

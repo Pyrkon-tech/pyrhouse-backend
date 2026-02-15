@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"warehouse/internal/auditlog"
-	custom_error "warehouse/internal/errors"
+	apperrors "warehouse/internal/errors"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
 
@@ -97,7 +97,7 @@ func (s *AssetService) CreateBulkAssets(req models.BulkItemRequest) ([]models.As
 		asset, err := s.assetsRepo.PersistItem(itemReq)
 		if err != nil {
 			switch err.(type) {
-			case *custom_error.UniqueViolationError:
+			case *apperrors.UniqueViolationError:
 				errors = append(errors, fmt.Sprintf("Numer seryjny %s jest już zarejestrowany", *serial))
 				continue
 			default:

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"warehouse/internal/auditlog"
-	custom_error "warehouse/internal/errors"
+	apperrors "warehouse/internal/errors"
 	"warehouse/internal/metadata"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
@@ -103,7 +103,7 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 	asset, err := h.assetService.CreateAsset(req)
 	if err != nil {
 		switch err.(type) {
-		case *custom_error.UniqueViolationError:
+		case *apperrors.UniqueViolationError:
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Item serial number already registered"})
 			return
 		default:
@@ -273,7 +273,7 @@ func (h *ItemHandler) UpdateAssetSerial(c *gin.Context) {
 	updatedAsset, err := h.assetService.UpdateAssetSerial(assetID, req.Serial)
 	if err != nil {
 		switch err.(type) {
-		case *custom_error.UniqueViolationError:
+		case *apperrors.UniqueViolationError:
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Numer seryjny już istnieje"})
 			return
 		default:

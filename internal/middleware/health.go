@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// HealthStatus reprezentuje status zdrowia aplikacji
+// HealthStatus represents the application health status
 type HealthStatus struct {
 	Status      string    `json:"status"`
 	LastChecked time.Time `json:"last_checked"`
@@ -31,32 +31,47 @@ var (
 	cacheDuration    = 5 * time.Second
 )
 
-// HealthCheckMiddleware dodaje endpoint do sprawdzania zdrowia aplikacji
+// HealthCheckMiddleware provides an application health check endpoint.
 func HealthCheckMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		healthMutex.RLock()
-		defer healthMutex.RUnlock()
-
-		// Sprawdź cache
 		if time.Since(lastResponseTime) < cacheDuration && lastResponse != nil {
-			c.Data(http.StatusOK, "application/json", lastResponse)
+			cached := make([]byte, len(lastResponse))
+			copy(cached, lastResponse)
+			healthMutex.RUnlock()
+			c.Data(http.StatusOK, "application/json", cached)
+			return
+		}
+		healthMutex.RUnlock()
+
+		healthMutex.Lock()
+		// Double-check after acquiring write lock
+		if time.Since(lastResponseTime) < cacheDuration && lastResponse != nil {
+			cached := make([]byte, len(lastResponse))
+			copy(cached, lastResponse)
+			healthMutex.Unlock()
+			c.Data(http.StatusOK, "application/json", cached)
 			return
 		}
 
-		// Aktualizacja czasu działania
 		healthStatus.Uptime = time.Since(startTime).String()
 		healthStatus.LastChecked = time.Now()
 
-		// Zapisz odpowiedź do cache
-		response, _ := json.Marshal(healthStatus)
+		response, err := json.Marshal(healthStatus)
+		if err != nil {
+			healthMutex.Unlock()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal health status"})
+			return
+		}
 		lastResponse = response
 		lastResponseTime = time.Now()
+		healthMutex.Unlock()
 
-		c.JSON(http.StatusOK, healthStatus)
+		c.Data(http.StatusOK, "application/json", response)
 	}
 }
 
-// UpdateHealthStatus aktualizuje status zdrowia aplikacji
+// UpdateHealthStatus updates the application health status
 func UpdateHealthStatus(status string) {
 	healthMutex.Lock()
 	defer healthMutex.Unlock()
@@ -66,7 +81,7 @@ func UpdateHealthStatus(status string) {
 	lastResponse = nil // Invalidate cache
 }
 
-// SetVersion ustawia wersję aplikacji
+// SetVersion sets the application version
 func SetVersion(version string) {
 	healthMutex.Lock()
 	defer healthMutex.Unlock()

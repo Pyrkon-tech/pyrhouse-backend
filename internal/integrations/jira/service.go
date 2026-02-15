@@ -138,18 +138,18 @@ func (s *JiraService) getTask(issueID string) (*Issue, error) {
 	return &issue, nil
 }
 
-// StatusTransition reprezentuje zmianę statusu
+// StatusTransition represents a status change
 type StatusTransition struct {
 	Status string `json:"status"`
 }
 
-// TransitionResponse reprezentuje odpowiedź po zmianie statusu
+// TransitionResponse represents the response after a status change
 type TransitionResponse struct {
 	Status     string   `json:"status"`
 	StatusDate DateTime `json:"statusDate"`
 }
 
-// ChangeStatus zmienia status zadania
+// ChangeStatus changes the status of a task
 func (s *JiraService) ChangeStatus(issueID string, newStatus string) (*TransitionResponse, error) {
 	url := fmt.Sprintf("%s/rest/servicedeskapi/request/%s/status", s.baseURL, issueID)
 
@@ -159,7 +159,7 @@ func (s *JiraService) ChangeStatus(issueID string, newStatus string) (*Transitio
 
 	jsonData, err := json.Marshal(transition)
 	if err != nil {
-		return nil, fmt.Errorf("błąd marshalowania danych: %v", err)
+		return nil, fmt.Errorf("error marshaling data: %v", err)
 	}
 
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))

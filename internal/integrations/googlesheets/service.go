@@ -47,11 +47,11 @@ func (s *DutyScheduleService) GetDutySchedule() ([]DutySchedule, error) {
 
 	values, err := s.readSpreadsheet(spreadsheetID, readRange)
 	if err != nil {
-		return nil, fmt.Errorf("nie można odczytać arkusza: %v", err)
+		return nil, fmt.Errorf("unable to read spreadsheet: %v", err)
 	}
 
 	if values == nil {
-		log.Printf("Nie znaleziono danych w arkuszu")
+		log.Printf("No data found in the spreadsheet")
 		return []DutySchedule{}, nil
 	}
 
@@ -72,7 +72,7 @@ func (s *DutyScheduleService) GetDutyScheduleForPerson(personName string) ([]Dut
 			Schedule:      make([]DutyTimeSlot, 0),
 		}
 
-		// Sprawdź dyżury na wtorek
+		// Check Tuesday shifts
 		if schedule.Tuesday == personName {
 			response.Schedule = append(response.Schedule, DutyTimeSlot{
 				StartTime: time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 11, 0, 0, 0, time.Local),
@@ -81,7 +81,7 @@ func (s *DutyScheduleService) GetDutyScheduleForPerson(personName string) ([]Dut
 			})
 		}
 
-		// Sprawdź dyżury na środę
+		// Check Wednesday shifts
 		if schedule.Wednesday == personName {
 			response.Schedule = append(response.Schedule, DutyTimeSlot{
 				StartTime: time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 11, 0, 0, 0, time.Local),
@@ -90,7 +90,7 @@ func (s *DutyScheduleService) GetDutyScheduleForPerson(personName string) ([]Dut
 			})
 		}
 
-		// Sprawdź dyżury na czwartek
+		// Check Thursday shifts
 		if schedule.Thursday == personName {
 			response.Schedule = append(response.Schedule, DutyTimeSlot{
 				StartTime: time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 11, 0, 0, 0, time.Local),
@@ -99,7 +99,7 @@ func (s *DutyScheduleService) GetDutyScheduleForPerson(personName string) ([]Dut
 			})
 		}
 
-		// Sprawdź dyżury na piątek
+		// Check Friday shifts
 		for timeSlot, person := range schedule.Friday {
 			if person == personName {
 				startTime, endTime := parseTimeSlot(timeSlot)
@@ -111,7 +111,7 @@ func (s *DutyScheduleService) GetDutyScheduleForPerson(personName string) ([]Dut
 			}
 		}
 
-		// Sprawdź dyżury na sobotę
+		// Check Saturday shifts
 		for timeSlot, person := range schedule.Saturday {
 			if person == personName {
 				startTime, endTime := parseTimeSlot(timeSlot)
@@ -123,7 +123,7 @@ func (s *DutyScheduleService) GetDutyScheduleForPerson(personName string) ([]Dut
 			}
 		}
 
-		// Sprawdź dyżury na niedzielę
+		// Check Sunday shifts
 		for timeSlot, person := range schedule.Sunday {
 			if person == personName {
 				startTime, endTime := parseTimeSlot(timeSlot)
@@ -146,11 +146,11 @@ func (s *DutyScheduleService) GetDutyScheduleForPerson(personName string) ([]Dut
 func (s *DutyScheduleService) readSpreadsheet(spreadsheetID string, readRange string) ([][]interface{}, error) {
 	resp, err := s.sheetsService.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
 	if err != nil {
-		return nil, fmt.Errorf("nie można odczytać arkusza: %v", err)
+		return nil, fmt.Errorf("unable to read spreadsheet: %v", err)
 	}
 
 	if len(resp.Values) == 0 {
-		log.Printf("Nie znaleziono danych w zakresie %s", readRange)
+		log.Printf("No data found in range %s", readRange)
 		return nil, nil
 	}
 
@@ -164,7 +164,7 @@ func (s *DutyScheduleService) parseDutySchedule(values [][]interface{}) []DutySc
 
 	schedules := make([]DutySchedule, 0)
 
-	// Pomijamy pierwszy wiersz (nagłówki)
+	// Skip the first row (headers)
 	for i := 1; i < len(values); i++ {
 		row := values[i]
 		if len(row) < 2 {
@@ -182,7 +182,7 @@ func (s *DutyScheduleService) parseDutySchedule(values [][]interface{}) []DutySc
 			Sunday:        make(map[string]string),
 		}
 
-		// Parsowanie godzin dla piątku (indeksy 6-29)
+		// Parse hours for Friday (indices 6-29)
 		for j := 6; j < 30; j++ {
 			if j < len(row) {
 				timeSlot := values[0][j].(string)
@@ -190,7 +190,7 @@ func (s *DutyScheduleService) parseDutySchedule(values [][]interface{}) []DutySc
 			}
 		}
 
-		// Parsowanie godzin dla soboty (indeksy 30-53)
+		// Parse hours for Saturday (indices 30-53)
 		for j := 30; j < 54; j++ {
 			if j < len(row) {
 				timeSlot := values[0][j].(string)
@@ -198,7 +198,7 @@ func (s *DutyScheduleService) parseDutySchedule(values [][]interface{}) []DutySc
 			}
 		}
 
-		// Parsowanie godzin dla niedzieli (indeksy 54-77)
+		// Parse hours for Sunday (indices 54-77)
 		for j := 54; j < 78; j++ {
 			if j < len(row) {
 				timeSlot := values[0][j].(string)
@@ -220,7 +220,7 @@ func toString(v interface{}) string {
 }
 
 func parseTimeSlot(timeSlot string) (time.Time, time.Time) {
-	// Przykładowy format: "00:00 - 01:00"
+	// Example format: "00:00 - 01:00"
 	layout := "15:04"
 	parts := splitTimeSlot(timeSlot)
 
@@ -235,7 +235,7 @@ func parseTimeSlot(timeSlot string) (time.Time, time.Time) {
 }
 
 func splitTimeSlot(timeSlot string) []string {
-	// Usuń spacje i podziel na części
+	// Remove spaces and split into parts
 	parts := make([]string, 2)
 	timeSlot = removeSpaces(timeSlot)
 	parts[0] = timeSlot[:5]

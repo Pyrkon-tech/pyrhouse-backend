@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// DiscordUserRepository definiuje metody repozytorium wymagane przez DiscordHandler
+// DiscordUserRepository defines the repository methods required by DiscordHandler
 type DiscordUserRepository interface {
 	FindUserByDiscordID(discordID string) (*models.User, error)
 	FindUserByUsername(username string) (*models.User, error)
@@ -34,18 +34,18 @@ func NewDiscordHandler(oauth *oauth.DiscordOAuth, userRepo DiscordUserRepository
 	}
 }
 
-// DiscordLogin redirectuje do strony autoryzacji Discord
+// DiscordLogin redirects to the Discord authorization page
 func (h *DiscordHandler) DiscordLogin(c *gin.Context) {
 	state := generateState()
 	c.SetCookie("oauth_state", state, 600, "/", "", false, true)
 	c.Redirect(http.StatusTemporaryRedirect, h.oauth.GetAuthURL(state))
 }
 
-// DiscordCallback obsługuje callback z Discord
+// DiscordCallback handles the callback from Discord
 func (h *DiscordHandler) DiscordCallback(c *gin.Context) {
 	frontendURL := h.oauth.GetFrontendURL()
 
-	// Helper do przekierowania z błędem
+	// Helper for redirecting with an error
 	redirectWithError := func(errorMsg string) {
 		if frontendURL != "" {
 			redirectURL := frontendURL + "?error=" + url.QueryEscape(errorMsg)
@@ -55,7 +55,7 @@ func (h *DiscordHandler) DiscordCallback(c *gin.Context) {
 		}
 	}
 
-	// 1. Weryfikacja state (CSRF protection)
+	// 1. Verify state (CSRF protection)
 	state := c.Query("state")
 	savedState, _ := c.Cookie("oauth_state")
 	if state != savedState {
@@ -63,92 +63,92 @@ func (h *DiscordHandler) DiscordCallback(c *gin.Context) {
 		return
 	}
 
-	// 2. Pobranie code
+	// 2. Get the code
 	code := c.Query("code")
 	if code == "" {
 		redirectWithError("Missing authorization code")
 		return
 	}
 
-	// 3. Wymiana code na token
+	// 3. Exchange code for token
 	token, err := h.oauth.ExchangeCode(code)
 	if err != nil {
 		redirectWithError("Failed to exchange code")
 		return
 	}
 
-	// 4. Pobranie danych użytkownika z Discord
+	// 4. Fetch user data from Discord
 	discordUser, err := h.oauth.GetUser(token.AccessToken)
 	if err != nil {
 		redirectWithError("Failed to get Discord user")
 		return
 	}
 
-	// 5. Znalezienie lub utworzenie użytkownika
+	// 5. Find or create user
 	user, err := h.findOrCreateUser(discordUser)
 	if err != nil {
 		redirectWithError("Failed to process user")
 		return
 	}
 
-	// 6. Sprawdzenie czy konto aktywne
+	// 6. Check if the account is active
 	if !user.Active {
-		redirectWithError("Konto jest nieaktywne. Skontaktuj się z administratorem.")
+		redirectWithError("Account is inactive. Contact the administrator.")
 		return
 	}
 
-	// 7. Generowanie JWT
+	// 7. Generate JWT
 	jwtToken, err := GenerateJWT(strconv.Itoa(user.ID), string(user.Role), user.Username)
 	if err != nil {
 		redirectWithError("Failed to generate token")
 		return
 	}
 
-	// 8. Przekierowanie na frontend z tokenem
+	// 8. Redirect to frontend with token
 	if frontendURL != "" {
 		redirectURL := frontendURL + "?token=" + jwtToken
 		c.Redirect(http.StatusTemporaryRedirect, redirectURL)
 	} else {
-		// Fallback - zwróć JSON jeśli brak frontendURL
+		// Fallback - return JSON if frontendURL is not set
 		c.JSON(http.StatusOK, gin.H{"token": jwtToken})
 	}
 }
 
 func (h *DiscordHandler) findOrCreateUser(discordUser *oauth.DiscordUser) (*models.User, error) {
-	// Szukaj użytkownika po discord_id
+	// Search for user by discord_id
 	user, err := h.userRepo.FindUserByDiscordID(discordUser.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	if user != nil {
-		// Użytkownik istnieje - aktualizuj dane Discord (username, avatar mogły się zmienić)
+		// User exists - update Discord data (username, avatar may have changed)
 		avatarURL := h.oauth.GetAvatarURL(discordUser)
 		if err := h.userRepo.UpdateDiscordInfo(user.ID, discordUser.Username, avatarURL); err != nil {
-			// Logujemy błąd, ale kontynuujemy
+			// Log the error but continue
 		}
 		return user, nil
 	}
 
-	// Sprawdź czy istnieje konto z taką samą nazwą użytkownika (bez połączenia z Discord)
+	// Check if an account with the same username exists (without Discord link)
 	existingUser, err := h.userRepo.FindUserByUsername(discordUser.Username)
 	if err != nil {
 		return nil, err
 	}
 	if existingUser != nil && existingUser.DiscordID == nil {
-		// Istnieje konto z taką nazwą - automatycznie połącz z Discord
+		// Account with this name exists - automatically link with Discord
 		avatarURL := h.oauth.GetAvatarURL(discordUser)
 		if err := h.userRepo.LinkDiscord(existingUser.ID, discordUser.ID, discordUser.Username, avatarURL); err != nil {
 			return nil, err
 		}
-		// Pobierz zaktualizowanego użytkownika
+		// Get the updated user
 		existingUser.DiscordID = &discordUser.ID
 		existingUser.DiscordUsername = &discordUser.Username
 		existingUser.AvatarURL = &avatarURL
 		return existingUser, nil
 	}
 
-	// Utwórz nowego użytkownika
+	// Create a new user
 	avatarURL := h.oauth.GetAvatarURL(discordUser)
 	newUser := &models.User{
 		Username:        discordUser.Username,
@@ -157,7 +157,7 @@ func (h *DiscordHandler) findOrCreateUser(discordUser *oauth.DiscordUser) (*mode
 		AvatarURL:       &avatarURL,
 		AuthProvider:    "discord",
 		Role:            roles.User,
-		Active:          false, // Wymagana ręczna aktywacja przez admina
+		Active:          false, // Manual activation by admin required
 	}
 
 	createdUser, err := h.userRepo.CreateDiscordUser(newUser)
@@ -168,28 +168,28 @@ func (h *DiscordHandler) findOrCreateUser(discordUser *oauth.DiscordUser) (*mode
 	return createdUser, nil
 }
 
-// RegisterRoutes rejestruje endpointy Discord OAuth
+// RegisterRoutes registers Discord OAuth endpoints
 func (h *DiscordHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/auth/discord", h.DiscordLogin)
 	router.GET("/auth/discord/callback", h.DiscordCallback)
 }
 
-// RegisterProtectedRoutes rejestruje chronione endpointy Discord
+// RegisterProtectedRoutes registers protected Discord endpoints
 func (h *DiscordHandler) RegisterProtectedRoutes(router *gin.RouterGroup) {
 	router.POST("/users/:id/link-discord", Authorize("user"), h.LinkDiscord)
 }
 
-// LinkDiscord łączy istniejące konto z Discord
+// LinkDiscord links an existing account with Discord
 func (h *DiscordHandler) LinkDiscord(c *gin.Context) {
 	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe ID użytkownika"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
-	// Sprawdź czy to właściciel konta lub admin
+	// Check if this is the account owner or admin
 	if !IsOwnerOrAllowed(c, userID, "admin") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Brak uprawnień"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
 		return
 	}
 
@@ -198,39 +198,39 @@ func (h *DiscordHandler) LinkDiscord(c *gin.Context) {
 		State string `json:"state" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowe dane", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data", "details": err.Error()})
 		return
 	}
 
-	// Wymiana code na token
+	// Exchange code for token
 	token, err := h.oauth.ExchangeCode(req.Code)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd autoryzacji Discord", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Discord authorization error", "details": err.Error()})
 		return
 	}
 
-	// Pobranie danych Discord
+	// Fetch Discord data
 	discordUser, err := h.oauth.GetUser(token.AccessToken)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się pobrać danych Discord", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch Discord data", "details": err.Error()})
 		return
 	}
 
-	// Sprawdź czy discord_id nie jest już przypisany do innego konta
+	// Check if discord_id is already assigned to another account
 	existingUser, _ := h.userRepo.FindUserByDiscordID(discordUser.ID)
 	if existingUser != nil && existingUser.ID != userID {
-		c.JSON(http.StatusConflict, gin.H{"error": "To konto Discord jest już połączone z innym użytkownikiem"})
+		c.JSON(http.StatusConflict, gin.H{"error": "This Discord account is already linked to another user"})
 		return
 	}
 
-	// Połącz konta
+	// Link accounts
 	avatarURL := h.oauth.GetAvatarURL(discordUser)
 	if err := h.userRepo.LinkDiscord(userID, discordUser.ID, discordUser.Username, avatarURL); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie udało się połączyć kont", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link accounts", "details": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Konto Discord zostało połączone"})
+	c.JSON(http.StatusOK, gin.H{"message": "Discord account has been linked"})
 }
 
 func generateState() string {

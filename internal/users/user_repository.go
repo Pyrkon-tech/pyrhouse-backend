@@ -78,15 +78,6 @@ func (r *userRepositoryImpl) GetUser(id int) (*models.User, error) {
 	return &user, nil
 }
 
-func (r *userRepositoryImpl) SetUserActive(userID int, active bool) error {
-	query := r.repository.GoquDBWrapper.Update("users").
-		Set(goqu.Record{"active": active}).
-		Where(goqu.Ex{"id": userID})
-
-	_, err := query.Executor().Exec()
-	return err
-}
-
 func (r *userRepositoryImpl) IsUsernameUnique(username string) (bool, error) {
 	var count int
 
@@ -153,18 +144,18 @@ func (r *userRepositoryImpl) DeleteUser(id int) error {
 	result, err := r.repository.GoquDBWrapper.Delete("users").Where(goqu.Ex{"id": id}).Executor().Exec()
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
-			return fmt.Errorf("nie można usunąć użytkownika, ponieważ ma przypisane transfery")
+			return fmt.Errorf("cannot delete user because they have assigned transfers")
 		}
-		return fmt.Errorf("błąd podczas usuwania użytkownika: %w", err)
+		return fmt.Errorf("error deleting user: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("nie można sprawdzić liczby usuniętych wierszy: %w", err)
+		return fmt.Errorf("could not check the number of deleted rows: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("nie znaleziono użytkownika o id: %d", id)
+		return fmt.Errorf("user not found with id: %d", id)
 	}
 
 	return nil
@@ -189,7 +180,7 @@ func (r *userRepositoryImpl) UsersExists(userIDs []int) (bool, error) {
 	return len(dbUserIDs) == len(userIDs), nil
 }
 
-// FindUserByDiscordID znajduje użytkownika po jego Discord ID
+// FindUserByDiscordID finds a user by their Discord ID
 func (r *userRepositoryImpl) FindUserByDiscordID(discordID string) (*models.User, error) {
 	var user models.User
 	query := r.repository.GoquDBWrapper.Select(
@@ -207,7 +198,7 @@ func (r *userRepositoryImpl) FindUserByDiscordID(discordID string) (*models.User
 	return &user, nil
 }
 
-// FindUserByUsername znajduje użytkownika po nazwie użytkownika
+// FindUserByUsername finds a user by their username
 func (r *userRepositoryImpl) FindUserByUsername(username string) (*models.User, error) {
 	var user models.User
 	query := r.repository.GoquDBWrapper.Select(
@@ -225,9 +216,9 @@ func (r *userRepositoryImpl) FindUserByUsername(username string) (*models.User, 
 	return &user, nil
 }
 
-// CreateDiscordUser tworzy nowego użytkownika z danymi Discord
+// CreateDiscordUser creates a new user with Discord data
 func (r *userRepositoryImpl) CreateDiscordUser(user *models.User) (*models.User, error) {
-	// Sprawdź czy username jest unikalna, jeśli nie - wygeneruj unikalną
+	// Check if the username is unique; if not, generate a unique one
 	username := user.Username
 	isUnique, err := r.IsUsernameUnique(username)
 	if err != nil {
@@ -235,11 +226,11 @@ func (r *userRepositoryImpl) CreateDiscordUser(user *models.User) (*models.User,
 	}
 
 	if !isUnique {
-		// Username zajęta - dodaj Discord ID jako sufiks
+		// Username taken - add Discord ID as suffix
 		if user.DiscordID != nil {
 			username = fmt.Sprintf("%s_%s", user.Username, *user.DiscordID)
 		} else {
-			// Fallback - dodaj losowy sufiks
+			// Fallback - add random suffix
 			username = fmt.Sprintf("%s_%d", user.Username, r.generateRandomSuffix())
 		}
 	}
@@ -271,7 +262,7 @@ func (r *userRepositoryImpl) generateRandomSuffix() int64 {
 	return time.Now().UnixNano() % 100000
 }
 
-// UpdateDiscordInfo aktualizuje dane Discord użytkownika
+// UpdateDiscordInfo updates a user's Discord data
 func (r *userRepositoryImpl) UpdateDiscordInfo(userID int, username string, avatarURL string) error {
 	query := r.repository.GoquDBWrapper.Update("users").
 		Set(goqu.Record{
@@ -287,7 +278,7 @@ func (r *userRepositoryImpl) UpdateDiscordInfo(userID int, username string, avat
 	return nil
 }
 
-// LinkDiscord łączy istniejące konto z kontem Discord
+// LinkDiscord links an existing account with a Discord account
 func (r *userRepositoryImpl) LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error {
 	query := r.repository.GoquDBWrapper.Update("users").
 		Set(goqu.Record{

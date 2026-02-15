@@ -57,19 +57,19 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	itemsHandler := items.NewItemHandler(repo, stockRepo, assetRepo, auditLog)
 	serviceDeskHandler := service_desk.NewHandler(repo)
 
-	// Inicjalizacja handlera Google Sheets
+	// Initialize the Google Sheets handler
 	googleSheetsHandler, err := googlesheets.NewGoogleSheetsHandler()
 	if err != nil {
 		googleSheetsHandler = nil
 	}
 
-	// Inicjalizacja handlera Jira
+	// Initialize the Jira handler
 	jiraHandler, err := jira.NewJiraHandler()
 	if err != nil {
 		jiraHandler = nil
 	}
 
-	// Inicjalizacja handlera Discord OAuth (tylko jeśli skonfigurowany)
+	// Initialize the Discord OAuth handler
 	var discordHandler *security.DiscordHandler
 	if cfg.Discord.ClientID != "" && cfg.Discord.ClientSecret != "" {
 		discordOAuth := oauth.NewDiscordOAuth(cfg.Discord)

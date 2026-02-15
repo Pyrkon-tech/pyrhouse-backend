@@ -1,6 +1,6 @@
 package models
 
-// CreateStockItemRequest reprezentuje żądanie utworzenia elementu magazynowego
+// CreateStockItemRequest represents a request to create a stock item
 type CreateStockItemRequest struct {
 	CategoryID int    `json:"category_id" binding:"required"`
 	LocationID int    `json:"location_id"`
@@ -8,7 +8,7 @@ type CreateStockItemRequest struct {
 	Origin     string `json:"origin"`
 }
 
-// PatchStockItemRequest reprezentuje żądanie aktualizacji elementu magazynowego
+// PatchStockItemRequest represents a request to update a stock item
 type PatchStockItemRequest struct {
 	ID         int     `uri:"id" binding:"required"`
 	LocationID *int    `json:"location_id"`
@@ -16,7 +16,7 @@ type PatchStockItemRequest struct {
 	Origin     *string `json:"origin"`
 }
 
-// RemoveStockItemFromTransferRequest reprezentuje żądanie usunięcia elementu z transferu
+// RemoveStockItemFromTransferRequest represents a request to remove an item from a transfer
 type RemoveStockItemFromTransferRequest struct {
 	Quantity     int `json:"quantity" binding:"required"`
 	ToLocationID int `json:"location_id" binding:"required"`
@@ -24,7 +24,7 @@ type RemoveStockItemFromTransferRequest struct {
 	CategoryID   int
 }
 
-// MoveStockItemToLocationRequest reprezentuje żądanie przeniesienia elementu
+// MoveStockItemToLocationRequest represents a request to move an item to a location
 type MoveStockItemToLocationRequest struct {
 	Quantity       int `json:"quantity" binding:"required"`
 	CategoryID     int

@@ -30,27 +30,27 @@ func (h *JiraHandler) getTasks(c *gin.Context) {
 
 	issues, err := h.JiraService.GetTasks(status, limit, start)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "błąd pobierania zadań"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tasks"})
 		return
 	}
 
-	c.JSON(200, issues)
+	c.JSON(http.StatusOK, issues)
 }
 
 func (h *JiraHandler) getTaskWithComments(c *gin.Context) {
 	issueID := c.Param("id")
 	if issueID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "brak ID zadania"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing task ID"})
 		return
 	}
 
 	issue, err := h.JiraService.GetTaskWithComments(issueID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "błąd pobierania zadania z komentarzami"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch task with comments"})
 		return
 	}
 
-	c.JSON(200, issue)
+	c.JSON(http.StatusOK, issue)
 }
 
 type ChangeStatusRequest struct {
@@ -60,21 +60,21 @@ type ChangeStatusRequest struct {
 func (h *JiraHandler) changeTaskStatus(c *gin.Context) {
 	issueID := c.Param("id")
 	if issueID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "brak ID zadania"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing task ID"})
 		return
 	}
 
 	var req ChangeStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "nieprawidłowy format danych"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
 	}
 
 	response, err := h.JiraService.ChangeStatus(issueID, req.Status)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "błąd zmiany statusu zadania"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to change task status"})
 		return
 	}
 
-	c.JSON(200, response)
+	c.JSON(http.StatusOK, response)
 }

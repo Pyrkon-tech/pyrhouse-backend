@@ -27,7 +27,7 @@ func Initialize(cfg config.JWTConfig) error {
 	jwtSecret = []byte(cfg.Secret)
 	jwtExpiration = cfg.Expiration
 
-	log.Println("Moduł security zainicjalizowany pomyślnie")
+	log.Println("Security module initialized successfully")
 	return nil
 }
 
@@ -41,12 +41,12 @@ func AuthenticateUser(username, password string, repo *repository.Repository) (*
 	}
 
 	if !user.Active {
-		return nil, fmt.Errorf("konto jest nieaktywne")
+		return nil, fmt.Errorf("account is inactive")
 	}
 
-	// Sprawdź czy użytkownik ma hasło (użytkownicy Discord mogą nie mieć)
+	// Check if the user has a password (Discord users may not have one)
 	if user.PasswordHash == nil {
-		return nil, fmt.Errorf("konto nie ma ustawionego hasła - użyj logowania przez Discord")
+		return nil, fmt.Errorf("account does not have a password set - use Discord login")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(password)); err != nil {

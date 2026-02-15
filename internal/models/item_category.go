@@ -26,7 +26,7 @@ func (c *ItemCategory) GeneratePyrID() {
 		return
 	}
 
-	// Sprawdzamy czy w label występują znane skróty (3-4 litery wielkie)
+	// Check if the label contains known abbreviations (3-4 uppercase letters)
 	words := strings.Fields(c.Label)
 	for _, word := range words {
 		if len(word) >= 3 && len(word) <= 4 && strings.ToUpper(word) == word {
@@ -35,12 +35,12 @@ func (c *ItemCategory) GeneratePyrID() {
 		}
 	}
 
-	// Jeśli nie znaleziono skrótu, generujemy standardowo
+	// If no abbreviation was found, generate one using the standard method
 	str := c.Name
 	words = strings.Fields(str)
 
 	if len(words) >= 3 {
-		// Jeśli mamy 3 lub więcej słów, bierzemy pierwszą literę z każdego słowa
+		// If we have 3 or more words, take the first letter from each word
 		var builder strings.Builder
 		for i := 0; i < 3; i++ {
 			if i < len(words) {
@@ -49,7 +49,7 @@ func (c *ItemCategory) GeneratePyrID() {
 		}
 		c.PyrID = strings.ToUpper(builder.String())
 	} else {
-		// Standardowa logika dla mniej niż 3 słów
+		// Standard logic for fewer than 3 words
 		if len(str) < 3 {
 			str = str + strings.Repeat("x", 3-len(str))
 		}

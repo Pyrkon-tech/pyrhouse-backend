@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// QuestItem reprezentuje pojedynczy element w questcie
+// QuestItem represents a single item in a quest
 type QuestItem struct {
 	ItemName string `json:"item_name"`
 	Quantity int    `json:"quantity"`
@@ -13,7 +13,7 @@ type QuestItem struct {
 	Status   string `json:"status"`
 }
 
-// Quest reprezentuje zagregowany element z arkusza Google Sheets
+// Quest represents an aggregated element from a Google Sheets spreadsheet
 type Quest struct {
 	Recipient    string      `json:"recipient"`
 	DeliveryDate string      `json:"delivery_date"`
@@ -23,7 +23,7 @@ type Quest struct {
 	Items        []QuestItem `json:"items"`
 }
 
-// MapHeaders tłumaczy nagłówki z arkusza na angielskie nazwy pól
+// MapHeaders maps spreadsheet headers to English field names
 func MapHeaders(headers []interface{}) map[int]string {
 	headerMap := make(map[int]string)
 
@@ -58,27 +58,27 @@ func MapHeaders(headers []interface{}) map[int]string {
 	return headerMap
 }
 
-// ParseQuests parsuje dane z arkusza na listę zagregowanych obiektów Quest
+// ParseQuests parses spreadsheet data into a list of aggregated Quest objects
 func ParseQuests(values [][]interface{}) []Quest {
-	log.Printf("[spreadsheet-parser] Rozpoczynam parsowanie %d wierszy danych", len(values))
+	log.Printf("[spreadsheet-parser] Starting to parse %d data rows", len(values))
 
 	if len(values) < 2 {
-		log.Printf("[spreadsheet-parser] Za mało wierszy danych, potrzebne minimum 2 wiersze (nagłówki + dane)")
+		log.Printf("[spreadsheet-parser] Not enough data rows, minimum 2 rows required (headers + data)")
 		return []Quest{}
 	}
 
 	headers := values[0]
-	log.Printf("[spreadsheet-parser] Nagłówki: %v", headers)
+	log.Printf("[spreadsheet-parser] Headers: %v", headers)
 
 	headerMap := MapHeaders(headers)
-	log.Printf("[spreadsheet-parser] Zmapowane nagłówki: %v", headerMap)
+	log.Printf("[spreadsheet-parser] Mapped headers: %v", headerMap)
 
-	// Map do przechowywania zagregowanych questów
+	// Map for storing aggregated quests
 	questMap := make(map[string]*Quest)
 
 	for i := 1; i < len(values); i++ {
 		row := values[i]
-		log.Printf("[spreadsheet-parser] Przetwarzanie wiersza %d: %v", i, row)
+		log.Printf("[spreadsheet-parser] Processing row %d: %v", i, row)
 
 		var recipient, deliveryDate, location, pavilion, itemName, notes, status string
 		var quantity int
@@ -119,13 +119,13 @@ func ParseQuests(values [][]interface{}) []Quest {
 			}
 		}
 
-		// Tworzymy klucz dla mapy na podstawie kombinacji pól
+		// Create a map key based on the combination of fields
 		key := recipient + "|" + deliveryDate + "|" + location + "|" + pavilion
 
-		// Sprawdzamy czy quest już istnieje
+		// Check if the quest already exists
 		quest, exists := questMap[key]
 		if !exists {
-			// Tworzymy nowy quest
+			// Create a new quest
 			quest = &Quest{
 				Recipient:    recipient,
 				DeliveryDate: deliveryDate,
@@ -137,7 +137,7 @@ func ParseQuests(values [][]interface{}) []Quest {
 			questMap[key] = quest
 		}
 
-		// Dodajemy element do questu
+		// Add item to the quest
 		quest.Items = append(quest.Items, QuestItem{
 			ItemName: itemName,
 			Quantity: quantity,
@@ -151,6 +151,6 @@ func ParseQuests(values [][]interface{}) []Quest {
 		quests = append(quests, *quest)
 	}
 
-	log.Printf("[spreadsheet-parser] Zakończono parsowanie, utworzono %d zagregowanych questów", len(quests))
+	log.Printf("[spreadsheet-parser] Parsing completed, created %d aggregated quests", len(quests))
 	return quests
 }

@@ -40,7 +40,6 @@ func NewDiscordOAuth(cfg config.DiscordConfig) *DiscordOAuth {
 	return &DiscordOAuth{config: cfg}
 }
 
-// GetAuthURL zwraca URL do autoryzacji Discord
 func (d *DiscordOAuth) GetAuthURL(state string) string {
 	params := url.Values{
 		"client_id":     {d.config.ClientID},
@@ -52,7 +51,6 @@ func (d *DiscordOAuth) GetAuthURL(state string) string {
 	return discordAuthURL + "?" + params.Encode()
 }
 
-// ExchangeCode wymienia authorization code na access token
 func (d *DiscordOAuth) ExchangeCode(code string) (*TokenResponse, error) {
 	data := url.Values{
 		"client_id":     {d.config.ClientID},
@@ -80,7 +78,6 @@ func (d *DiscordOAuth) ExchangeCode(code string) (*TokenResponse, error) {
 	return &token, nil
 }
 
-// GetUser pobiera dane użytkownika z Discord API
 func (d *DiscordOAuth) GetUser(accessToken string) (*DiscordUser, error) {
 	req, err := http.NewRequest("GET", discordUserURL, nil)
 	if err != nil {
@@ -106,7 +103,6 @@ func (d *DiscordOAuth) GetUser(accessToken string) (*DiscordUser, error) {
 	return &user, nil
 }
 
-// GetAvatarURL generuje URL do avatara Discord
 func (d *DiscordOAuth) GetAvatarURL(user *DiscordUser) string {
 	if user.Avatar == nil {
 		return ""
@@ -114,12 +110,10 @@ func (d *DiscordOAuth) GetAvatarURL(user *DiscordUser) string {
 	return fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", user.ID, *user.Avatar)
 }
 
-// IsConfigured sprawdza czy Discord OAuth jest skonfigurowany
 func (d *DiscordOAuth) IsConfigured() bool {
 	return d.config.ClientID != "" && d.config.ClientSecret != "" && d.config.RedirectURI != ""
 }
 
-// GetFrontendURL zwraca URL frontendu do przekierowania po logowaniu
 func (d *DiscordOAuth) GetFrontendURL() string {
 	return d.config.FrontendURL
 }

@@ -4,13 +4,13 @@ import (
 	"github.com/doug-martin/goqu/v9"
 )
 
-// RetrieveItemQuery reprezentuje zapytanie o pojedynczy element
+// RetrieveItemQuery represents a query for a single item
 type RetrieveItemQuery struct {
 	ID           *int   `uri:"id" binding:"required,number"`
 	CategoryType string `uri:"category" binding:"required"`
 }
 
-// RetrieveItemListQuery reprezentuje zapytanie o listę elementów
+// RetrieveItemListQuery represents a query for a list of items
 type RetrieveItemListQuery struct {
 	LocationIDs   []int  `form:"location_ids" binding:"omitempty"`
 	CategoryID    *int   `form:"category_id" binding:"omitempty,number"`
@@ -18,7 +18,7 @@ type RetrieveItemListQuery struct {
 	CategoryLabel string `form:"category_label"`
 }
 
-// AddCondition dodaje warunek do zapytania
+// AddCondition adds a condition to the query
 func (q *RetrieveItemListQuery) AddCondition(key string, value interface{}) {
 	switch key {
 	case "location_ids":
@@ -36,7 +36,7 @@ func (q *RetrieveItemListQuery) AddCondition(key string, value interface{}) {
 	}
 }
 
-// BuildConditions buduje warunki zapytania
+// BuildConditions builds the query conditions
 func (q *RetrieveItemListQuery) BuildConditions(aliases map[string]string) goqu.Ex {
 	conditions := goqu.Ex{}
 
@@ -53,7 +53,7 @@ func (q *RetrieveItemListQuery) BuildConditions(aliases map[string]string) goqu.
 	return conditions
 }
 
-// HasConditions sprawdza, czy zapytanie ma warunki
+// HasConditions checks whether the query has any conditions
 func (q *RetrieveItemListQuery) HasConditions() bool {
 	return len(q.LocationIDs) > 0 || q.CategoryID != nil || q.CategoryLabel != ""
 }

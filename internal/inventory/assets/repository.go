@@ -3,7 +3,7 @@ package assets
 import (
 	"database/sql"
 	"fmt"
-	custom_error "warehouse/internal/errors"
+	apperrors "warehouse/internal/errors"
 	"warehouse/internal/metadata"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
@@ -126,7 +126,7 @@ func (r *AssetsRepository) PersistItem(itemRequest models.ItemRequest) (*models.
 
 	if _, err := query.Executor().ScanVal(&assetID); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
-			return nil, custom_error.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
+			return nil, apperrors.WrapDBError("Duplicate serial number for asset", string(pqErr.Code))
 		}
 		return nil, fmt.Errorf("failed to insert asset record: %w", err)
 	}
@@ -186,7 +186,7 @@ func (r *AssetsRepository) UpdateAssetLocation(tx *goqu.TxDatabase, itemID int, 
 		return fmt.Errorf("transaction is required for UpdateAssetLocation")
 	}
 
-	// Najpierw sprawdzamy czy asset istnieje
+	// First check if the asset exists
 	var exists bool
 	_, err := tx.Select(goqu.L("1")).
 		From("items").
@@ -202,7 +202,7 @@ func (r *AssetsRepository) UpdateAssetLocation(tx *goqu.TxDatabase, itemID int, 
 		return fmt.Errorf("no asset found with id: %d", itemID)
 	}
 
-	// Aktualizujemy lokalizację
+	// Update the location
 	_, err = tx.Update("items").
 		Set(goqu.Record{"location_id": locationID}).
 		Where(goqu.Ex{"id": itemID}).
@@ -221,7 +221,7 @@ func (r *AssetsRepository) UpdateAssetStatusAndLocation(tx *goqu.TxDatabase, ite
 		return fmt.Errorf("transaction is required for UpdateAssetStatusAndLocation")
 	}
 
-	// Aktualizujemy status i lokalizację w jednym zapytaniu
+	// Update status and location in a single query
 	result, err := tx.Update("items").
 		Set(goqu.Record{
 			"location_id": locationID,
@@ -249,7 +249,7 @@ func (r *AssetsRepository) UpdateAssetStatusAndLocation(tx *goqu.TxDatabase, ite
 
 func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, locationID int) error {
 	return repository.WithTransaction(r.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-		// Najpierw sprawdzamy czy asset istnieje
+		// First check if the asset exists
 		var count int
 		_, err := tx.Select(goqu.COUNT("*")).
 			From("items").
@@ -265,7 +265,7 @@ func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, l
 			return fmt.Errorf("asset with id %d does not exist", itemID)
 		}
 
-		// Usuwamy z transferu
+		// Remove from transfer
 		result, err := tx.Delete("serialized_transfers").
 			Where(goqu.Ex{
 				"transfer_id": transferID,
@@ -287,7 +287,7 @@ func (r *AssetsRepository) RemoveAssetFromTransfer(transferID int, itemID int, l
 			return fmt.Errorf("no transfer record found for asset %d and transfer %d", itemID, transferID)
 		}
 
-		// Aktualizujemy status i lokalizację w jednym zapytaniu
+		// Update status and location in a single query
 		if err := r.UpdateAssetStatusAndLocation(tx, itemID, locationID, metadata.StatusAvailable); err != nil {
 			return err
 		}
@@ -467,7 +467,7 @@ func (r *AssetsRepository) CountAssetsInCategory(categoryID int) (int, error) {
 func (r *AssetsRepository) GenerateUniquePyrCode(categoryID int, categoryPyrID string) (string, error) {
 	var nextNumber int
 
-	// Pobieramy największy numer dla danej kategorii
+	// Get the largest number for the given category
 	query := r.repository.GoquDBWrapper.Select(
 		goqu.L("COALESCE(MAX(CAST(REGEXP_REPLACE(pyr_code, '^PYR-" + categoryPyrID + "(\\d+)(-\\d+)?$', '\\1') AS INTEGER)), 0)"),
 	).
@@ -493,18 +493,18 @@ func (r *AssetsRepository) UpdateAssetSerial(assetID int, serial string) error {
 	result, err := query.Executor().Exec()
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
-			return custom_error.WrapDBError("Numer seryjny już istnieje", string(pqErr.Code))
+			return apperrors.WrapDBError("Serial number already exists", string(pqErr.Code))
 		}
-		return fmt.Errorf("nie udało się zaktualizować numeru seryjnego: %w", err)
+		return fmt.Errorf("failed to update serial number: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("nie udało się sprawdzić liczby zaktualizowanych wierszy: %w", err)
+		return fmt.Errorf("failed to check the number of updated rows: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("nie znaleziono zasobu o ID: %d", assetID)
+		return fmt.Errorf("asset not found with ID: %d", assetID)
 	}
 
 	return nil
@@ -518,7 +518,7 @@ func (r *AssetsRepository) GetAssetsForReport() ([]models.FlatAssetRecord, error
 	var flatAssets []models.FlatAssetRecord
 	err := query.Executor().ScanStructs(&flatAssets)
 	if err != nil {
-		return nil, fmt.Errorf("nie udało się pobrać danych do raportu: %w", err)
+		return nil, fmt.Errorf("failed to fetch report data: %w", err)
 	}
 
 	return flatAssets, nil
@@ -547,7 +547,7 @@ func (r *AssetsRepository) GetStockForReport() ([]models.FlatStockRecord, error)
 	var flatStocks []models.FlatStockRecord
 	err := query.Executor().ScanStructs(&flatStocks)
 	if err != nil {
-		return nil, fmt.Errorf("nie udało się pobrać danych do raportu: %w", err)
+		return nil, fmt.Errorf("failed to fetch report data: %w", err)
 	}
 
 	return flatStocks, nil

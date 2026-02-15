@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	custom_error "warehouse/internal/errors"
+	apperrors "warehouse/internal/errors"
 	"warehouse/internal/metadata"
 	"warehouse/internal/models"
 	"warehouse/internal/repository"
@@ -244,7 +244,7 @@ func (h *TestItemHandler) CreateBulkAssets(c *gin.Context) {
 		asset, err := h.r.PersistItem(itemReq)
 		if err != nil {
 			switch err.(type) {
-			case *custom_error.UniqueViolationError:
+			case *apperrors.UniqueViolationError:
 				errors = append(errors, fmt.Sprintf("Serial number %s already registered", *serial))
 				continue
 			default:
@@ -564,7 +564,7 @@ func TestCreateBulkAssets_DuplicateSerial(t *testing.T) {
 
 	mockAssetsRepo.On("PersistItem", mock.MatchedBy(func(req models.ItemRequest) bool {
 		return *req.Serial == "SERIAL002"
-	})).Return(nil, &custom_error.UniqueViolationError{})
+	})).Return(nil, &apperrors.UniqueViolationError{})
 
 	// Mock successful asset creation for third serial
 	asset3 := &models.Asset{

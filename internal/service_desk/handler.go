@@ -54,13 +54,13 @@ func (h *Handler) getRequests(c *gin.Context) {
 	status := c.Query("status")
 	limitInt, offsetInt, err := h.getQueryPaginationParams(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format limitu lub offsetu", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid limit or offset format", "details": err.Error()})
 		return
 	}
 
 	requests, err := h.repository.GetRequests(status, limitInt, offsetInt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd pobierania zgłoszeń", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching requests", "details": err.Error()})
 		return
 	}
 
@@ -85,10 +85,8 @@ func (h *Handler) getRequest(c *gin.Context) {
 }
 
 func (h *Handler) createRequest(c *gin.Context) {
-	// Sprawdź czy użytkownik jest zalogowany
 	userID, err := security.GetUserIDFromToken(c)
 
-	// Jeśli użytkownik nie jest zalogowany, sprawdź rate limit
 	if err != nil || userID == "" {
 		clientIP := c.ClientIP()
 		if !h.rateLimiter.IsAllowed(clientIP) {
@@ -97,7 +95,7 @@ func (h *Handler) createRequest(c *gin.Context) {
 			c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
 			c.Header("X-RateLimit-Reset", time.Now().Add(time.Minute).Format(time.RFC3339))
 			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error":     "Przekroczono limit zapytań. Spróbuj ponownie później lub zaloguj się.",
+				"error":     "Rate limit exceeded. Please try again later or log in.",
 				"remaining": remaining,
 				"reset_at":  time.Now().Add(time.Minute).Format(time.RFC3339),
 			})
@@ -107,22 +105,21 @@ func (h *Handler) createRequest(c *gin.Context) {
 
 	var req Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format danych"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format"})
 		return
 	}
 
-	// Jeśli użytkownik jest zalogowany, ustaw jego ID
 	if userID != "" {
 		id, err := strconv.Atoi(userID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd konwersji ID użytkownika"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error converting user ID"})
 			return
 		}
 		req.CreatedByID = &id
 	}
 
 	if err := h.service.CreateRequest(&req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd tworzenia zgłoszenia", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating request", "details": err.Error()})
 		return
 	}
 
@@ -133,13 +130,13 @@ func (h *Handler) getComments(c *gin.Context) {
 	id := c.Param("id")
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
 		return
 	}
 
 	comments, err := h.repository.GetComments(idInt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd pobierania komentarzy", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching comments", "details": err.Error()})
 		return
 	}
 
@@ -150,7 +147,7 @@ func (h *Handler) changeStatus(c *gin.Context) {
 	reqID := c.Param("id")
 	id, err := strconv.Atoi(reqID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
 		return
 	}
 
@@ -159,16 +156,16 @@ func (h *Handler) changeStatus(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format danych"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format"})
 		return
 	}
 
 	if err := h.service.ChangeStatus(id, req.Status); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd zmiany statusu", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error changing status", "details": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Status zmieniony"})
+	c.JSON(http.StatusOK, gin.H{"message": "Status changed"})
 }
 
 func (h *Handler) assignRequest(c *gin.Context) {
@@ -176,18 +173,18 @@ func (h *Handler) assignRequest(c *gin.Context) {
 
 	reqID, err := strconv.Atoi(id)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
 		return
 	}
 
 	exists, err := h.repository.RequestsExists(reqID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd sprawdzania czy zgłoszenie istnieje", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking if request exists", "details": err.Error()})
 		return
 	}
 
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Zgłoszenie nie znalezione"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Request not found"})
 		return
 	}
 
@@ -196,34 +193,34 @@ func (h *Handler) assignRequest(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format danych"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format"})
 		return
 	}
 
 	if err := h.service.AssignRequest(reqID, req.AssignedToID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd przypisania zgłoszenia", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error assigning request", "details": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Zgłoszenie przypisane"})
+	c.JSON(http.StatusOK, gin.H{"message": "Request assigned"})
 }
 
 func (h *Handler) changePriority(c *gin.Context) {
 	id := c.Param("id")
 	reqID, err := strconv.Atoi(id)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
 		return
 	}
 
 	exists, err := h.repository.RequestsExists(reqID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd sprawdzania czy zgłoszenie istnieje", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking if request exists", "details": err.Error()})
 		return
 	}
 
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Zgłoszenie nie znalezione"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Request not found"})
 		return
 	}
 
@@ -232,39 +229,39 @@ func (h *Handler) changePriority(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format danych"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format"})
 		return
 	}
 
 	if req.Priority != "low" && req.Priority != "medium" && req.Priority != "high" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy priorytet"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid priority"})
 		return
 	}
 
 	if err := h.repository.UpdateRequestPriority(reqID, req.Priority); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd zmiany priorytetu", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error changing priority", "details": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Priorytet zmieniony"})
+	c.JSON(http.StatusOK, gin.H{"message": "Priority changed"})
 }
 
 func (h *Handler) addComment(c *gin.Context) {
 	id := c.Param("id")
 	reqID, err := strconv.Atoi(id)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
 		return
 	}
 
 	exists, err := h.repository.RequestsExists(reqID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd sprawdzania czy zgłoszenie istnieje", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking if request exists", "details": err.Error()})
 		return
 	}
 
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Zgłoszenie nie znalezione"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Request not found"})
 		return
 	}
 
@@ -273,26 +270,26 @@ func (h *Handler) addComment(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy format danych"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format"})
 		return
 	}
 
 	userIDstring, err := security.GetUserIDFromToken(c)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd pobierania ID użytkownika", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching user ID", "details": err.Error()})
 		return
 	}
 
 	userID, err := strconv.Atoi(userIDstring)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd konwersji ID użytkownika", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error converting user ID", "details": err.Error()})
 		return
 	}
 
 	comment, err := h.service.AddComment(reqID, req.Content, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd dodawania komentarza", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error adding comment", "details": err.Error()})
 		return
 	}
 

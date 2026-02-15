@@ -61,14 +61,16 @@ func (r *AuditLogRepository) GetResourceLog(id int, resourceType string) (*[]mod
 	var auditLogs []models.AuditLog
 	for rows.Next() {
 		var log models.AuditLog
-		rows.Scan( //if err -> handle
+		if err := rows.Scan(
 			&log.ID,
 			&log.ResourceID,
 			&log.ResourceType,
 			&log.Action,
 			&log.DataRaw,
 			&log.CreatedAt,
-		)
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan audit log row: %w", err)
+		}
 		log.LoadFromDB()
 		auditLogs = append(auditLogs, log)
 	}

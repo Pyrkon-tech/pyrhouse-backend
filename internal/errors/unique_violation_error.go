@@ -1,4 +1,4 @@
-package custom_error
+package apperrors
 
 import "fmt"
 
