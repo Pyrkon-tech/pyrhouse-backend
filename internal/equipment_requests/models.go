@@ -4,7 +4,8 @@ import "time"
 
 // Quest represents an aggregated equipment release request
 type Quest struct {
-	ID           string       `json:"id"`
+	ID           string       `json:"id"` // quest-abc123 (used for all operations)
+	QuestKey     string       `json:"-"` // MD5 hash for deduplication, not exposed in API
 	Destination  Destination  `json:"destination"`
 	Recipient    string       `json:"recipient"`
 	DeliveryDate string       `json:"delivery_date"`
@@ -18,11 +19,13 @@ type Quest struct {
 
 // QuestItem represents a single item in a quest
 type QuestItem struct {
-	Name           string  `json:"name"`
-	Quantity       int     `json:"quantity"`
-	CategoryID     *int    `json:"category_id,omitempty"`
-	CategoryMatch  string  `json:"category_match"` // exact, fuzzy, none
-	Notes          string  `json:"notes,omitempty"`
+	Name                    string  `json:"name"`
+	Quantity                int     `json:"quantity"`
+	CategoryID              *int    `json:"category_id,omitempty"`
+	CategoryMatch           string  `json:"category_match"` // exact, fuzzy, manual, none
+	CategoryMatchConfidence float64 `json:"category_match_confidence,omitempty"` // 0.00-1.00 for fuzzy matches
+	BudgetOwner             string  `json:"budget_owner,omitempty"` // Per-item budget owner (can differ from quest)
+	Notes                   string  `json:"notes,omitempty"`
 }
 
 // Destination represents where items should be delivered

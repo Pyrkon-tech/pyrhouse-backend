@@ -1418,18 +1418,25 @@ paths:
     post:
       tags:
         - equipment-requests
-      summary: Manual sync from Google Sheets
+      summary: Manual sync from Google Sheets to database
       description: |
         Triggers manual synchronization from the equipment request Google Sheet.
         Fetches all rows from the configured sheet, aggregates them into quests based on
-        destination, recipient, delivery date, and pickup time. Returns the aggregated quests.
+        destination, recipient, delivery date, and pickup time. Persists to database with upsert logic.
 
-        Phase 1: Results are cached in-memory (not persisted to DB).
+        **Phase 2:** Database persistence with fuzzy category matching (Levenshtein distance).
+
+        Sync process:
+        1. Fetch from Google Sheets
+        2. Parse and aggregate into quests
+        3. Fuzzy match categories (manual > exact > fuzzy > none)
+        4. Upsert to database (create new or update existing)
+        5. Track sync statistics
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: Sync completed successfully
+          description: Sync completed successfully with statistics
           content:
             application/json:
               schema:
@@ -1438,9 +1445,24 @@ paths:
                   message:
                     type: string
                     example: "Sync completed successfully"
-                  count:
-                    type: integer
-                    example: 2
+                  stats:
+                    type: object
+                    properties:
+                      quests_created:
+                        type: integer
+                        example: 2
+                      quests_updated:
+                        type: integer
+                        example: 1
+                      quests_unchanged:
+                        type: integer
+                        example: 0
+                      items_added:
+                        type: integer
+                        example: 5
+                      items_removed:
+                        type: integer
+                        example: 2
                   quests:
                     type: array
                     items:
@@ -1465,15 +1487,44 @@ paths:
     get:
       tags:
         - equipment-requests
-      summary: List all equipment request quests
+      summary: List equipment request quests from database
       description: |
-        Returns all cached equipment request quests. In Phase 1, these are stored in-memory
-        and populated by the last sync operation.
+        Returns quests from database with optional filtering and pagination.
+
+        **Phase 2:** Database-backed with pagination and status filtering.
       security:
         - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by quest status
+          schema:
+            type: string
+            enum: [pending, in_progress, completed, cancelled]
+            example: "pending"
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of quests to return (max 500)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+            example: 50
+        - name: offset
+          in: query
+          required: false
+          description: Number of quests to skip for pagination
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
       responses:
         "200":
-          description: List of quests
+          description: List of quests with pagination info
           content:
             application/json:
               schema:
@@ -1481,7 +1532,16 @@ paths:
                 properties:
                   count:
                     type: integer
+                    description: Number of quests returned
                     example: 2
+                  limit:
+                    type: integer
+                    description: Limit applied
+                    example: 50
+                  offset:
+                    type: integer
+                    description: Offset applied
+                    example: 0
                   quests:
                     type: array
                     items:
@@ -1524,6 +1584,143 @@ paths:
                   error:
                     type: string
                     example: "Quest not found"
+
+    patch:
+      tags:
+        - equipment-requests
+      summary: Update quest status
+      description: |
+        Updates the status of an equipment request quest.
+
+        Valid statuses: pending, in_progress, completed, cancelled
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Quest ID
+          schema:
+            type: string
+            example: "quest-f6c39c6c14716069"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [pending, in_progress, completed, cancelled]
+                  example: "in_progress"
+      responses:
+        "200":
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Quest status updated successfully"
+                  status:
+                    type: string
+                    example: "in_progress"
+        "400":
+          description: Invalid status value
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /api/equipment-requests/sync-log:
+    get:
+      tags:
+        - equipment-requests
+      summary: Get latest sync log
+      description: |
+        Returns the most recent sync operation log with statistics.
+
+        **Phase 2:** Tracks sync history including performance and errors.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Latest sync log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipmentRequestSyncLog"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: No sync log found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "No sync log found"
+
+  /api/equipment-requests/category-mapping:
+    post:
+      tags:
+        - equipment-requests
+      summary: Create manual category mapping
+      description: |
+        Creates a manual override for item-to-category matching.
+        Manual mappings have highest priority in fuzzy matching algorithm.
+
+        **Phase 2:** Override fuzzy matching for specific items.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - form_item_name
+                - category_id
+              properties:
+                form_item_name:
+                  type: string
+                  description: Exact item name from form
+                  example: "Laptop Dell"
+                category_id:
+                  type: integer
+                  description: Target category ID
+                  example: 15
+                created_by:
+                  type: integer
+                  description: User ID who created mapping
+                  example: 1
+      responses:
+        "201":
+          description: Category mapping created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Category mapping created successfully"
+                  mapping:
+                    $ref: "#/components/schemas/EquipmentRequestCategoryMapping"
+        "400":
+          description: Invalid request
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/DefaultError"
 
 servers:
   - url: https://pyrhouse-backend-f26ml.ondigitalocean.app/api
@@ -1823,10 +2020,105 @@ components:
           enum:
             - exact
             - fuzzy
+            - manual
             - none
           example: "exact"
+        category_match_confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+          description: Confidence score for fuzzy matches (0.00-1.00)
+          example: 0.85
+        budget_owner:
+          type: string
+          nullable: true
+          description: Budget owner for this specific item (can differ from quest budget_owner)
+          example: "Anna Nowak"
         notes:
           type: string
           nullable: true
           description: Additional notes from requestor
           example: "Must have good battery life"
+
+    EquipmentRequestSyncLog:
+      type: object
+      description: Log entry for equipment request synchronization from Google Sheets
+      properties:
+        id:
+          type: integer
+          description: Log entry ID
+          example: 42
+        synced_at:
+          type: string
+          format: date-time
+          description: When the sync operation completed
+          example: "2026-02-16T14:30:00Z"
+        rows_processed:
+          type: integer
+          description: Total number of spreadsheet rows processed
+          example: 20
+        quests_created:
+          type: integer
+          description: Number of new quests created during sync
+          example: 5
+        quests_updated:
+          type: integer
+          description: Number of existing quests updated during sync
+          example: 3
+        quests_unchanged:
+          type: integer
+          description: Number of quests that remained unchanged
+          example: 12
+        items_added:
+          type: integer
+          description: Total number of items added across all quests
+          example: 8
+        items_removed:
+          type: integer
+          description: Total number of items removed across all quests
+          example: 2
+        success:
+          type: boolean
+          description: Whether the sync operation completed successfully
+          example: true
+        duration_ms:
+          type: integer
+          description: How long the sync operation took in milliseconds
+          example: 2350
+        sheet_id:
+          type: string
+          description: Google Sheets spreadsheet ID that was synced
+          example: "1abc123def456"
+        errors:
+          type: string
+          description: Error messages if sync failed (empty if successful)
+          example: ""
+
+    EquipmentRequestCategoryMapping:
+      type: object
+      description: Manual mapping from form item name to equipment category
+      properties:
+        id:
+          type: integer
+          description: Mapping ID
+          example: 15
+        form_item_name:
+          type: string
+          description: Item name as it appears in the Google Sheets form
+          example: "Laptop Dell"
+        category_id:
+          type: integer
+          description: ID of the equipment category this maps to
+          example: 123
+        created_by:
+          type: integer
+          nullable: true
+          description: User ID who created this mapping
+          example: 7
+        created_at:
+          type: string
+          format: date-time
+          description: When this mapping was created
+          example: "2026-02-16T10:15:00Z"

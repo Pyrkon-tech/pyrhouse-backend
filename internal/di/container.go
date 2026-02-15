@@ -71,9 +71,12 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	var equipmentRequestHandler *equipment_requests.Handler
 	if cfg.EquipmentRequest.SheetID != "" && googleSheetsHandler != nil {
 		categoryRepo := category.NewCategoryRepository(repo)
+		equipmentRequestRepo := equipment_requests.NewRepository(repo)
 		equipmentRequestService := equipment_requests.NewService(
+			
 			googleSheetsHandler.DutyScheduleService,
 			categoryRepo,
+			equipmentRequestRepo,
 			cfg.EquipmentRequest.SheetID,
 			cfg.EquipmentRequest.SheetName,
 			cfg.EquipmentRequest.FuzzyThreshold,
