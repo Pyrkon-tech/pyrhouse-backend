@@ -72,6 +72,7 @@ func main() {
 
 	// Setup server
 	container := di.NewAppContainer(db, cfg)
+	defer container.Close() // Ensure cleanup on shutdown
 	router := setupRouter(container, cfg)
 	middleware.SetVersion(cfg.Server.Version)
 

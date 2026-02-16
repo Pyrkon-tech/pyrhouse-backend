@@ -2,6 +2,7 @@ package di
 
 import (
 	"database/sql"
+	"log"
 	"warehouse/internal/auditlog"
 	auditLogRepo "warehouse/internal/auditlog"
 	"warehouse/internal/config"
@@ -35,6 +36,7 @@ type Container struct {
 	ServiceDeskHandler       *service_desk.Handler
 	DiscordHandler           *security.DiscordHandler
 	EquipmentRequestHandler  *equipment_requests.Handler
+	EquipmentRequestScheduler *equipment_requests.Scheduler
 }
 
 func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
@@ -69,11 +71,12 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	}
 
 	var equipmentRequestHandler *equipment_requests.Handler
+	var equipmentRequestScheduler *equipment_requests.Scheduler
 	if cfg.EquipmentRequest.SheetID != "" && googleSheetsHandler != nil {
 		categoryRepo := category.NewCategoryRepository(repo)
 		equipmentRequestRepo := equipment_requests.NewRepository(repo)
 		equipmentRequestService := equipment_requests.NewService(
-			
+
 			googleSheetsHandler.DutyScheduleService,
 			categoryRepo,
 			equipmentRequestRepo,
@@ -82,22 +85,43 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 			cfg.EquipmentRequest.FuzzyThreshold,
 		)
 		equipmentRequestHandler = equipment_requests.NewHandler(equipmentRequestService)
+
+		// Phase 3: Auto-sync scheduler
+		if cfg.EquipmentRequest.SyncEnabled {
+			equipmentRequestScheduler = equipment_requests.NewScheduler(
+				equipmentRequestService,
+				cfg.EquipmentRequest.SyncInterval,
+			)
+			equipmentRequestScheduler.Start()
+			log.Printf("[INFO] Equipment request auto-sync enabled (interval: %v)", cfg.EquipmentRequest.SyncInterval)
+		} else {
+			log.Println("[INFO] Equipment request auto-sync disabled")
+		}
 	}
 
 	return &Container{
-		Repository:              repo,
-		AuditLog:                auditLog,
-		LoginHandler:            loginHandler,
-		AssetHandler:            assetHandler,
-		StockHandler:            stockHandler,
-		LocationHandler:         locationHandler,
-		TransferHandler:         transferHandler,
-		UserHandler:             userHandler,
-		ItemHandler:             itemsHandler,
-		GoogleSheetsHandler:     googleSheetsHandler,
-		ItemCategoryHandler:     itemCategoryHandler,
-		ServiceDeskHandler:      serviceDeskHandler,
-		DiscordHandler:          discordHandler,
-		EquipmentRequestHandler: equipmentRequestHandler,
+		Repository:                repo,
+		AuditLog:                  auditLog,
+		LoginHandler:              loginHandler,
+		AssetHandler:              assetHandler,
+		StockHandler:              stockHandler,
+		LocationHandler:           locationHandler,
+		TransferHandler:           transferHandler,
+		UserHandler:               userHandler,
+		ItemHandler:               itemsHandler,
+		GoogleSheetsHandler:       googleSheetsHandler,
+		ItemCategoryHandler:       itemCategoryHandler,
+		ServiceDeskHandler:        serviceDeskHandler,
+		DiscordHandler:            discordHandler,
+		EquipmentRequestHandler:   equipmentRequestHandler,
+		EquipmentRequestScheduler: equipmentRequestScheduler,
+	}
+}
+
+// Close performs cleanup operations on the container
+func (c *Container) Close() {
+	// Stop the equipment request scheduler if running
+	if c.EquipmentRequestScheduler != nil {
+		c.EquipmentRequestScheduler.Stop()
 	}
 }
