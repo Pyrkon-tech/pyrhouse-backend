@@ -58,7 +58,13 @@ func (r *CategoryRepository) GetCategoryByID(id int) (*models.ItemCategory, erro
 func (r *CategoryRepository) GetCategories() ([]models.ItemCategory, error) {
 	var categories []models.ItemCategory
 	query := r.repository.GoquDBWrapper.
-		Select("*").
+		Select(
+			goqu.I("id").As("category_id"),
+			goqu.I("item_category").As("type"),
+			goqu.I("category_type").As("category_type"),
+			goqu.I("label"),
+			goqu.I("pyr_id"),
+		).
 		From("item_category").
 		Order(goqu.I("id").Asc())
 

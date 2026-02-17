@@ -452,6 +452,7 @@ Run: `go test ./...`
 - **New users via Discord:** Created with `active=false` — need admin activation
 - **Migrations:** Always create both `.up.sql` and `.down.sql` files
 - **goqu:** Use `goqu.Ex{}` for WHERE conditions, not raw strings
+- **Repository:** Always check if goqu don't have different column mapping 
 - **Transactions:** Always use `repository.WithTransaction()` for multi-step DB operations
 - **Error package:** Use `apperrors` package (not `custom_error`) for DB error wrapping
 - **Language:** All code, comments, and error messages must be in English
