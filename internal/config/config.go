@@ -62,7 +62,7 @@ type DiscordConfig struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:           getEnv("PORT", "8080"),
+			Port:           getEnv("APP_PORT", "8080"),
 			RequestTimeout: getDurationEnv("REQUEST_TIMEOUT_SECONDS", 0),
 			Version:        getEnv("APP_VERSION", "1.0.0"),
 		},

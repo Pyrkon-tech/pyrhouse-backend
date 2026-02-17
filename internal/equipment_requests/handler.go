@@ -19,7 +19,7 @@ func NewHandler(service *Service) *Handler {
 
 // RegisterRoutes registers equipment request routes
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
-	equipmentRoutes := router.Group("/api/equipment-requests")
+	equipmentRoutes := router.Group("/equipment-requests")
 	{
 		// Sync operations
 		equipmentRoutes.POST("/sync", h.ManualSync)

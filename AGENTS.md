@@ -256,6 +256,169 @@ The `.up.sql` should contain the forward migration, `.down.sql` the rollback. Mi
 2. Initialize in `di/container.go` with graceful degradation (log warning if config missing, don't crash)
 3. Add config fields to `internal/config/config.go`
 
+## Equipment Requests Feature
+
+**Location:** `internal/equipment_requests/`
+**Status:** ✅ Fully implemented (Phase 1-3 complete)
+**Purpose:** Automated equipment release request management integrated with Google Sheets
+
+### Architecture Overview
+
+```
+Google Forms → Google Sheets → Backend (auto-sync) → PostgreSQL
+                                    ↓
+                            Quest Aggregation + Fuzzy Matching
+                                    ↓
+                            REST API for Frontend
+```
+
+### Components
+
+**Files:**
+- `handler.go` - HTTP endpoints for quests management
+- `service.go` - Business logic, fuzzy matching (Levenshtein), sync orchestration
+- `repository.go` - Database operations (CRUD + category mapping)
+- `scheduler.go` - Auto-sync background scheduler (Phase 3)
+- `models.go` - Data models (Quest, QuestItem, Destination)
+- `column_mapper.go` - Flexible Google Sheets column parsing
+- Tests: `*_test.go` (47 unit tests, all passing)
+
+**Database Tables (Migration 000028):**
+- `equipment_request_quests` - Aggregated requests by destination/recipient/date
+- `equipment_request_items` - Line items with category matching metadata
+- `equipment_request_sync_log` - Synchronization history and statistics
+- `equipment_request_category_mapping` - Manual item name → category overrides
+
+### Key Concepts
+
+**Quest Aggregation:**
+Items from Google Sheets are grouped into "quests" based on:
+- Pavilion + Location + Recipient + Delivery Date + Pickup Time
+
+**Fuzzy Category Matching (4-level priority):**
+1. **Manual mapping** (confidence: 1.0) - User-defined overrides in DB
+2. **Exact match** (confidence: 1.0) - Case-insensitive string match
+3. **Fuzzy match** (confidence: 0.0-1.0) - Levenshtein distance ≤ threshold (default: 3)
+4. **No match** (confidence: 0.0) - Item name doesn't match any category
+
+**Auto-Sync Scheduler:**
+- Configurable interval (default: 15 minutes, range: 1m-24h)
+- Graceful shutdown support
+- Error recovery (continues running on sync failures)
+- Manual trigger available via API
+
+### API Endpoints
+
+All under `/api/equipment-requests`:
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/quests` | List quests (filter, paginate) | JWT |
+| GET | `/quests/:id` | Get quest details | JWT |
+| PATCH | `/quests/:id/status` | Update quest status | JWT |
+| POST | `/sync` | Manual sync trigger | JWT |
+| GET | `/sync-log` | Latest sync statistics | JWT |
+| POST | `/category-mapping` | Create manual mapping | JWT |
+
+**Quest Statuses:**
+- `pending` - Awaiting processing
+- `in_progress` - Being prepared
+- `completed` - Delivered
+- `cancelled` - Cancelled
+
+### Configuration (.env)
+
+```bash
+# Required
+EQUIPMENT_REQUEST_SHEET_ID=<google-sheets-id>
+EQUIPMENT_REQUEST_SHEET_NAME=Zamówienia
+
+# Optional (Phase 3)
+EQUIPMENT_REQUEST_SYNC_ENABLED=false        # Auto-sync toggle
+EQUIPMENT_REQUEST_SYNC_INTERVAL=15m         # 1m-24h
+EQUIPMENT_REQUEST_FUZZY_THRESHOLD=3         # Levenshtein distance
+```
+
+### Usage Examples
+
+**Start server with auto-sync:**
+```bash
+# .env
+EQUIPMENT_REQUEST_SYNC_ENABLED=true
+EQUIPMENT_REQUEST_SYNC_INTERVAL=5m
+
+# Server will log:
+# [INFO] Equipment request auto-sync enabled (interval: 5m0s)
+# [INFO] Auto-sync: Starting equipment request sync...
+# [INFO] Auto-sync completed in 1.2s: 2 created, 1 updated, 15 unchanged
+```
+
+**Manual sync via API:**
+```bash
+POST /api/equipment-requests/sync
+Authorization: Bearer <token>
+
+Response:
+{
+  "message": "Sync completed successfully",
+  "stats": {
+    "quests_created": 5,
+    "quests_updated": 3,
+    "quests_unchanged": 12,
+    "items_added": 8,
+    "items_removed": 2
+  }
+}
+```
+
+### Frontend Integration
+
+**Specification:** See `EQUIPMENT_REQUESTS_FRONTEND_SPEC.md`
+**TypeScript types provided:** Quest, QuestItem, SyncStats, etc.
+**UI mockups:** Included in spec (List, Detail, Dashboard views)
+
+### Testing
+
+Run all equipment request tests:
+```bash
+go test ./internal/equipment_requests/... -v -short
+# 47 tests total, ~1.5s runtime
+```
+
+Integration tests (require test DB):
+```bash
+go test ./internal/equipment_requests/... -v  # without -short
+```
+
+### Rollback
+
+If auto-sync causes issues:
+1. Set `EQUIPMENT_REQUEST_SYNC_ENABLED=false`
+2. Restart server
+3. Manual sync still available via API
+
+To fully rollback Phase 3:
+```bash
+migrate -path migrations -database $DATABASE_URL down 1
+# Rolls back migration 000028
+```
+
+### Implementation Notes
+
+- **Scheduler:** Thread-safe, graceful shutdown via `container.Close()`
+- **Fuzzy matching:** Levenshtein distance algorithm (O(m*n) time complexity)
+- **Quest keys:** MD5 hash of aggregation fields for deduplication
+- **Transaction safety:** All multi-step DB operations use `repository.WithTransaction()`
+- **Error handling:** Sync errors logged but don't crash scheduler
+
+### Future Enhancements (Not Implemented)
+
+- Automatic transfer creation from completed quests
+- Real-time sync via webhooks (Google Sheets limitation)
+- Budget tracking and approval workflow
+- Email notifications on sync errors
+- Analytics dashboard (quest trends, popular items)
+
 ## Testing
 
 Uses `github.com/stretchr/testify` with table-driven tests:
