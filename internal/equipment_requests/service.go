@@ -12,17 +12,29 @@ import (
 	"warehouse/internal/models"
 )
 
+// TransferCreator abstracts transfer creation to avoid circular dependency with transfers package
+type TransferCreator interface {
+	InitTransfer(req models.TransferRequest, transitStatus string) (int, error)
+}
+
 type Service struct {
 	sheetReader      *googlesheets.DutyScheduleService
 	categoryRepo     *category.CategoryRepository
-	questRepo        QuestRepositoryInterface // NEW: for Phase 2 DB persistence
+	questRepo        QuestRepositoryInterface
+	transferCreator  TransferCreator
 	sheetID          string
 	sheetName        string
 	fuzzyThreshold   int
 	categories       []models.ItemCategory // cached
 }
 
-func NewService(sheetReader *googlesheets.DutyScheduleService, categoryRepo *category.CategoryRepository, questRepo *Repository, sheetID, sheetName string, fuzzyThreshold int) *Service {
+func NewService(
+	sheetReader *googlesheets.DutyScheduleService,
+	categoryRepo *category.CategoryRepository,
+	questRepo *Repository,
+	sheetID, sheetName string,
+	fuzzyThreshold int,
+) *Service {
 	return &Service{
 		sheetReader:    sheetReader,
 		categoryRepo:   categoryRepo,
@@ -31,6 +43,11 @@ func NewService(sheetReader *googlesheets.DutyScheduleService, categoryRepo *cat
 		sheetName:      sheetName,
 		fuzzyThreshold: fuzzyThreshold,
 	}
+}
+
+// SetTransferCreator sets the transfer creator (called after DI wiring to avoid circular deps)
+func (s *Service) SetTransferCreator(tc TransferCreator) {
+	s.transferCreator = tc
 }
 
 // SyncQuests fetches sheet data and aggregates into quests
@@ -447,4 +464,204 @@ func toLower(s string) string {
 		result[i] = c
 	}
 	return string(result)
+}
+
+// ============================================================================
+// Phase 4: Quest → Transfer Integration
+// ============================================================================
+
+// ResolveQuestLocation resolves quest destination pavilion+location to a location ID
+func (s *Service) ResolveQuestLocation(quest *Quest) (*int, error) {
+	return s.questRepo.ResolveLocationByPavilionAndName(
+		quest.Destination.Pavilion,
+		quest.Destination.Location,
+	)
+}
+
+// ResolveQuestStockItems maps quest items (by category_id) to actual stock items at a source location
+func (s *Service) ResolveQuestStockItems(quest *Quest, fromLocationID int) ([]ResolvedStockItem, []UnresolvedItem) {
+	var resolved []ResolvedStockItem
+	var unresolved []UnresolvedItem
+
+	for _, item := range quest.Items {
+		if item.CategoryID == nil {
+			unresolved = append(unresolved, UnresolvedItem{
+				ItemName: item.Name,
+				Quantity: item.Quantity,
+				Reason:   "no category match for this item",
+			})
+			continue
+		}
+
+		matches, err := s.questRepo.FindStockItemsByCategory(fromLocationID, *item.CategoryID)
+		if err != nil || len(matches) == 0 {
+			unresolved = append(unresolved, UnresolvedItem{
+				ItemName:   item.Name,
+				Quantity:   item.Quantity,
+				CategoryID: item.CategoryID,
+				Reason:     "no stock found at source location for this category",
+			})
+			continue
+		}
+
+		// Use the first matching stock item (same category at that location)
+		match := matches[0]
+		resolved = append(resolved, ResolvedStockItem{
+			StockID:      match.StockID,
+			CategoryID:   match.CategoryID,
+			CategoryName: match.CategoryName,
+			ItemName:     item.Name,
+			Quantity:     item.Quantity,
+			Available:    match.Quantity,
+		})
+	}
+
+	return resolved, unresolved
+}
+
+// PreviewTransferFromQuest builds a preview of what a transfer from this quest would look like
+func (s *Service) PreviewTransferFromQuest(ctx context.Context, questID string, fromLocationID int) (*TransferPreview, error) {
+	quest, err := s.questRepo.GetQuestByID(ctx, questID)
+	if err != nil {
+		return nil, fmt.Errorf("quest not found: %w", err)
+	}
+
+	preview := &TransferPreview{
+		FromLocationID: fromLocationID,
+	}
+
+	// Resolve destination location
+	toLocationID, err := s.ResolveQuestLocation(quest)
+	if err == nil && toLocationID != nil {
+		preview.ToLocationID = toLocationID
+	}
+
+	// Resolve stock items
+	preview.ResolvedItems, preview.UnresolvedItems = s.ResolveQuestStockItems(quest, fromLocationID)
+
+	return preview, nil
+}
+
+// CreateTransferFromQuest creates an inventory transfer from a quest
+func (s *Service) CreateTransferFromQuest(ctx context.Context, questID string, req CreateTransferFromQuestRequest) (int, error) {
+	if s.transferCreator == nil {
+		return 0, fmt.Errorf("transfer service not configured")
+	}
+
+	// 1. Fetch and validate quest
+	quest, err := s.questRepo.GetQuestByID(ctx, questID)
+	if err != nil {
+		return 0, fmt.Errorf("quest not found: %w", err)
+	}
+
+	if quest.TransferID != nil {
+		return 0, fmt.Errorf("quest already linked to transfer %d", *quest.TransferID)
+	}
+
+	if quest.Status != "pending" {
+		return 0, fmt.Errorf("quest status must be 'pending', got '%s'", quest.Status)
+	}
+
+	// 2. Resolve destination location
+	toLocationID := 0
+	if req.ToLocationID != nil {
+		toLocationID = *req.ToLocationID
+	} else {
+		resolved, err := s.ResolveQuestLocation(quest)
+		if err != nil || resolved == nil {
+			return 0, fmt.Errorf("could not resolve destination location from pavilion '%s' and location '%s' — provide to_location_id explicitly",
+				quest.Destination.Pavilion, quest.Destination.Location)
+		}
+		toLocationID = *resolved
+	}
+
+	// 3. Build transfer request
+	transferReq := models.TransferRequest{
+		FromLocationID: req.FromLocationID,
+		LocationID:     toLocationID,
+	}
+
+	// 3a. Stock items — use override or auto-resolve
+	if len(req.StockItems) > 0 {
+		for _, si := range req.StockItems {
+			transferReq.StockItemCollection = append(transferReq.StockItemCollection, models.StockItemRequest{
+				ID:       si.ID,
+				Quantity: si.Quantity,
+			})
+		}
+	} else {
+		// Auto-resolve from quest items
+		resolved, unresolved := s.ResolveQuestStockItems(quest, req.FromLocationID)
+		if len(resolved) == 0 {
+			reasons := make([]string, len(unresolved))
+			for i, u := range unresolved {
+				reasons[i] = fmt.Sprintf("%s: %s", u.ItemName, u.Reason)
+			}
+			return 0, fmt.Errorf("no stock items could be resolved: %v", reasons)
+		}
+		for _, r := range resolved {
+			transferReq.StockItemCollection = append(transferReq.StockItemCollection, models.StockItemRequest{
+				ID:       r.StockID,
+				Quantity: r.Quantity,
+			})
+		}
+	}
+
+	// 3b. Assets — optional
+	for _, a := range req.Assets {
+		transferReq.AssetItemCollection = append(transferReq.AssetItemCollection, models.AssetItemRequest{
+			ID: a.ID,
+		})
+	}
+
+	// 3c. Users — optional
+	for _, u := range req.Users {
+		transferReq.Users = append(transferReq.Users, models.TransferUser{
+			UserID: u.ID,
+		})
+	}
+
+	// 4. Create the transfer
+	transferID, err := s.transferCreator.InitTransfer(transferReq, "in_transit")
+	if err != nil {
+		return 0, fmt.Errorf("failed to create transfer: %w", err)
+	}
+
+	// 5. Link quest to transfer
+	if err := s.questRepo.LinkQuestToTransfer(ctx, questID, transferID); err != nil {
+		return transferID, fmt.Errorf("transfer created (ID: %d) but failed to link to quest: %w", transferID, err)
+	}
+
+	log.Printf("[equipment-requests] Created transfer %d from quest %s", transferID, questID)
+	return transferID, nil
+}
+
+// OnTransferStatusChanged is called by the transfer service when a linked transfer changes status.
+// Implements the TransferStatusCallback interface.
+func (s *Service) OnTransferStatusChanged(transferID int, newStatus string) error {
+	ctx := context.Background()
+
+	quest, err := s.questRepo.GetQuestByTransferID(ctx, transferID)
+	if err != nil {
+		return fmt.Errorf("failed to find quest for transfer %d: %w", transferID, err)
+	}
+	if quest == nil {
+		return nil // No quest linked to this transfer — nothing to do
+	}
+
+	switch newStatus {
+	case "completed":
+		if err := s.questRepo.UpdateQuestStatus(ctx, quest.ID, "completed"); err != nil {
+			return fmt.Errorf("failed to complete quest %s: %w", quest.ID, err)
+		}
+		log.Printf("[equipment-requests] Quest %s completed via transfer %d", quest.ID, transferID)
+
+	case "cancelled":
+		if err := s.questRepo.UnlinkQuestFromTransfer(ctx, quest.ID); err != nil {
+			return fmt.Errorf("failed to unlink quest %s from cancelled transfer %d: %w", quest.ID, transferID, err)
+		}
+		log.Printf("[equipment-requests] Quest %s unlinked from cancelled transfer %d, status reset to pending", quest.ID, transferID)
+	}
+
+	return nil
 }

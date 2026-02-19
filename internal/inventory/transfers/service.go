@@ -15,13 +15,20 @@ import (
 	"github.com/doug-martin/goqu/v9"
 )
 
+// TransferStatusCallback is called when a transfer changes status (completed, cancelled).
+// Used by equipment_requests to sync quest status with transfer status.
+type TransferStatusCallback interface {
+	OnTransferStatusChanged(transferID int, newStatus string) error
+}
+
 type TransferService struct {
-	r         *repository.Repository
-	tr        TransferRepository
-	ar        *assets.AssetsRepository
-	stockRepo *stocks.StockRepository
-	ur        users.UserRepository
-	il        *inventorylog.InventoryLog
+	r                *repository.Repository
+	tr               TransferRepository
+	ar               *assets.AssetsRepository
+	stockRepo        *stocks.StockRepository
+	ur               users.UserRepository
+	il               *inventorylog.InventoryLog
+	statusCallbacks  []TransferStatusCallback
 }
 
 type ValidationError struct {
@@ -44,6 +51,19 @@ func NewService(
 		stockRepo: sr,
 		il:        il,
 		ur:        ur,
+	}
+}
+
+// RegisterStatusCallback adds a callback that will be invoked when a transfer status changes
+func (s *TransferService) RegisterStatusCallback(cb TransferStatusCallback) {
+	s.statusCallbacks = append(s.statusCallbacks, cb)
+}
+
+func (s *TransferService) notifyStatusCallbacks(transferID int, newStatus string) {
+	for _, cb := range s.statusCallbacks {
+		if err := cb.OnTransferStatusChanged(transferID, newStatus); err != nil {
+			log.Printf("[transfers] Status callback error for transfer %d -> %s: %v", transferID, newStatus, err)
+		}
 	}
 }
 
@@ -350,6 +370,7 @@ func (s *TransferService) ConfirmTransfer(transferID int, status string) error {
 	}
 
 	go s.createInventoryLog("delivered", transferID)
+	go s.notifyStatusCallbacks(transferID, "completed")
 
 	return nil
 }
@@ -411,24 +432,10 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 		}
 
 		if hasStockItems {
-			stockItems, err := s.stockRepo.GetStockItemsByTransfer(transfer.ID)
-			if err != nil {
-				return fmt.Errorf("failed to get stock items: %w", err)
+			if err := s.stockRepo.RestoreStockFromCancelledTransfer(tx, transfer.ID); err != nil {
+				return fmt.Errorf("failed to restore stock items to original location: %w", err)
 			}
 
-			// Przywróć pozycje magazynowe
-			for _, item := range *stockItems {
-				if err := s.stockRepo.RestoreStockToLocation(tx, models.RemoveStockItemFromTransferRequest{
-					CategoryID:   item.Category.ID,
-					TransferID:   transfer.ID,
-					Quantity:     item.Quantity,
-					ToLocationID: transfer.FromLocation.ID,
-				}); err != nil {
-					return fmt.Errorf("failed to restore stock item %d to original location: %w", item.Category.ID, err)
-				}
-			}
-
-			// Aktualizuj status pozycji magazynowych w transferze
 			if err := s.tr.UpdateStockItemsTransferStatus(tx, transfer.ID, "cancelled"); err != nil {
 				return fmt.Errorf("failed to update stock items transfer status: %w", err)
 			}
@@ -446,6 +453,7 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 	}
 
 	go s.createInventoryLog("cancelled", transfer.ID)
+	go s.notifyStatusCallbacks(transfer.ID, "cancelled")
 
 	return nil
 }

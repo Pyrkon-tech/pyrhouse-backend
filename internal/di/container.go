@@ -76,7 +76,6 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		categoryRepo := category.NewCategoryRepository(repo)
 		equipmentRequestRepo := equipment_requests.NewRepository(repo)
 		equipmentRequestService := equipment_requests.NewService(
-
 			googleSheetsHandler.DutyScheduleService,
 			categoryRepo,
 			equipmentRequestRepo,
@@ -84,6 +83,11 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 			cfg.EquipmentRequest.SheetName,
 			cfg.EquipmentRequest.FuzzyThreshold,
 		)
+
+		// Phase 4: Wire quest → transfer integration
+		equipmentRequestService.SetTransferCreator(transferHandler.Service)
+		transferHandler.Service.RegisterStatusCallback(equipmentRequestService)
+
 		equipmentRequestHandler = equipment_requests.NewHandler(equipmentRequestService)
 
 		// Phase 3: Auto-sync scheduler

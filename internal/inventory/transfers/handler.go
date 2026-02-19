@@ -36,7 +36,7 @@ func NewHandler(
 
 	return &TransferHandler{
 		TransferRepository: tr,
-		Service:            &TransferService{r, tr, ar, stockRepo, ur, inventorylog},
+		Service:            NewService(r, tr, ar, stockRepo, ur, inventorylog),
 		AssetRepo:          ar,
 	}
 }

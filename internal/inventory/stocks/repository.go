@@ -19,33 +19,32 @@ func NewRepository(r *repository.Repository) *StockRepository {
 }
 
 func (r *StockRepository) PersistStockItem(stockRequest models.CreateStockItemRequest) (*models.StockItem, error) {
-	query := r.repository.GoquDBWrapper.Insert("non_serialized_items").
-		Rows(goqu.Record{
-			"quantity":         stockRequest.Quantity,
-			"location_id":      stockRequest.LocationID,
-			"item_category_id": stockRequest.CategoryID,
-			"origin":           stockRequest.Origin,
-		}).
-		Returning("id")
-	stockItem := models.StockItem{
-		Quantity: stockRequest.Quantity,
-		Category: models.ItemCategory{
-			ID: stockRequest.CategoryID,
-		},
-		Location: models.Location{
-			ID: stockRequest.LocationID,
-		},
-		Origin: stockRequest.Origin,
-	}
-
-	if _, err := query.Executor().ScanVal(&stockItem.ID); err != nil {
+	sql := `
+		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (item_category_id, location_id, origin)
+		DO UPDATE SET quantity = non_serialized_items.quantity + EXCLUDED.quantity
+		RETURNING id, quantity
+	`
+	var id, quantity int
+	err := r.repository.DB.QueryRow(sql, stockRequest.CategoryID, stockRequest.LocationID, stockRequest.Quantity, stockRequest.Origin).Scan(&id, &quantity)
+	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
-			return nil, apperrors.WrapDBError("Duplicate entry for stock item", string(pqErr.Code))
+			if string(pqErr.Code) == "23503" {
+				return nil, fmt.Errorf("invalid location_id or category_id: referenced record does not exist")
+			}
+			return nil, apperrors.WrapDBError(pqErr.Message, string(pqErr.Code))
 		}
 		return nil, fmt.Errorf("failed to insert stock item record: %w", err)
 	}
 
-	return &stockItem, nil
+	return &models.StockItem{
+		ID:       id,
+		Quantity: quantity,
+		Category: models.ItemCategory{ID: stockRequest.CategoryID},
+		Location: models.Location{ID: stockRequest.LocationID},
+		Origin:   stockRequest.Origin,
+	}, nil
 }
 
 func (r *StockRepository) GetStockItems() (*[]models.StockItem, error) {
@@ -311,18 +310,41 @@ func (r *StockRepository) RemoveZeroQuantityStock(tx *goqu.TxDatabase, transferR
 	return nil
 }
 
+// RestoreStockToLocation adds quantity back for a specific category/origin at the given location.
+// Used when removing a single item from an in-transit transfer (partial removal).
 func (r *StockRepository) RestoreStockToLocation(tx *goqu.TxDatabase, transferReq models.RemoveStockItemFromTransferRequest) error {
-	query := tx.Update("non_serialized_items").
-		Set(goqu.Record{
-			"location_id": transferReq.ToLocationID,
-		}).
-		Where(goqu.Ex{
-			"item_category_id": transferReq.CategoryID,
-		})
-
-	_, err := query.Executor().Exec()
+	query := `
+		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin)
+		SELECT item_category_id, $1, $2, origin
+		FROM non_serialized_transfers
+		WHERE transfer_id = $3 AND item_category_id = $4
+		LIMIT 1
+		ON CONFLICT (item_category_id, location_id, origin)
+		DO UPDATE SET quantity = non_serialized_items.quantity + EXCLUDED.quantity
+	`
+	_, err := tx.Exec(query, transferReq.ToLocationID, transferReq.Quantity, transferReq.TransferID, transferReq.CategoryID)
 	if err != nil {
 		return fmt.Errorf("failed to restore stock to location: %w", err)
+	}
+
+	return nil
+}
+
+// RestoreStockFromCancelledTransfer returns all transferred quantities back to from_location.
+// Symmetric to IncreaseStockAtDestination — used on transfer cancellation.
+func (r *StockRepository) RestoreStockFromCancelledTransfer(tx *goqu.TxDatabase, transferID int) error {
+	query := `
+		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin)
+		SELECT nst.item_category_id, t.from_location_id, nst.quantity, nst.origin
+		FROM non_serialized_transfers nst
+		INNER JOIN transfers t ON nst.transfer_id = t.id
+		WHERE nst.transfer_id = $1
+		ON CONFLICT (item_category_id, location_id, origin)
+		DO UPDATE SET quantity = non_serialized_items.quantity + EXCLUDED.quantity
+	`
+	_, err := tx.Exec(query, transferID)
+	if err != nil {
+		return fmt.Errorf("failed to restore stock from cancelled transfer: %w", err)
 	}
 
 	return nil

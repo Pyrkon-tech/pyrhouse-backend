@@ -18,11 +18,25 @@ type QuestRepositoryInterface interface {
 	GetQuestByKey(ctx context.Context, questKey string) (*Quest, error)
 	ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error)
 	UpdateQuestStatus(ctx context.Context, questID string, status string) error
+	LinkQuestToTransfer(ctx context.Context, questID string, transferID int) error
+	GetQuestByTransferID(ctx context.Context, transferID int) (*Quest, error)
+	UnlinkQuestFromTransfer(ctx context.Context, questID string) error
+	FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error)
+	ResolveLocationByPavilionAndName(pavilion, name string) (*int, error)
 	CreateSyncLog(ctx context.Context, log *SyncLog) error
 	GetLatestSyncLog(ctx context.Context) (*SyncLog, error)
 	GetCategoryMapping(ctx context.Context, itemName string) (*int, error)
 	CreateCategoryMapping(ctx context.Context, mapping *CategoryMapping) error
 	IncrementMappingUsage(ctx context.Context, itemName string) error
+}
+
+// StockMatch represents a non-serialized stock item found at a location for a given category
+type StockMatch struct {
+	StockID      int    `db:"id"`
+	CategoryID   int    `db:"item_category_id"`
+	CategoryName string `db:"category_name"`
+	Quantity     int    `db:"quantity"`
+	LocationID   int    `db:"location_id"`
 }
 
 type Repository struct {
@@ -492,6 +506,103 @@ func (r *Repository) itemToRecord(questDBID int, item *QuestItem, sourceRow int)
 	return record
 }
 
+// GetQuestByTransferID retrieves quest linked to a specific transfer
+func (r *Repository) GetQuestByTransferID(ctx context.Context, transferID int) (*Quest, error) {
+	var questDB QuestDB
+
+	query := r.repo.GoquDBWrapper.
+		Select("*").
+		From("equipment_request_quests").
+		Where(goqu.Ex{"transfer_id": transferID})
+
+	found, err := query.Executor().ScanStruct(&questDB)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch quest by transfer ID: %w", err)
+	}
+	if !found {
+		return nil, nil // No quest linked to this transfer
+	}
+
+	items, err := r.getItemsByQuestDBID(ctx, questDB.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.recordToQuest(&questDB, items), nil
+}
+
+// UnlinkQuestFromTransfer removes transfer link and resets quest to pending
+func (r *Repository) UnlinkQuestFromTransfer(ctx context.Context, questID string) error {
+	_, err := r.repo.GoquDBWrapper.
+		Update("equipment_request_quests").
+		Set(goqu.Record{
+			"transfer_id": nil,
+			"status":      "pending",
+		}).
+		Where(goqu.Ex{"quest_id": questID}).
+		Executor().Exec()
+
+	if err != nil {
+		return fmt.Errorf("failed to unlink quest from transfer: %w", err)
+	}
+
+	return nil
+}
+
+// FindStockItemsByCategory finds non-serialized stock items at a location matching a category
+func (r *Repository) FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error) {
+	var matches []StockMatch
+
+	query := r.repo.GoquDBWrapper.
+		Select(
+			goqu.I("s.id"),
+			goqu.I("s.item_category_id"),
+			goqu.I("c.item_category").As("category_name"),
+			goqu.I("s.quantity"),
+			goqu.I("s.location_id"),
+		).
+		From(goqu.T("non_serialized_items").As("s")).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"s.item_category_id": goqu.I("c.id")}),
+		).
+		Where(goqu.Ex{
+			"s.location_id":      fromLocationID,
+			"s.item_category_id": categoryID,
+		}).
+		Where(goqu.I("s.quantity").Gt(0))
+
+	if err := query.Executor().ScanStructs(&matches); err != nil {
+		return nil, fmt.Errorf("failed to find stock items by category: %w", err)
+	}
+
+	return matches, nil
+}
+
+// ResolveLocationByPavilionAndName finds a location ID by pavilion and name (case-insensitive)
+func (r *Repository) ResolveLocationByPavilionAndName(pavilion, name string) (*int, error) {
+	var locationID int
+
+	query := r.repo.GoquDBWrapper.
+		Select("id").
+		From("locations").
+		Where(
+			goqu.I("pavilion").ILike(pavilion),
+			goqu.I("name").ILike(name),
+		).
+		Limit(1)
+
+	found, err := query.Executor().ScanVal(&locationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve location: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+
+	return &locationID, nil
+}
+
 // Helper: Convert DB records to Quest
 func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 	quest := &Quest{
@@ -504,6 +615,7 @@ func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 		Recipient:    questDB.Recipient,
 		DeliveryDate: questDB.DeliveryDate.Format("2006-01-02"),
 		Status:       questDB.Status,
+		TransferID:   questDB.TransferID,
 		LastSynced:   questDB.LastSyncedAt,
 		Items:        make([]QuestItem, len(itemsDB)),
 		SourceRows:   make([]int, len(itemsDB)),

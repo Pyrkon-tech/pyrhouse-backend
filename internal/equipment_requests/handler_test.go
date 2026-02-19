@@ -117,8 +117,46 @@ func (m *mockQuestRepository) CreateCategoryMapping(ctx context.Context, mapping
 }
 
 func (m *mockQuestRepository) IncrementMappingUsage(ctx context.Context, itemName string) error {
-	// No-op for mock
 	return nil
+}
+
+func (m *mockQuestRepository) LinkQuestToTransfer(ctx context.Context, questID string, transferID int) error {
+	for i, q := range m.quests {
+		if q.ID == questID {
+			m.quests[i].TransferID = &transferID
+			m.quests[i].Status = "in_progress"
+			return nil
+		}
+	}
+	return assert.AnError
+}
+
+func (m *mockQuestRepository) GetQuestByTransferID(ctx context.Context, transferID int) (*Quest, error) {
+	for _, q := range m.quests {
+		if q.TransferID != nil && *q.TransferID == transferID {
+			return &q, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockQuestRepository) UnlinkQuestFromTransfer(ctx context.Context, questID string) error {
+	for i, q := range m.quests {
+		if q.ID == questID {
+			m.quests[i].TransferID = nil
+			m.quests[i].Status = "pending"
+			return nil
+		}
+	}
+	return assert.AnError
+}
+
+func (m *mockQuestRepository) FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error) {
+	return nil, nil
+}
+
+func (m *mockQuestRepository) ResolveLocationByPavilionAndName(pavilion, name string) (*int, error) {
+	return nil, nil
 }
 
 func setupTestHandler() (*Handler, *mockQuestRepository) {

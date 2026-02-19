@@ -1,8 +1,10 @@
 package equipment_requests
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,8 +32,9 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		equipmentRoutes.GET("/quests/:id", h.GetQuest)
 		equipmentRoutes.PATCH("/quests/:id/status", h.UpdateQuestStatus)
 
-		// Transfer creation (future implementation)
-		// equipmentRoutes.POST("/quests/:id/transfer", h.CreateTransferFromQuest)
+		// Quest → Transfer integration
+		equipmentRoutes.POST("/quests/:id/transfer", h.CreateTransferFromQuest)
+		equipmentRoutes.GET("/quests/:id/transfer-preview", h.PreviewTransferFromQuest)
 
 		// Category mapping management
 		equipmentRoutes.POST("/category-mapping", h.CreateCategoryMapping)
@@ -64,14 +67,12 @@ func (h *Handler) ManualSync(c *gin.Context) {
 
 // ListQuests returns quests from database with filtering and pagination
 func (h *Handler) ListQuests(c *gin.Context) {
-	// Build filter from query params
 	filter := QuestFilter{
 		Status: c.Query("status"),
 		Limit:  getIntQuery(c, "limit", 100),
 		Offset: getIntQuery(c, "offset", 0),
 	}
 
-	// Validate limit
 	if filter.Limit > 500 {
 		filter.Limit = 500
 	}
@@ -109,7 +110,7 @@ func (h *Handler) GetQuest(c *gin.Context) {
 	c.JSON(http.StatusOK, quest)
 }
 
-// UpdateQuestStatus updates quest status
+// UpdateQuestStatus updates quest status (only allowed for quests without a linked transfer)
 func (h *Handler) UpdateQuestStatus(c *gin.Context) {
 	questID := c.Param("id")
 
@@ -135,7 +136,25 @@ func (h *Handler) UpdateQuestStatus(c *gin.Context) {
 		return
 	}
 
-	err := h.service.questRepo.UpdateQuestStatus(c.Request.Context(), questID, req.Status)
+	// Check if quest has a linked transfer — if so, reject manual status changes
+	quest, err := h.service.questRepo.GetQuestByID(c.Request.Context(), questID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "Quest not found",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if quest.TransferID != nil {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":   "Quest status is managed by linked transfer",
+			"details": fmt.Sprintf("Quest is linked to transfer %d. Use transfer endpoints to change status.", *quest.TransferID),
+		})
+		return
+	}
+
+	err = h.service.questRepo.UpdateQuestStatus(c.Request.Context(), questID, req.Status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to update quest status",
@@ -148,6 +167,74 @@ func (h *Handler) UpdateQuestStatus(c *gin.Context) {
 		"message": "Quest status updated successfully",
 		"status":  req.Status,
 	})
+}
+
+// CreateTransferFromQuest creates an inventory transfer from a quest
+func (h *Handler) CreateTransferFromQuest(c *gin.Context) {
+	questID := c.Param("id")
+
+	var req CreateTransferFromQuestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	transferID, err := h.service.CreateTransferFromQuest(c.Request.Context(), questID, req)
+	if err != nil {
+		errMsg := err.Error()
+		status := http.StatusInternalServerError
+
+		switch {
+		case strings.Contains(errMsg, "already linked to transfer"),
+			strings.Contains(errMsg, "status must be"):
+			status = http.StatusConflict
+		case strings.Contains(errMsg, "could not resolve"),
+			strings.Contains(errMsg, "no stock items"):
+			status = http.StatusUnprocessableEntity
+		case strings.Contains(errMsg, "quest not found"):
+			status = http.StatusNotFound
+		}
+
+		c.JSON(status, gin.H{
+			"error":   "Failed to create transfer from quest",
+			"details": errMsg,
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":     "Transfer created from quest successfully",
+		"transfer_id": transferID,
+		"quest_id":    questID,
+	})
+}
+
+// PreviewTransferFromQuest shows what a transfer from this quest would look like
+func (h *Handler) PreviewTransferFromQuest(c *gin.Context) {
+	questID := c.Param("id")
+	fromLocationID := getIntQuery(c, "from_location_id", 0)
+
+	if fromLocationID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Missing required parameter",
+			"details": "from_location_id query parameter is required",
+		})
+		return
+	}
+
+	preview, err := h.service.PreviewTransferFromQuest(c.Request.Context(), questID, fromLocationID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "Quest not found",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, preview)
 }
 
 // GetSyncLog returns the most recent sync log
@@ -225,3 +312,4 @@ func contains(slice []string, item string) bool {
 	}
 	return false
 }
+

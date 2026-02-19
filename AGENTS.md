@@ -411,13 +411,58 @@ migrate -path migrations -database $DATABASE_URL down 1
 - **Transaction safety:** All multi-step DB operations use `repository.WithTransaction()`
 - **Error handling:** Sync errors logged but don't crash scheduler
 
+### Quest → Transfer Integration (Phase 4)
+
+**Purpose:** Equipment request quests feed into the inventory transfer system for actual warehouse issuance.
+
+**Architecture:**
+```
+Google Sheets → Quest (demand: "what was ordered") → Transfer (fulfillment: "how we issue")
+```
+
+Quest is the **integration layer** (sync, parsing, fuzzy matching from forms). Transfer is the **operational layer** (warehouse logistics, GPS tracking, audit). They are linked but separate responsibilities.
+
+**Flow:**
+1. Quest created via Google Sheets sync → status: `pending`, `transfer_id: null`
+2. User calls `POST /equipment-requests/quests/:id/transfer` with `from_location_id`
+3. System resolves destination location from quest pavilion+location (or uses provided `to_location_id`)
+4. System resolves stock items from quest item categories at source location (or uses provided `stock_items`)
+5. Transfer created via `TransferService.InitTransfer()` → quest linked with `transfer_id`, status: `in_progress`
+6. Transfer lifecycle proceeds normally (GPS, user assignment, etc.)
+7. `PATCH /transfers/:id/confirm` → callback auto-completes quest
+8. `PATCH /transfers/:id/cancel` → callback unlinks quest, resets to `pending`
+
+**Key design decisions:**
+- **Dedicated endpoint, not auto-creation on status change** — transfer creation requires user input (`from_location_id`, optional stock/asset overrides)
+- **Quest status is transfer-driven once linked** — `PATCH /quests/:id/status` returns 409 Conflict if `transfer_id` is set
+- **Callback pattern avoids circular dependencies** — `TransferStatusCallback` interface in `transfers/service.go`, implemented by `equipment_requests/Service.OnTransferStatusChanged()`
+- **Category→stock resolution gap** — quest items have `category_id` (fuzzy-matched), transfers need `stock_id` (specific row in `non_serialized_items`). Preview endpoint helps users review before creating.
+
+**New endpoints:**
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/equipment-requests/quests/:id/transfer` | Create transfer from quest |
+| GET | `/equipment-requests/quests/:id/transfer-preview` | Preview transfer resolution |
+
+**Modified behavior:**
+- `PATCH /quests/:id/status` — rejects changes for quests with linked transfers (409)
+- `PATCH /transfers/:id/confirm` — auto-completes linked quest
+- `PATCH /transfers/:id/cancel` — unlinks and resets linked quest to pending
+
+**Key files:**
+- `internal/equipment_requests/service.go` — `CreateTransferFromQuest()`, `OnTransferStatusChanged()`, resolution logic
+- `internal/equipment_requests/handler.go` — new endpoints + PATCH restriction
+- `internal/equipment_requests/repository.go` — `GetQuestByTransferID()`, `UnlinkQuestFromTransfer()`, `FindStockItemsByCategory()`
+- `internal/inventory/transfers/service.go` — `TransferStatusCallback` interface, `RegisterStatusCallback()`, callback invocations
+- `internal/di/container.go` — wiring: `SetTransferCreator()`, `RegisterStatusCallback()`
+
 ### Future Enhancements (Not Implemented)
 
-- Automatic transfer creation from completed quests
 - Real-time sync via webhooks (Google Sheets limitation)
 - Budget tracking and approval workflow
 - Email notifications on sync errors
 - Analytics dashboard (quest trends, popular items)
+- Multiple transfers per quest (partial fulfillment / split delivery)
 
 ## Testing
 

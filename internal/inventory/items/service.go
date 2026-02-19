@@ -5,6 +5,7 @@ import (
 	"warehouse/internal/auditlog"
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/stocks"
+	"warehouse/internal/models"
 	"warehouse/internal/repository"
 )
 
@@ -24,18 +25,46 @@ func NewItemService(r *repository.Repository, sr *stocks.StockRepository, ar *as
 	}
 }
 
+type assetWithLogs struct {
+	*models.Asset
+	AssetLogs []models.AuditLog `json:"assetLogs"`
+}
+
+type stockWithLogs struct {
+	*models.StockItem
+	Logs []models.AuditLog `json:"logs"`
+}
+
 func (s *ItemService) fetchItem(query RetrieveItemQuery) (interface{}, error) {
 	switch query.CategoryType {
 	case "asset":
 		if query.ID == nil {
 			return nil, fmt.Errorf("asset ID is required")
 		}
-		return s.ar.GetAsset(*query.ID)
+		asset, err := s.ar.GetAsset(*query.ID)
+		if err != nil {
+			return nil, err
+		}
+		logs, _ := s.auditLog.GetLogs(*query.ID, "asset")
+		result := &assetWithLogs{Asset: asset}
+		if logs != nil {
+			result.AssetLogs = *logs
+		}
+		return result, nil
 	case "stock":
 		if query.ID == nil {
 			return nil, fmt.Errorf("stock ID is required")
 		}
-		return s.sr.GetStockItem(*query.ID)
+		stock, err := s.sr.GetStockItem(*query.ID)
+		if err != nil {
+			return nil, err
+		}
+		logs, _ := s.auditLog.GetLogs(*query.ID, "stock")
+		result := &stockWithLogs{StockItem: stock}
+		if logs != nil {
+			result.Logs = *logs
+		}
+		return result, nil
 	default:
 		return nil, fmt.Errorf("unsupported category type: %s", query.CategoryType)
 	}

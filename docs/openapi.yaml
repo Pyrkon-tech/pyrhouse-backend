@@ -178,6 +178,49 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /items/{category}/{id}:
+    get:
+      tags:
+        - items
+      summary: Get single item with history
+      description: |
+        Returns a single item (asset or stock) along with its audit log history.
+
+        - `category=asset` → returns asset fields + `assetLogs`
+        - `category=stock` → returns stock item fields + `logs`
+      operationId: getItem
+      parameters:
+        - in: path
+          name: category
+          required: true
+          schema:
+            type: string
+            enum: [asset, stock]
+          description: Item type
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Item ID
+      responses:
+        "200":
+          description: Item with audit log history
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AssetWithLogs"
+                  - $ref: "#/components/schemas/StockWithLogs"
+        "400":
+          description: Invalid URI parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
   /items:
     get:
       tags:
@@ -1414,7 +1457,7 @@ paths:
         "500":
           $ref: "#/components/responses/DefaultError"
 
-  /api/equipment-requests/sync:
+  /equipment-requests/sync:
     post:
       tags:
         - equipment-requests
@@ -1483,7 +1526,7 @@ paths:
                     type: string
                     example: "unable to read spreadsheet: API error"
 
-  /api/equipment-requests/quests:
+  /equipment-requests/quests:
     get:
       tags:
         - equipment-requests
@@ -1549,7 +1592,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/equipment-requests/quests/{id}:
+  /equipment-requests/quests/{id}:
     get:
       tags:
         - equipment-requests
@@ -1593,6 +1636,10 @@ paths:
         Updates the status of an equipment request quest.
 
         Valid statuses: pending, in_progress, completed, cancelled
+
+        **Important:** If the quest is linked to a transfer (transfer_id is not null),
+        manual status changes are rejected with 409 Conflict. Use transfer endpoints
+        (confirm/cancel) instead — quest status is automatically synced from transfer.
       security:
         - bearerAuth: []
       parameters:
@@ -1634,10 +1681,210 @@ paths:
           description: Invalid status value
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Quest is linked to a transfer — manual status changes not allowed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Quest status is managed by linked transfer"
+                  details:
+                    type: string
+                    example: "Quest is linked to transfer 42. Use transfer endpoints to change status."
         "500":
           $ref: "#/components/responses/DefaultError"
 
-  /api/equipment-requests/sync-log:
+  /equipment-requests/quests/{id}/transfer:
+    post:
+      tags:
+        - equipment-requests
+      summary: Create transfer from quest
+      description: |
+        Creates an inventory transfer from an equipment request quest.
+
+        The quest must be in 'pending' status and not already linked to a transfer.
+        Resolves destination location from quest pavilion+location if to_location_id is not provided.
+        Resolves stock items from quest item categories if stock_items are not provided.
+
+        On success, the quest status changes to 'in_progress' and transfer_id is set.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Quest ID
+          schema:
+            type: string
+            example: "quest-f6c39c6c14716069"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - from_location_id
+              properties:
+                from_location_id:
+                  type: integer
+                  description: Source warehouse location ID
+                  example: 1
+                to_location_id:
+                  type: integer
+                  nullable: true
+                  description: Destination location ID (auto-resolved from quest if not provided)
+                  example: 5
+                stock_items:
+                  type: array
+                  description: Stock items to transfer (auto-resolved from quest categories if not provided)
+                  items:
+                    type: object
+                    required:
+                      - id
+                      - quantity
+                    properties:
+                      id:
+                        type: integer
+                        description: Non-serialized stock item ID
+                      quantity:
+                        type: integer
+                        minimum: 1
+                assets:
+                  type: array
+                  description: Serialized assets to include in transfer
+                  items:
+                    type: object
+                    required:
+                      - id
+                    properties:
+                      id:
+                        type: integer
+                        description: Serialized asset item ID
+                users:
+                  type: array
+                  description: Users assigned to delivery
+                  items:
+                    type: object
+                    required:
+                      - id
+                    properties:
+                      id:
+                        type: integer
+      responses:
+        "201":
+          description: Transfer created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Transfer created from quest successfully"
+                  transfer_id:
+                    type: integer
+                    example: 42
+                  quest_id:
+                    type: string
+                    example: "quest-f6c39c6c14716069"
+        "400":
+          description: Invalid request body
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Quest not found
+        "409":
+          description: Quest already linked to a transfer or not in pending status
+        "422":
+          description: Could not resolve destination location or stock items
+
+  /equipment-requests/quests/{id}/transfer-preview:
+    get:
+      tags:
+        - equipment-requests
+      summary: Preview transfer from quest
+      description: |
+        Shows what a transfer created from this quest would look like.
+        Resolves destination location and stock items without creating anything.
+        Useful for the frontend to pre-populate a "create transfer" form.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Quest ID
+          schema:
+            type: string
+            example: "quest-f6c39c6c14716069"
+        - name: from_location_id
+          in: query
+          required: true
+          description: Source warehouse location ID to resolve stock from
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: Transfer preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from_location_id:
+                    type: integer
+                    example: 1
+                  to_location_id:
+                    type: integer
+                    nullable: true
+                    example: 5
+                  to_location_name:
+                    type: string
+                    example: "Maskarada"
+                  resolved_items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        stock_id:
+                          type: integer
+                        category_id:
+                          type: integer
+                        category_name:
+                          type: string
+                        item_name:
+                          type: string
+                        quantity:
+                          type: integer
+                        available:
+                          type: integer
+                  unresolved_items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        item_name:
+                          type: string
+                        quantity:
+                          type: integer
+                        category_id:
+                          type: integer
+                          nullable: true
+                        reason:
+                          type: string
+        "400":
+          description: Missing from_location_id parameter
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Quest not found
+
+  /equipment-requests/sync-log:
     get:
       tags:
         - equipment-requests
@@ -1668,7 +1915,7 @@ paths:
                     type: string
                     example: "No sync log found"
 
-  /api/equipment-requests/category-mapping:
+  /equipment-requests/category-mapping:
     post:
       tags:
         - equipment-requests
@@ -1775,6 +2022,54 @@ components:
         property:
           type: string
           example: assets
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        resource_id:
+          type: integer
+          example: 42
+        resource_type:
+          type: string
+          example: asset
+        action:
+          type: string
+          example: create
+          description: Action performed (e.g. create, update, delete, in_transfer, delivered)
+        data:
+          type: object
+          additionalProperties: true
+          description: Action-specific payload (msg, from_location_id, to_location_id, quantity, etc.)
+          example:
+            msg: "Stock item created successfully"
+            quantity: 10
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-19T12:00:00Z"
+
+    AssetWithLogs:
+      allOf:
+        - $ref: "#/components/schemas/Item"
+        - type: object
+          properties:
+            assetLogs:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuditLog"
+
+    StockWithLogs:
+      allOf:
+        - $ref: "#/components/schemas/Stock"
+        - type: object
+          properties:
+            logs:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuditLog"
 
     Item:
       type: object
@@ -1970,7 +2265,22 @@ components:
             - pending
             - in_progress
             - completed
+            - cancelled
           example: "pending"
+        transfer_id:
+          type: integer
+          nullable: true
+          description: ID of the linked inventory transfer (set when transfer is created from quest)
+          example: 42
+        transfer_status:
+          type: string
+          nullable: true
+          description: Status of the linked transfer (derived from transfer, not stored on quest)
+          enum:
+            - in_transit
+            - completed
+            - cancelled
+          example: "in_transit"
         source_rows:
           type: array
           description: Source spreadsheet row numbers for debugging

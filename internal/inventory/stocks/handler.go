@@ -42,6 +42,10 @@ func (h *StockHandler) CreateStock(c *gin.Context) {
 		return
 	}
 
+	if stockRequest.LocationID == 0 {
+		stockRequest.LocationID = 1
+	}
+
 	stock, err := h.stockService.CreateStockItem(stockRequest)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create stock item", "details": err.Error()})

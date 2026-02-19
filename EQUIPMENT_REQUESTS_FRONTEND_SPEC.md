@@ -1,41 +1,49 @@
 # Equipment Requests - Frontend Implementation Specification
 
-## 📋 Overview
+## Overview
 
-System do zarządzania zamówieniami sprzętu zintegrowany z Google Sheets. Backend automatycznie synchronizuje dane z formularza Google → arkusz kalkulacyjny → baza danych PostgreSQL.
+System do zarządzania zamówieniami sprzętu zintegrowany z Google Sheets i systemem transferów magazynowych.
+
+**Architektura:**
+- **Quest** = warstwa integracji (Google Sheets sync, fuzzy matching kategorii, agregacja pozycji)
+- **Transfer** = warstwa operacyjna (wydanie magazynowe, śledzenie statusu, potwierdzenie odbioru)
+- Quest zasilaja system transferów — quest nigdy nie zarządza wydaniem samodzielnie
 
 **Stack Backend:**
 - Go 1.23 + Gin + PostgreSQL
 - Auto-sync co 5-15 minut (konfigurowalny)
 - Fuzzy matching kategorii (Levenshtein distance)
 - Quest aggregation (grupowanie pozycji według lokalizacji/odbiorcy/daty)
+- Quest → Transfer integracja (tworzenie transferów z questów, callback statusów)
 
 **Frontend do zaimplementowania:**
 - React/Vue/Angular (do wyboru)
 - TypeScript (zalecane)
-- UI do przeglądania i zarządzania questami
+- UI do przeglądania questów, tworzenia transferów z questów, zarządzania wydaniami
 
 ---
 
 ## 🎯 Funkcjonalności do Implementacji
 
 ### Must-Have (Priority 1)
-1. ✅ **Lista questów** z filtrowaniem i paginacją
-2. ✅ **Szczegóły questa** z listą pozycji
-3. ✅ **Zmiana statusu** questa (pending → in_progress → completed)
-4. ✅ **Manual sync trigger** (przycisk "Synchronizuj teraz")
-5. ✅ **Status ostatniej synchronizacji**
+1. **Lista questów** z filtrowaniem i paginacją
+2. **Szczegóły questa** z listą pozycji i statusem transferu
+3. **Zmiana statusu** questa (tylko dla questów BEZ transferu)
+4. **Manual sync trigger** (przycisk "Synchronizuj teraz")
+5. **Status ostatniej synchronizacji**
+6. **Tworzenie transferu z questa** (podgląd + kreator)
+7. **Podgląd transferu** przed utworzeniem (preview endpoint)
 
 ### Nice-to-Have (Priority 2)
-6. ⭐ **Dashboard ze statystykami** (ile pending, in_progress, completed)
-7. ⭐ **Category mapping management** (ręczne dopasowanie nazw → kategorie)
-8. ⭐ **Export do CSV/Excel**
-9. ⭐ **Search/filtering** po odbiorcach, lokalizacjach
+8. **Dashboard ze statystykami** (ile pending, in_progress, completed, ile z transferem)
+9. **Category mapping management** (ręczne dopasowanie nazw → kategorie)
+10. **Export do CSV/Excel**
+11. **Search/filtering** po odbiorcach, lokalizacjach
 
 ### Future (Priority 3)
-10. 🚀 **Real-time updates** (WebSocket/SSE gdy backend będzie wspierał)
-11. 🚀 **Automatic transfer creation** z questa
-12. 🚀 **Budget tracking**
+12. **Real-time updates** (WebSocket/SSE gdy backend będzie wspierał)
+13. **Budget tracking**
+14. **Multiple transfers per quest** (częściowe wydania)
 
 ---
 
@@ -94,6 +102,8 @@ Authorization: Bearer <token>
         }
       ],
       "status": "pending",
+      "transfer_id": null,
+      "transfer_status": null,
       "source_rows": [115, 116],
       "last_synced": "2026-02-17T12:30:00Z"
     }
@@ -145,6 +155,8 @@ Authorization: Bearer <token>
     }
   ],
   "status": "pending",
+  "transfer_id": null,
+  "transfer_status": null,
   "source_rows": [115, 116],
   "last_synced": "2026-02-17T12:30:00Z"
 }
@@ -161,7 +173,9 @@ Authorization: Bearer <token>
 ---
 
 #### 3. PATCH `/equipment-requests/quests/:id/status`
-Zmień status questa.
+Zmień status questa. **Dziala TYLKO dla questów bez powiązanego transferu.**
+
+Jeśli quest ma `transfer_id` — status jest zarządzany automatycznie przez transfer (callback). Ręczna zmiana zwróci 409 Conflict.
 
 **URL Parameters:**
 - `id`: Quest ID
@@ -205,6 +219,16 @@ Content-Type: application/json
   "details": "Status must be one of: pending, in_progress, completed, cancelled"
 }
 ```
+
+**Response 409 Conflict** (quest linked to transfer):
+```json
+{
+  "error": "Quest status is managed by linked transfer",
+  "details": "Quest is linked to transfer 42. Use transfer endpoints to change status."
+}
+```
+
+> **Frontend note:** Jeśli quest ma `transfer_id`, ukryj przycisk zmiany statusu i pokaż link do transferu.
 
 ---
 
@@ -325,7 +349,174 @@ Content-Type: application/json
 
 ---
 
-## 📊 TypeScript Type Definitions
+#### 7. GET `/equipment-requests/quests/:id/transfer-preview?from_location_id=1`
+Podgląd co się stanie gdy stworzymy transfer z questa. Pokazuje rozwiązane stock items, nierozwiązane pozycje i rozwiązaną lokalizację docelową. **Używaj PRZED tworzeniem transferu** żeby user mógł zobaczyć i skorygować dane.
+
+**URL Parameters:**
+- `id`: Quest ID
+
+**Query Parameters:**
+- `from_location_id` (required): ID magazynu źródłowego
+
+**Request Example:**
+```bash
+GET /api/equipment-requests/quests/quest-f6c39c6c14716069/transfer-preview?from_location_id=1
+Authorization: Bearer <token>
+```
+
+**Response 200 OK:**
+```json
+{
+  "from_location_id": 1,
+  "to_location_id": 5,
+  "to_location_name": "PCC - Maskarada",
+  "resolved_items": [
+    {
+      "stock_id": 42,
+      "category_id": 123,
+      "category_name": "Laptopy",
+      "item_name": "Laptop Dell",
+      "quantity": 2,
+      "available": 15
+    }
+  ],
+  "unresolved_items": [
+    {
+      "item_name": "Specjalna lampa UV",
+      "quantity": 1,
+      "category_id": null,
+      "reason": "no category match"
+    }
+  ]
+}
+```
+
+**Frontend behavior:**
+- `resolved_items` — gotowe do transferu, pokaż zielono
+- `unresolved_items` — wymagają ręcznego wskazania stock_id, pokaż czerwono/żółto
+- `to_location_id: null` — lokalizacja nie rozwiązana automatycznie, user musi wybrać ręcznie
+
+**Response 400 Bad Request:**
+```json
+{
+  "error": "Missing required parameter",
+  "details": "from_location_id query parameter is required"
+}
+```
+
+**Response 404 Not Found:**
+```json
+{
+  "error": "Quest not found",
+  "details": "..."
+}
+```
+
+---
+
+#### 8. POST `/equipment-requests/quests/:id/transfer`
+Stwórz transfer magazynowy na podstawie questa. Quest musi mieć status `pending` i nie mieć `transfer_id`.
+
+Po utworzeniu transferu:
+- Quest dostaje `transfer_id` i status zmienia się na `in_progress`
+- Dalsze zmiany statusu questa są automatyczne (callback z transferu)
+- Transfer `completed` → quest `completed`
+- Transfer `cancelled` → quest wraca do `pending`, `transfer_id` = NULL
+
+**URL Parameters:**
+- `id`: Quest ID
+
+**Request Body:**
+```json
+{
+  "from_location_id": 1,
+  "to_location_id": 5,
+  "stock_items": [
+    { "id": 42, "quantity": 2 },
+    { "id": 78, "quantity": 1 }
+  ],
+  "assets": [
+    { "id": 123 }
+  ],
+  "users": [
+    { "id": 7 }
+  ]
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `from_location_id` | Yes | Magazyn źródłowy |
+| `to_location_id` | No | Lokalizacja docelowa. Jeśli brak — auto-resolve z pavilion + location questa |
+| `stock_items` | No | Ręczne wskazanie stock items. Jeśli brak — auto-resolve z category_id |
+| `assets` | No | Serializowane assety do transferu |
+| `users` | No | Użytkownicy przypisani do transferu |
+
+**Request Example (minimal — auto-resolve):**
+```bash
+POST /api/equipment-requests/quests/quest-f6c39c6c14716069/transfer
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "from_location_id": 1
+}
+```
+
+**Request Example (full — manual override):**
+```bash
+POST /api/equipment-requests/quests/quest-f6c39c6c14716069/transfer
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "from_location_id": 1,
+  "to_location_id": 5,
+  "stock_items": [
+    { "id": 42, "quantity": 2 }
+  ],
+  "users": [
+    { "id": 7 }
+  ]
+}
+```
+
+**Response 201 Created:**
+```json
+{
+  "message": "Transfer created from quest successfully",
+  "transfer_id": 156,
+  "quest_id": "quest-f6c39c6c14716069"
+}
+```
+
+**Response 409 Conflict:**
+```json
+{
+  "error": "Failed to create transfer from quest",
+  "details": "quest already linked to transfer 42"
+}
+```
+
+**Response 422 Unprocessable Entity:**
+```json
+{
+  "error": "Failed to create transfer from quest",
+  "details": "could not resolve destination location for pavilion 'PCC' and name 'Maskarada'"
+}
+```
+
+**Response 404 Not Found:**
+```json
+{
+  "error": "Failed to create transfer from quest",
+  "details": "quest not found"
+}
+```
+
+---
+
+## TypeScript Type Definitions
 
 ```typescript
 // Quest Types
@@ -338,6 +529,8 @@ export interface Quest {
   budget_owner: string;
   items: QuestItem[];
   status: QuestStatus;
+  transfer_id?: number;        // null = no transfer linked
+  transfer_status?: string;    // "pending" | "in_transit" | "completed" | "cancelled"
   source_rows: number[];
   last_synced: string; // ISO datetime: "2026-02-17T12:30:00Z"
 }
@@ -415,6 +608,59 @@ export interface CategoryMappingRequest {
   created_by?: number;
 }
 
+// Transfer Integration Types
+
+export interface CreateTransferFromQuestRequest {
+  from_location_id: number;
+  to_location_id?: number;
+  stock_items?: StockItemOverride[];
+  assets?: AssetOverride[];
+  users?: UserOverride[];
+}
+
+export interface StockItemOverride {
+  id: number;
+  quantity: number;
+}
+
+export interface AssetOverride {
+  id: number;
+}
+
+export interface UserOverride {
+  id: number;
+}
+
+export interface CreateTransferFromQuestResponse {
+  message: string;
+  transfer_id: number;
+  quest_id: string;
+}
+
+export interface TransferPreview {
+  from_location_id: number;
+  to_location_id?: number;
+  to_location_name?: string;
+  resolved_items: ResolvedStockItem[];
+  unresolved_items: UnresolvedItem[];
+}
+
+export interface ResolvedStockItem {
+  stock_id: number;
+  category_id: number;
+  category_name?: string;
+  item_name: string;
+  quantity: number;
+  available: number;
+}
+
+export interface UnresolvedItem {
+  item_name: string;
+  quantity: number;
+  category_id?: number;
+  reason: string; // "no category match" | "no stock in location" | etc.
+}
+
 // Error Response
 export interface ApiError {
   error: string;
@@ -438,17 +684,19 @@ export interface ApiError {
 │ Last sync: 2 minutes ago (5 created, 3 updated, 12 unchanged)│
 ├─────────────────────────────────────────────────────────────┤
 │ ┌─────────────────────────────────────────────────────────┐ │
-│ │ 📦 PCC - Maskarada                    [PENDING]         │ │
+│ │ PCC - Maskarada                       [PENDING]         │ │
 │ │ Recipient: Jan Kowalski                                 │ │
 │ │ Delivery: 2025-06-13 | Pickup: 17-18                   │ │
 │ │ Items: Laptop (2), Mouse (2)                           │ │
 │ │ Budget: Anna Nowak                                      │ │
+│ │                                  [Create Transfer]      │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │ ┌─────────────────────────────────────────────────────────┐ │
-│ │ 📦 Pawilon 5 - POW               [IN_PROGRESS]         │ │
-│ │ Recipient: Anna Nowak                                   │ │
+│ │ Pawilon 5 - POW                  [IN_PROGRESS]         │ │
+│ │ Recipient: Anna Nowak              Transfer #156        │ │
 │ │ Delivery: 2025-06-14                                    │ │
 │ │ Items: Monitor (1), Keyboard (1), Mouse (1)            │ │
+│ │                                  [View Transfer ->]     │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
 │                  [< Previous] Page 1 of 3 [Next >]          │
@@ -456,74 +704,150 @@ export interface ApiError {
 ```
 
 **Features:**
-- ✅ Card-based layout dla questów
-- ✅ Color-coded status badges:
-  - `pending`: 🟡 Yellow
-  - `in_progress`: 🔵 Blue
-  - `completed`: 🟢 Green
-  - `cancelled`: 🔴 Red
-- ✅ Filter by status dropdown
-- ✅ Search by recipient/location
-- ✅ Pagination controls
-- ✅ Last sync info + stats
-- ✅ "Synchronize Now" button with loading state
+- Card-based layout dla questów
+- Color-coded status badges:
+  - `pending`: Yellow
+  - `in_progress`: Blue
+  - `completed`: Green
+  - `cancelled`: Red
+- Filter by status dropdown
+- Search by recipient/location
+- Pagination controls
+- Last sync info + stats
+- "Synchronize Now" button with loading state
+- **[Create Transfer]** button na kartach z `transfer_id == null` i `status == pending`
+- **Transfer #ID** badge + **[View Transfer]** link na kartach z `transfer_id != null`
 
 ---
 
-### 2. Quest Detail View
+### 2. Quest Detail View (without transfer)
 
-**Layout:**
+**Layout — quest BEZ powiązanego transferu:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ [← Back to List]     Quest #quest-f6c39c6c14716069          │
 ├─────────────────────────────────────────────────────────────┤
 │ Status: [PENDING ▼]                    [Change Status]      │
 ├─────────────────────────────────────────────────────────────┤
-│ 📍 Destination                                              │
+│ Destination                                                 │
 │   Pavilion: PCC                                             │
 │   Location: Maskarada                                       │
 │                                                             │
-│ 👤 Recipient                                                │
+│ Recipient                                                   │
 │   Jan Kowalski                                              │
 │                                                             │
-│ 📅 Delivery Details                                         │
+│ Delivery Details                                            │
 │   Date: 2025-06-13                                          │
 │   Pickup Time: 17-18                                        │
 │                                                             │
-│ 💰 Budget Owner                                             │
+│ Budget Owner                                                │
 │   Anna Nowak                                                │
 ├─────────────────────────────────────────────────────────────┤
-│ 📦 Items (2)                                                │
+│ Items (2)                                                   │
 ├─────────────────────────────────────────────────────────────┤
 │ ┌─────────────────────────────────────────────────────────┐ │
 │ │ Laptop Dell                                      Qty: 2 │ │
-│ │ Category: 💻 Electronics (fuzzy match, 85%)            │ │
+│ │ Category: Electronics (fuzzy match, 85%)               │ │
 │ │ Budget: Anna Nowak                                      │ │
-│ │ Notes: Musi mieć dobrą baterię                         │ │
+│ │ Notes: Musi miec dobra baterie                         │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │ ┌─────────────────────────────────────────────────────────┐ │
 │ │ Mysz bezprzewodowa                               Qty: 2 │ │
-│ │ Category: 🖱️ Accessories (exact match, 100%)          │ │
+│ │ Category: Accessories (exact match, 100%)              │ │
 │ └─────────────────────────────────────────────────────────┘ │
 ├─────────────────────────────────────────────────────────────┤
-│ 🔍 Metadata                                                 │
+│              [Create Transfer from Quest]                    │
+│  From location: [Warehouse 1 ▼]                             │
+│                 [Preview Transfer]                           │
+├─────────────────────────────────────────────────────────────┤
+│ Metadata                                                    │
 │   Source Rows: 115, 116                                     │
 │   Last Synced: 2026-02-17 12:30:00                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### 3. Quest Detail View (with transfer)
+
+**Layout — quest Z powiązanym transferem:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ [← Back to List]     Quest #quest-f6c39c6c14716069          │
+├─────────────────────────────────────────────────────────────┤
+│ Status: IN_PROGRESS              Managed by Transfer #156   │
+│ (Status zmienia sie automatycznie przez transfer)           │
+├─────────────────────────────────────────────────────────────┤
+│ Destination / Recipient / Delivery ... (jak wyzej)          │
+├─────────────────────────────────────────────────────────────┤
+│ Items (2) ... (jak wyzej)                                   │
+├─────────────────────────────────────────────────────────────┤
+│ Linked Transfer                                             │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ Transfer #156                         [IN_TRANSIT]      │ │
+│ │ From: Warehouse 1 -> PCC - Maskarada                   │ │
+│ │ Items: Laptop Dell (2), Mysz bezprzewodowa (2)         │ │
+│ │                                                         │ │
+│ │                         [View Transfer Details ->]      │ │
+│ └─────────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│ Metadata                                                    │
+│   Source Rows: 115, 116                                     │
+│   Last Synced: 2026-02-17 12:30:00                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 4. Transfer Creation Flow (from Quest)
+
+**Step 1: Preview** — user wybiera `from_location_id`, klika "Preview Transfer"
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Create Transfer from Quest                                  │
+├─────────────────────────────────────────────────────────────┤
+│ From: [Warehouse 1 ▼]     To: PCC - Maskarada (auto)       │
+├─────────────────────────────────────────────────────────────┤
+│ Resolved Items (ready to transfer):                GREEN    │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ Laptop Dell           Stock #42      Qty: 2 / Avail: 15│ │
+│ │ Mysz bezprzewodowa    Stock #78      Qty: 2 / Avail: 30│ │
+│ └─────────────────────────────────────────────────────────┘ │
+│                                                             │
+│ Unresolved Items (need manual mapping):             YELLOW  │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ Specjalna lampa UV     Qty: 1                           │ │
+│ │ Reason: no category match                               │ │
+│ │ Manual override: [Select stock item ▼]                  │ │
+│ └─────────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│ Optional: Assign users [Select users ▼]                     │
+├─────────────────────────────────────────────────────────────┤
+│               [Cancel]        [Create Transfer]             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Step 2: Confirm** — user klika "Create Transfer", backend tworzy transfer i linkuje z questem
+
+**UI logic:**
+1. User wybiera `from_location_id` z dropdowna lokalizacji
+2. Klik "Preview" -> wywolanie `GET /quests/:id/transfer-preview?from_location_id=X`
+3. Wyswietl `resolved_items` (zielono) i `unresolved_items` (zolto/czerwono)
+4. Dla `unresolved_items` user moze recznie wskazac `stock_id` z dropdowna
+5. Klik "Create Transfer" -> wywolanie `POST /quests/:id/transfer` z overrides
+6. Po sukcesie: redirect do quest detail (teraz z `transfer_id`)
+
 **Features:**
-- ✅ Status dropdown with inline update
-- ✅ Structured info display
-- ✅ Items list with:
+- Status dropdown with inline update (tylko gdy `transfer_id == null`)
+- Info banner "Status managed by transfer" (gdy `transfer_id != null`)
+- Structured info display
+- Items list with:
   - Category match indicator (exact/fuzzy/manual/none)
   - Confidence percentage for fuzzy matches
   - Color coding based on match quality
-- ✅ Metadata section (debug info)
+- Transfer creation section (preview + create)
+- Linked transfer card with link to transfer detail
+- Metadata section (debug info)
 
 ---
 
-### 3. Dashboard (Optional - Priority 2)
+### 5. Dashboard (Optional - Priority 2)
 
 **Layout:**
 ```
@@ -625,6 +949,30 @@ export const equipmentRequestsAPI = {
     );
     return response.data;
   },
+
+  // Preview transfer from quest (call BEFORE creating)
+  previewTransferFromQuest: async (
+    questId: string,
+    fromLocationId: number
+  ): Promise<TransferPreview> => {
+    const response = await api.get(
+      `/equipment-requests/quests/${questId}/transfer-preview`,
+      { params: { from_location_id: fromLocationId } }
+    );
+    return response.data;
+  },
+
+  // Create transfer from quest
+  createTransferFromQuest: async (
+    questId: string,
+    req: CreateTransferFromQuestRequest
+  ): Promise<CreateTransferFromQuestResponse> => {
+    const response = await api.post(
+      `/equipment-requests/quests/${questId}/transfer`,
+      req
+    );
+    return response.data;
+  },
 };
 ```
 
@@ -638,16 +986,20 @@ src/
 │   └── equipment-requests/
 │       ├── components/
 │       │   ├── QuestList.tsx
-│       │   ├── QuestCard.tsx
-│       │   ├── QuestDetail.tsx
+│       │   ├── QuestCard.tsx             // card with transfer badge/button
+│       │   ├── QuestDetail.tsx           // detail with conditional transfer section
 │       │   ├── QuestFilters.tsx
 │       │   ├── SyncButton.tsx
 │       │   ├── SyncStatus.tsx
-│       │   └── StatusBadge.tsx
+│       │   ├── StatusBadge.tsx
+│       │   ├── TransferPreview.tsx       // NEW: preview resolved/unresolved items
+│       │   ├── TransferCreationForm.tsx  // NEW: from_location selector + create button
+│       │   └── LinkedTransferCard.tsx    // NEW: shows linked transfer info
 │       ├── hooks/
 │       │   ├── useQuests.ts
 │       │   ├── useQuestDetail.ts
-│       │   └── useSync.ts
+│       │   ├── useSync.ts
+│       │   └── useTransferFromQuest.ts   // NEW: preview + create transfer logic
 │       └── types.ts
 ├── api/
 │   └── equipmentRequests.ts
@@ -694,12 +1046,18 @@ export const useQuests = () => {
   const updateStatus = async (id: string, status: QuestStatus) => {
     try {
       await equipmentRequestsAPI.updateQuestStatus(id, status);
-      // Refresh list
       await fetchQuests();
     } catch (err: any) {
+      // Handle 409 Conflict — quest managed by transfer
+      if (err.response?.status === 409) {
+        throw new Error('Status is managed by linked transfer. Use transfer endpoints.');
+      }
       throw new Error(err.response?.data?.error || 'Failed to update status');
     }
   };
+
+  // Helper: check if quest can have manual status change
+  const canChangeStatus = (quest: Quest) => !quest.transfer_id;
 
   return {
     quests,
@@ -708,7 +1066,85 @@ export const useQuests = () => {
     filters,
     setFilters,
     updateStatus,
+    canChangeStatus,
     refresh: fetchQuests,
+  };
+};
+```
+
+---
+
+### Step 3b: Transfer from Quest Hook (NEW)
+
+```typescript
+// src/features/equipment-requests/hooks/useTransferFromQuest.ts
+import { useState } from 'react';
+import { equipmentRequestsAPI } from '@/api/equipmentRequests';
+import type {
+  TransferPreview,
+  CreateTransferFromQuestRequest,
+  CreateTransferFromQuestResponse,
+} from '../types';
+
+export const useTransferFromQuest = (questId: string) => {
+  const [preview, setPreview] = useState<TransferPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchPreview = async (fromLocationId: number) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await equipmentRequestsAPI.previewTransferFromQuest(
+        questId,
+        fromLocationId
+      );
+      setPreview(data);
+    } catch (err: any) {
+      setError(err.response?.data?.details || 'Failed to fetch preview');
+      setPreview(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createTransfer = async (
+    req: CreateTransferFromQuestRequest
+  ): Promise<CreateTransferFromQuestResponse> => {
+    try {
+      setCreating(true);
+      setError(null);
+      const result = await equipmentRequestsAPI.createTransferFromQuest(
+        questId,
+        req
+      );
+      return result;
+    } catch (err: any) {
+      const status = err.response?.status;
+      const details = err.response?.data?.details || 'Failed to create transfer';
+
+      if (status === 409) {
+        setError('Quest already has a linked transfer');
+      } else if (status === 422) {
+        setError(`Cannot resolve data: ${details}`);
+      } else {
+        setError(details);
+      }
+      throw err;
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return {
+    preview,
+    loading,
+    creating,
+    error,
+    fetchPreview,
+    createTransfer,
+    clearPreview: () => setPreview(null),
   };
 };
 ```
@@ -807,7 +1243,7 @@ export const QuestList: React.FC = () => {
 
 ## ✅ Testing Checklist
 
-### Manual Testing
+### Manual Testing — Core
 - [ ] Lista questów ładuje się poprawnie
 - [ ] Filtrowanie po statusie działa
 - [ ] Paginacja działa (next/previous)
@@ -819,6 +1255,18 @@ export const QuestList: React.FC = () => {
 - [ ] Error handling - błąd sieci
 - [ ] Loading states działają
 
+### Manual Testing — Transfer Integration
+- [ ] Quest bez transferu: przycisk "Create Transfer" widoczny
+- [ ] Quest z transferem: przycisk "Create Transfer" ukryty, widoczny badge z transfer ID
+- [ ] Quest z transferem: zmiana statusu zablokowana, widoczny komunikat
+- [ ] Preview transfer: wybranie `from_location_id` i klik "Preview" zwraca podgląd
+- [ ] Preview: resolved items wyświetlone na zielono z dostępnymi ilościami
+- [ ] Preview: unresolved items wyświetlone na żółto/czerwono z powodem
+- [ ] Create transfer: klik "Create Transfer" tworzy transfer i linkuje z questem
+- [ ] Create transfer: po sukcesie quest ma `transfer_id` i status `in_progress`
+- [ ] Create transfer: podwójne kliknięcie nie tworzy drugiego transferu (409)
+- [ ] Quest detail: linked transfer card z linkiem do transfer detail
+
 ### Edge Cases
 - [ ] Pusta lista questów (brak danych)
 - [ ] Quest bez kategorii (category_match = "none")
@@ -826,6 +1274,12 @@ export const QuestList: React.FC = () => {
 - [ ] Quest z bardzo długimi nazwami pozycji
 - [ ] Dużo pozycji w queście (>10)
 - [ ] Token wygasł (401 Unauthorized)
+- [ ] Preview z nierozwiązaną lokalizacją (to_location_id = null)
+- [ ] Preview z 0 resolved items i wszystkimi unresolved
+- [ ] Create transfer na quest który już ma transfer (409 Conflict)
+- [ ] Create transfer z nieistniejącym from_location_id
+- [ ] Quest status auto-update po potwierdzeniu transferu (completed)
+- [ ] Quest status auto-reset po anulowaniu transferu (pending, transfer_id = null)
 
 ---
 
@@ -856,12 +1310,16 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,https://yourapp.com
 
 ---
 
-## 🐛 Known Issues & Limitations
+## Known Issues & Limitations
 
 1. **Auto-refresh:** Frontend nie ma real-time updates - użyj polling lub manual refresh
 2. **Large datasets:** Paginacja max 500 questów per page
 3. **Category matching:** Confidence score nie zawsze odzwierciedla jakość - może być false positive
 4. **Sync timing:** Auto-sync jest asynchroniczny - może trwać kilka sekund
+5. **Transfer callback delay:** Po potwierdzeniu/anulowaniu transferu, quest status zmienia się asynchronicznie (callback). Frontend powinien poll po ~1s żeby zobaczyć zaktualizowany status
+6. **Single transfer per quest:** Jeden quest może mieć tylko jeden transfer. Jeśli transfer anulowany, quest wraca do `pending` i można stworzyć nowy
+7. **Location resolution:** Auto-resolve lokalizacji działa tylko gdy pavilion+location dokładnie pasują do tabeli `locations` (ILIKE). Jeśli nie — user musi podać `to_location_id` ręcznie
+8. **Stock resolution:** Auto-resolve stock items szuka po `category_id` + `from_location_id`. Jeśli brak stocku w danej lokalizacji, item ląduje w `unresolved_items`
 
 ---
 

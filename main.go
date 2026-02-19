@@ -115,7 +115,6 @@ func setupRouter(container *di.Container, cfg *config.Config) *gin.Engine {
 	if cfg.Server.RequestTimeout > 0 {
 		router.Use(middleware.TimeoutMiddleware(cfg.Server.RequestTimeout * time.Second))
 	}
-
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORS.AllowedOrigins,
 		AllowMethods:     cfg.CORS.AllowedMethods,

@@ -10,7 +10,8 @@ type Persister interface {
 }
 
 type Auditlog struct {
-	r Persister
+	r       Persister
+	logRepo *AuditLogRepository
 }
 
 type Auditable interface {
@@ -32,8 +33,10 @@ func (a *Auditlog) Log(action string, data interface{}, item Auditable) {
 	log.Println("Created AuditLog entry for id ", auditLog.ResourceID)
 }
 
-func NewAuditLog(repository *AuditLogRepository) *Auditlog {
-	a := Auditlog{r: repository}
+func (a *Auditlog) GetLogs(id int, resourceType string) (*[]models.AuditLog, error) {
+	return a.logRepo.GetResourceLog(id, resourceType)
+}
 
-	return &a
+func NewAuditLog(repository *AuditLogRepository) *Auditlog {
+	return &Auditlog{r: repository, logRepo: repository}
 }
