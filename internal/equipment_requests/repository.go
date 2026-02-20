@@ -28,6 +28,8 @@ type QuestRepositoryInterface interface {
 	GetCategoryMapping(ctx context.Context, itemName string) (*int, error)
 	CreateCategoryMapping(ctx context.Context, mapping *CategoryMapping) error
 	IncrementMappingUsage(ctx context.Context, itemName string) error
+	ListCategoryMappings(ctx context.Context) ([]CategoryMapping, error)
+	DeleteCategoryMapping(ctx context.Context, id int) error
 }
 
 // StockMatch represents a non-serialized stock item found at a location for a given category
@@ -254,7 +256,11 @@ func (r *Repository) ListQuests(ctx context.Context, filter QuestFilter) ([]Ques
 	query := r.repo.GoquDBWrapper.
 		Select("*").
 		From("equipment_request_quests").
-		Order(goqu.I("delivery_date").Asc(), goqu.I("created_at").Desc())
+		Order(
+			goqu.L("CASE status WHEN 'pending' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END").Asc(),
+			goqu.L("CASE WHEN status IN ('pending', 'in_progress') THEN delivery_date END").Asc(),
+			goqu.L("CASE WHEN status = 'completed' THEN completed_at END").Desc().NullsLast(),
+		)
 
 	// Apply filters
 	if filter.Status != "" {
@@ -436,6 +442,44 @@ func (r *Repository) IncrementMappingUsage(ctx context.Context, itemName string)
 
 	if err != nil {
 		return fmt.Errorf("failed to increment mapping usage: %w", err)
+	}
+
+	return nil
+}
+
+// ListCategoryMappings returns all manual category mappings ordered by use frequency
+func (r *Repository) ListCategoryMappings(ctx context.Context) ([]CategoryMapping, error) {
+	var mappings []CategoryMapping
+
+	query := r.repo.GoquDBWrapper.
+		Select("*").
+		From("equipment_request_category_mapping").
+		Order(
+			goqu.I("use_count").Desc(),
+			goqu.I("created_at").Desc(),
+		)
+
+	if err := query.Executor().ScanStructs(&mappings); err != nil {
+		return nil, fmt.Errorf("failed to list category mappings: %w", err)
+	}
+
+	return mappings, nil
+}
+
+// DeleteCategoryMapping removes a manual category mapping by ID
+func (r *Repository) DeleteCategoryMapping(ctx context.Context, id int) error {
+	result, err := r.repo.GoquDBWrapper.
+		Delete("equipment_request_category_mapping").
+		Where(goqu.Ex{"id": id}).
+		Executor().Exec()
+
+	if err != nil {
+		return fmt.Errorf("failed to delete category mapping: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("category mapping %d not found", id)
 	}
 
 	return nil

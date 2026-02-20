@@ -8,9 +8,10 @@ import (
 
 // StockService reprezentuje serwis dla operacji na elementach magazynowych
 type StockService struct {
-	repository *repository.Repository
-	stockRepo  *StockRepository
-	auditLog   *auditlog.Auditlog
+	repository    *repository.Repository
+	stockRepo     *StockRepository
+	auditLog      *auditlog.Auditlog
+	OnStockChanged func(locationID int, action string) // optional — wired by DI container
 }
 
 // NewStockService tworzy nową instancję StockService
@@ -41,6 +42,10 @@ func (s *StockService) CreateStockItem(req models.CreateStockItemRequest) (*mode
 		createdStock,
 	)
 
+	if s.OnStockChanged != nil {
+		go s.OnStockChanged(req.LocationID, "created")
+	}
+
 	return createdStock, nil
 }
 
@@ -60,6 +65,10 @@ func (s *StockService) UpdateStockItem(req *models.PatchStockItemRequest) (*mode
 		},
 		updatedStock,
 	)
+
+	if s.OnStockChanged != nil {
+		go s.OnStockChanged(updatedStock.Location.ID, "updated")
+	}
 
 	return updatedStock, nil
 }
@@ -97,6 +106,10 @@ func (s *StockService) DeleteStock(id int) error {
 			},
 			stock,
 		)
+
+		if s.OnStockChanged != nil {
+			go s.OnStockChanged(stock.Location.ID, "deleted")
+		}
 	}
 
 	return nil

@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"warehouse/internal/integrations/googlesheets"
@@ -26,6 +27,10 @@ type Service struct {
 	sheetName        string
 	fuzzyThreshold   int
 	categories       []models.ItemCategory // cached
+
+	// SSE broadcaster
+	sseMu      sync.RWMutex
+	sseClients map[chan QuestEvent]struct{}
 }
 
 func NewService(
@@ -42,7 +47,58 @@ func NewService(
 		sheetID:        sheetID,
 		sheetName:      sheetName,
 		fuzzyThreshold: fuzzyThreshold,
+		sseClients:     make(map[chan QuestEvent]struct{}),
 	}
+}
+
+// ============================================================================
+// SSE Broadcaster
+// ============================================================================
+
+// Subscribe registers a channel to receive quest events over SSE.
+// The returned channel is buffered (capacity 10) to avoid blocking the sync.
+func (s *Service) Subscribe() chan QuestEvent {
+	ch := make(chan QuestEvent, 10)
+	s.sseMu.Lock()
+	s.sseClients[ch] = struct{}{}
+	s.sseMu.Unlock()
+	return ch
+}
+
+// Unsubscribe removes the channel from the broadcaster and closes it.
+func (s *Service) Unsubscribe(ch chan QuestEvent) {
+	s.sseMu.Lock()
+	delete(s.sseClients, ch)
+	close(ch)
+	s.sseMu.Unlock()
+}
+
+// broadcastEvent sends an event to all connected SSE clients.
+// Slow clients are skipped (non-blocking send).
+func (s *Service) broadcastEvent(event QuestEvent) {
+	s.sseMu.RLock()
+	defer s.sseMu.RUnlock()
+
+	if len(s.sseClients) == 0 {
+		return
+	}
+
+	for ch := range s.sseClients {
+		select {
+		case ch <- event:
+		default: // skip slow client
+		}
+	}
+}
+
+func (s *Service) broadcastSync(stats *SyncStats) {
+	s.broadcastEvent(QuestEvent{Type: "sync_completed", Stats: stats})
+}
+
+// BroadcastStocksChanged notifies SSE clients that stock inventory has changed.
+// Called by StockService via callback wired in the DI container.
+func (s *Service) BroadcastStocksChanged(locationID int, action string) {
+	s.broadcastEvent(QuestEvent{Type: "stocks_changed", LocationID: locationID, Action: action})
 }
 
 // SetTransferCreator sets the transfer creator (called after DI wiring to avoid circular deps)
@@ -129,11 +185,6 @@ func (s *Service) aggregateQuests(rows []SheetRow) []Quest {
 	questMap := make(map[string]*Quest)
 
 	for _, row := range rows {
-		// Skip non-ordered items
-		if row.Status != StatusOrdered {
-			continue
-		}
-
 		// Generate quest key
 		key := s.questKey(row)
 
@@ -141,7 +192,8 @@ func (s *Service) aggregateQuests(rows []SheetRow) []Quest {
 		quest, exists := questMap[key]
 		if !exists {
 			quest = &Quest{
-				ID: generateQuestID(key),
+				ID:       generateQuestID(key),
+				QuestKey: key,
 				Destination: Destination{
 					Pavilion: row.Pavilion,
 					Location: row.Location,
@@ -150,7 +202,7 @@ func (s *Service) aggregateQuests(rows []SheetRow) []Quest {
 				DeliveryDate: row.DeliveryDate,
 				PickupTime:   row.PickupTime,
 				BudgetOwner:  row.BudgetOwner,
-				Status:       "pending",
+				Status:       sheetStatusToQuestStatus(row.Status),
 				Items:        []QuestItem{},
 				SourceRows:   []int{},
 				LastSynced:   time.Now(),
@@ -176,6 +228,15 @@ func (s *Service) aggregateQuests(rows []SheetRow) []Quest {
 	}
 
 	return quests
+}
+
+func sheetStatusToQuestStatus(sheetStatus string) string {
+	switch sheetStatus {
+	case StatusSent, StatusDelivered:
+		return "completed"
+	default:
+		return "pending"
+	}
 }
 
 func (s *Service) questKey(row SheetRow) string {
@@ -260,10 +321,6 @@ func (s *Service) SyncQuestsToDatabase(ctx context.Context) (*SyncResult, error)
 	// 6. Upsert quests to database
 	stats := &SyncStats{}
 	for i := range quests {
-		// Set quest key for deduplication
-		questKey := s.questKey(sheetRows[0]) // Use first row to get key fields
-		quests[i].QuestKey = questKey
-
 		if err := s.upsertQuest(ctx, &quests[i], stats); err != nil {
 			log.Printf("[equipment-requests] Failed to upsert quest %s: %v", quests[i].ID, err)
 			continue
@@ -290,6 +347,9 @@ func (s *Service) SyncQuestsToDatabase(ctx context.Context) (*SyncResult, error)
 	log.Printf("[equipment-requests] Synced %d quests from %d rows (created: %d, updated: %d) in %dms",
 		len(quests), len(sheetRows), stats.Created, stats.Updated, duration.Milliseconds())
 
+	// Notify SSE clients
+	go s.broadcastSync(stats)
+
 	return &SyncResult{Quests: quests, Stats: stats}, nil
 }
 
@@ -307,6 +367,14 @@ func (s *Service) upsertQuest(ctx context.Context, quest *Quest, stats *SyncStat
 		stats.ItemsAdded += len(quest.Items)
 		log.Printf("[equipment-requests] Created new quest: %s", quest.ID)
 	} else {
+		// Skip update for quests managed by a linked transfer — their status
+		// is controlled exclusively by transfer callbacks.
+		if existing.TransferID != nil {
+			stats.Unchanged++
+			log.Printf("[equipment-requests] Skipping update for quest %s — managed by transfer %d", existing.ID, *existing.TransferID)
+			return nil
+		}
+
 		// Update existing quest by quest_id
 		if err := s.questRepo.UpdateQuest(ctx, existing.ID, quest); err != nil {
 			return fmt.Errorf("failed to update quest: %w", err)

@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"warehouse/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -16,10 +19,18 @@ import (
 
 // mockQuestRepository is a mock implementation for testing
 type mockQuestRepository struct {
-	quests       []Quest
-	syncLogs     []SyncLog
-	mappings     map[string]int
-	statusUpdate func(ctx context.Context, questID string, status string) error
+	quests           []Quest
+	syncLogs         []SyncLog
+	mappings         map[string]int
+	categoryMappings []CategoryMapping
+	statusUpdate     func(ctx context.Context, questID string, status string) error
+	stockFinder      func(locationID, categoryID int) ([]StockMatch, error)
+}
+
+// mockTransferCreator is a mock TransferCreator for testing
+type mockTransferCreator struct {
+	transferID int
+	err        error
 }
 
 func (m *mockQuestRepository) CreateQuest(ctx context.Context, quest *Quest) error {
@@ -152,11 +163,32 @@ func (m *mockQuestRepository) UnlinkQuestFromTransfer(ctx context.Context, quest
 }
 
 func (m *mockQuestRepository) FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error) {
+	if m.stockFinder != nil {
+		return m.stockFinder(fromLocationID, categoryID)
+	}
 	return nil, nil
 }
 
 func (m *mockQuestRepository) ResolveLocationByPavilionAndName(pavilion, name string) (*int, error) {
 	return nil, nil
+}
+
+func (m *mockQuestRepository) ListCategoryMappings(ctx context.Context) ([]CategoryMapping, error) {
+	return m.categoryMappings, nil
+}
+
+func (m *mockQuestRepository) DeleteCategoryMapping(ctx context.Context, id int) error {
+	for i, cm := range m.categoryMappings {
+		if cm.ID == id {
+			m.categoryMappings = append(m.categoryMappings[:i], m.categoryMappings[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("category mapping %d not found", id)
+}
+
+func (m *mockTransferCreator) InitTransfer(req models.TransferRequest, status string) (int, error) {
+	return m.transferID, m.err
 }
 
 func setupTestHandler() (*Handler, *mockQuestRepository) {
@@ -535,3 +567,377 @@ func TestContains(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Phase 4 Tests
+// ============================================================================
+
+func TestHandler_UpdateQuestStatus_409_WhenQuestHasTransfer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, mockRepo := setupTestHandler()
+
+	transferID := 42
+	mockRepo.quests = append(mockRepo.quests, Quest{
+		ID:         "quest-linked",
+		Status:     "in_progress",
+		TransferID: &transferID,
+		SourceRows: []int{1},
+	})
+
+	bodyBytes, _ := json.Marshal(map[string]string{"status": "completed"})
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: "quest-linked"}}
+	c.Request = httptest.NewRequest("PATCH", "/api/equipment-requests/quests/quest-linked/status", bytes.NewReader(bodyBytes))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.UpdateQuestStatus(c)
+
+	assert.Equal(t, http.StatusConflict, w.Code)
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Contains(t, resp, "error")
+	assert.Contains(t, resp["error"], "managed by linked transfer")
+}
+
+func setupHandlerWithTransferCreator(tc TransferCreator) (*Handler, *mockQuestRepository) {
+	mockRepo := &mockQuestRepository{
+		quests:   []Quest{},
+		syncLogs: []SyncLog{},
+		mappings: make(map[string]int),
+	}
+	svc := &Service{transferCreator: tc}
+	svc.questRepo = mockRepo
+	svc.sseClients = make(map[chan QuestEvent]struct{})
+	return &Handler{service: svc}, mockRepo
+}
+
+func TestHandler_CreateTransferFromQuest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	toLocationID := 5
+
+	tests := []struct {
+		name           string
+		questID        string
+		quest          *Quest
+		body           interface{}
+		transferID     int
+		transferErr    error
+		expectedStatus int
+	}{
+		{
+			name:           "Quest not found returns 404",
+			questID:        "quest-missing",
+			quest:          nil,
+			body:           map[string]interface{}{"from_location_id": 1},
+			expectedStatus: http.StatusNotFound,
+		},
+		{
+			name:    "Quest already has transfer returns 409",
+			questID: "quest-linked",
+			quest: &Quest{
+				ID:         "quest-linked",
+				Status:     "pending",
+				TransferID: func() *int { id := 99; return &id }(),
+				SourceRows: []int{1},
+			},
+			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
+			expectedStatus: http.StatusConflict,
+		},
+		{
+			name:    "Quest not pending returns 409",
+			questID: "quest-done",
+			quest: &Quest{
+				ID:         "quest-done",
+				Status:     "completed",
+				SourceRows: []int{1},
+			},
+			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
+			expectedStatus: http.StatusConflict,
+		},
+		{
+			name:    "Missing from_location_id returns 400",
+			questID: "quest-ok",
+			quest: &Quest{
+				ID:         "quest-ok",
+				Status:     "pending",
+				SourceRows: []int{1},
+			},
+			body:           map[string]interface{}{},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:    "Success — explicit stock items and to_location_id",
+			questID: "quest-pending",
+			quest: &Quest{
+				ID:         "quest-pending",
+				Status:     "pending",
+				SourceRows: []int{1},
+			},
+			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
+			transferID:     156,
+			expectedStatus: http.StatusCreated,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tc := &mockTransferCreator{transferID: tt.transferID, err: tt.transferErr}
+			handler, mockRepo := setupHandlerWithTransferCreator(tc)
+
+			if tt.quest != nil {
+				mockRepo.quests = append(mockRepo.quests, *tt.quest)
+			}
+
+			bodyBytes, _ := json.Marshal(tt.body)
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Params = gin.Params{{Key: "id", Value: tt.questID}}
+			c.Request = httptest.NewRequest("POST", "/api/equipment-requests/quests/"+tt.questID+"/transfer", bytes.NewReader(bodyBytes))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			handler.CreateTransferFromQuest(c)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			if tt.expectedStatus == http.StatusCreated {
+				var resp map[string]interface{}
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.EqualValues(t, tt.transferID, resp["transfer_id"])
+				assert.Equal(t, tt.questID, resp["quest_id"])
+			}
+		})
+	}
+}
+
+func TestHandler_PreviewTransferFromQuest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		questID        string
+		fromLocationID string
+		quest          *Quest
+		expectedStatus int
+	}{
+		{
+			name:           "Missing from_location_id returns 400",
+			questID:        "quest-1",
+			fromLocationID: "",
+			quest:          &Quest{ID: "quest-1", Status: "pending", SourceRows: []int{1}},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Quest not found returns 404",
+			questID:        "quest-missing",
+			fromLocationID: "1",
+			quest:          nil,
+			expectedStatus: http.StatusNotFound,
+		},
+		{
+			name:           "Success returns 200 with preview",
+			questID:        "quest-2",
+			fromLocationID: "1",
+			quest: &Quest{
+				ID:     "quest-2",
+				Status: "pending",
+				Destination: Destination{Pavilion: "P1", Location: "L1"},
+				Items:  []QuestItem{{Name: "Laptop", Quantity: 2}},
+				SourceRows: []int{1},
+			},
+			expectedStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, mockRepo := setupTestHandler()
+
+			if tt.quest != nil {
+				mockRepo.quests = append(mockRepo.quests, *tt.quest)
+			}
+
+			url := "/api/equipment-requests/quests/" + tt.questID + "/transfer-preview"
+			if tt.fromLocationID != "" {
+				url += "?from_location_id=" + tt.fromLocationID
+			}
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Params = gin.Params{{Key: "id", Value: tt.questID}}
+			c.Request = httptest.NewRequest("GET", url, nil)
+
+			handler.PreviewTransferFromQuest(c)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			if tt.expectedStatus == http.StatusOK {
+				var resp TransferPreview
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, 1, resp.FromLocationID)
+			}
+		})
+	}
+}
+
+func TestService_OnTransferStatusChanged(t *testing.T) {
+	transferID := 10
+	questID := "quest-linked"
+
+	tests := []struct {
+		name          string
+		newStatus     string
+		initialQuests []Quest
+		checkResult   func(t *testing.T, repo *mockQuestRepository)
+		expectError   bool
+	}{
+		{
+			name:      "completed → quest UpdateQuestStatus completed",
+			newStatus: "completed",
+			initialQuests: []Quest{
+				{ID: questID, Status: "in_progress", TransferID: &transferID, SourceRows: []int{1}},
+			},
+			checkResult: func(t *testing.T, repo *mockQuestRepository) {
+				assert.Equal(t, "completed", repo.quests[0].Status)
+			},
+		},
+		{
+			name:      "cancelled → quest unlinked and status reset to pending",
+			newStatus: "cancelled",
+			initialQuests: []Quest{
+				{ID: questID, Status: "in_progress", TransferID: &transferID, SourceRows: []int{1}},
+			},
+			checkResult: func(t *testing.T, repo *mockQuestRepository) {
+				assert.Equal(t, "pending", repo.quests[0].Status)
+				assert.Nil(t, repo.quests[0].TransferID)
+			},
+		},
+		{
+			name:          "no quest linked to transfer → no error",
+			newStatus:     "completed",
+			initialQuests: []Quest{},
+			checkResult:   func(t *testing.T, repo *mockQuestRepository) {},
+		},
+		{
+			name:      "unknown status → no action taken",
+			newStatus: "unknown_status",
+			initialQuests: []Quest{
+				{ID: questID, Status: "in_progress", TransferID: &transferID, SourceRows: []int{1}},
+			},
+			checkResult: func(t *testing.T, repo *mockQuestRepository) {
+				assert.Equal(t, "in_progress", repo.quests[0].Status)
+				assert.NotNil(t, repo.quests[0].TransferID)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := &mockQuestRepository{
+				quests:   tt.initialQuests,
+				mappings: make(map[string]int),
+			}
+			svc := &Service{questRepo: mockRepo}
+
+			err := svc.OnTransferStatusChanged(transferID, tt.newStatus)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			tt.checkResult(t, mockRepo)
+		})
+	}
+}
+
+func TestHandler_ListCategoryMappings(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, mockRepo := setupTestHandler()
+
+	mockRepo.categoryMappings = []CategoryMapping{
+		{ID: 1, FormItemName: "Laptop Dell", CategoryID: 10, UseCount: 5},
+		{ID: 2, FormItemName: "Mouse", CategoryID: 20, UseCount: 1},
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/equipment-requests/category-mappings", nil)
+
+	handler.ListCategoryMappings(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.EqualValues(t, 2, resp["count"])
+	mappings, ok := resp["mappings"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, mappings, 2)
+}
+
+func TestHandler_DeleteCategoryMapping(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		id             string
+		initialData    []CategoryMapping
+		expectedStatus int
+	}{
+		{
+			name:           "Delete existing mapping returns 204",
+			id:             "1",
+			initialData:    []CategoryMapping{{ID: 1, FormItemName: "Laptop", CategoryID: 10}},
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			name:           "Delete non-existent mapping returns 404",
+			id:             "99",
+			initialData:    []CategoryMapping{},
+			expectedStatus: http.StatusNotFound,
+		},
+		{
+			name:           "Invalid ID returns 400",
+			id:             "abc",
+			initialData:    []CategoryMapping{},
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, mockRepo := setupTestHandler()
+			mockRepo.categoryMappings = tt.initialData
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Params = gin.Params{{Key: "id", Value: tt.id}}
+			c.Request = httptest.NewRequest("DELETE", "/api/equipment-requests/category-mappings/"+tt.id, nil)
+
+			handler.DeleteCategoryMapping(c)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+		})
+	}
+}
+
+func TestHandler_GetSyncStatus_NoScheduler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, _ := setupTestHandler() // scheduler is nil by default
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/equipment-requests/sync-status", nil)
+
+	handler.GetSyncStatus(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp SyncStatus
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.False(t, resp.Enabled)
+	assert.Nil(t, resp.LastSync)
+}
+
+// compile-time check: mockTransferCreator implements TransferCreator
+var _ TransferCreator = (*mockTransferCreator)(nil)

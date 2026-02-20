@@ -88,6 +88,9 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		equipmentRequestService.SetTransferCreator(transferHandler.Service)
 		transferHandler.Service.RegisterStatusCallback(equipmentRequestService)
 
+		// Wire stock changes → SSE broadcast
+		stockService.OnStockChanged = equipmentRequestService.BroadcastStocksChanged
+
 		equipmentRequestHandler = equipment_requests.NewHandler(equipmentRequestService)
 
 		// Phase 3: Auto-sync scheduler
@@ -97,6 +100,7 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 				cfg.EquipmentRequest.SyncInterval,
 			)
 			equipmentRequestScheduler.Start()
+			equipmentRequestHandler.SetScheduler(equipmentRequestScheduler)
 			log.Printf("[INFO] Equipment request auto-sync enabled (interval: %v)", cfg.EquipmentRequest.SyncInterval)
 		} else {
 			log.Println("[INFO] Equipment request auto-sync disabled")

@@ -1969,6 +1969,111 @@ paths:
         "500":
           $ref: "#/components/responses/DefaultError"
 
+  /equipment-requests/category-mappings:
+    get:
+      tags:
+        - equipment-requests
+      summary: List category mappings
+      description: Returns all manual item-to-category mappings ordered by usage frequency.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of category mappings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 3
+                  mappings:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EquipmentRequestCategoryMapping"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /equipment-requests/category-mappings/{id}:
+    delete:
+      tags:
+        - equipment-requests
+      summary: Delete category mapping
+      description: Removes a manual category mapping by ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Category mapping ID
+      responses:
+        "204":
+          description: Mapping deleted successfully
+        "400":
+          description: Invalid mapping ID
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Category mapping not found
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /equipment-requests/stream:
+    get:
+      tags:
+        - equipment-requests
+      summary: Subscribe to real-time quest updates (SSE)
+      description: |
+        Opens a Server-Sent Events connection. The server pushes a `quest_update` event
+        whenever a sync completes (manual or scheduled). The frontend should refresh the
+        quest list on receiving this event.
+
+        **Event format:**
+        ```
+        event: quest_update
+        data: {"type":"sync_completed","stats":{"Created":2,"Updated":1,...}}
+        ```
+
+        The connection stays open until the client disconnects.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: SSE stream opened
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Newline-delimited SSE events
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /equipment-requests/sync-status:
+    get:
+      tags:
+        - equipment-requests
+      summary: Get auto-sync scheduler status
+      description: |
+        Returns the current state of the auto-sync scheduler — whether it is enabled,
+        its interval, when the last sync occurred, and when the next one is expected.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Scheduler status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 servers:
   - url: https://pyrhouse-backend-f26ml.ondigitalocean.app/api
     description: Production
@@ -2432,3 +2537,33 @@ components:
           format: date-time
           description: When this mapping was created
           example: "2026-02-16T10:15:00Z"
+
+    SyncStatus:
+      type: object
+      description: Current state of the auto-sync scheduler
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the scheduler is currently running
+          example: true
+        interval:
+          type: string
+          description: Sync interval as Go duration string
+          example: "15m0s"
+        last_sync:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the last successful sync
+          example: "2026-02-19T12:00:00Z"
+        next_sync:
+          type: string
+          format: date-time
+          nullable: true
+          description: Estimated timestamp of the next sync (last_sync + interval)
+          example: "2026-02-19T12:15:00Z"
+        last_error:
+          type: string
+          nullable: true
+          description: Error message from the last failed sync, if any
+          example: "failed to fetch sheet: context deadline exceeded"

@@ -2,6 +2,7 @@ package equipment_requests
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,13 +11,19 @@ import (
 )
 
 type Handler struct {
-	service *Service
+	service   *Service
+	scheduler *Scheduler // optional — nil when auto-sync is disabled
 }
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{
 		service: service,
 	}
+}
+
+// SetScheduler injects the scheduler after construction (avoids circular DI).
+func (h *Handler) SetScheduler(s *Scheduler) {
+	h.scheduler = s
 }
 
 // RegisterRoutes registers equipment request routes
@@ -38,6 +45,14 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 
 		// Category mapping management
 		equipmentRoutes.POST("/category-mapping", h.CreateCategoryMapping)
+		equipmentRoutes.GET("/category-mappings", h.ListCategoryMappings)
+		equipmentRoutes.DELETE("/category-mappings/:id", h.DeleteCategoryMapping)
+
+		// Real-time updates (SSE)
+		equipmentRoutes.GET("/stream", h.StreamQuests)
+
+		// Scheduler status
+		equipmentRoutes.GET("/sync-status", h.GetSyncStatus)
 	}
 }
 
@@ -286,6 +301,109 @@ func (h *Handler) CreateCategoryMapping(c *gin.Context) {
 		"message": "Category mapping created successfully",
 		"mapping": mapping,
 	})
+}
+
+// StreamQuests opens an SSE connection that receives events whenever quests are synced.
+func (h *Handler) StreamQuests(c *gin.Context) {
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+
+	// Send 200 OK + headers immediately so the client doesn't hang waiting.
+	// Without this, c.Stream() blocks on the select below and headers are never
+	// flushed until the first event arrives (which may never come).
+	c.Writer.WriteHeaderNow()
+	c.Writer.Flush()
+
+	ch := h.service.Subscribe()
+	defer h.service.Unsubscribe(ch)
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case event, ok := <-ch:
+			if !ok {
+				return false
+			}
+			c.SSEvent("quest_update", event)
+			return true
+		case <-c.Request.Context().Done():
+			return false
+		}
+	})
+}
+
+// GetSyncStatus returns the current state of the auto-sync scheduler.
+func (h *Handler) GetSyncStatus(c *gin.Context) {
+	if h.scheduler == nil {
+		c.JSON(http.StatusOK, SyncStatus{Enabled: false})
+		return
+	}
+
+	status := SyncStatus{
+		Enabled:  h.scheduler.IsEnabled(),
+		Interval: h.scheduler.GetInterval().String(),
+	}
+
+	if lastSync := h.scheduler.GetLastSync(); !lastSync.IsZero() {
+		status.LastSync = &lastSync
+		if status.Enabled {
+			nextSync := lastSync.Add(h.scheduler.GetInterval())
+			status.NextSync = &nextSync
+		}
+	}
+
+	if lastErr := h.scheduler.GetLastError(); lastErr != nil {
+		status.LastError = lastErr.Error()
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
+// ListCategoryMappings returns all manual category mappings.
+func (h *Handler) ListCategoryMappings(c *gin.Context) {
+	mappings, err := h.service.questRepo.ListCategoryMappings(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to fetch category mappings",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"count":    len(mappings),
+		"mappings": mappings,
+	})
+}
+
+// DeleteCategoryMapping removes a manual category mapping by ID.
+func (h *Handler) DeleteCategoryMapping(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid mapping ID",
+			"details": "ID must be a positive integer",
+		})
+		return
+	}
+
+	if err := h.service.questRepo.DeleteCategoryMapping(c.Request.Context(), id); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Category mapping not found",
+				"details": err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to delete category mapping",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.AbortWithStatus(http.StatusNoContent)
 }
 
 // Helper functions

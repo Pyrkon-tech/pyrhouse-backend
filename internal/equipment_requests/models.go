@@ -119,3 +119,22 @@ type UnresolvedItem struct {
 	CategoryID *int   `json:"category_id,omitempty"`
 	Reason     string `json:"reason"`
 }
+
+// QuestEvent is broadcast over SSE. Discriminate on Type field.
+//   "sync_completed"  — after a Google Sheets sync (Stats populated)
+//   "stocks_changed"  — after a stock create/update/delete (LocationID + Action populated)
+type QuestEvent struct {
+	Type       string     `json:"type"`
+	Stats      *SyncStats `json:"stats,omitempty"`
+	LocationID int        `json:"location_id,omitempty"`
+	Action     string     `json:"action,omitempty"` // "created" | "updated" | "deleted"
+}
+
+// SyncStatus describes the current state of the auto-sync scheduler
+type SyncStatus struct {
+	Enabled   bool       `json:"enabled"`
+	Interval  string     `json:"interval,omitempty"`
+	LastSync  *time.Time `json:"last_sync,omitempty"`
+	NextSync  *time.Time `json:"next_sync,omitempty"`
+	LastError string     `json:"last_error,omitempty"`
+}

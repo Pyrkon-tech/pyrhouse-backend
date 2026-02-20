@@ -80,7 +80,7 @@ func Load() (*Config, error) {
 		CORS: CORSConfig{
 			AllowedOrigins:   getSliceEnv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://localhost:5000"}),
 			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
+			AllowedHeaders:   []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With", "Cache-Control", "Last-Event-ID"},
 			ExposedHeaders:   []string{"Content-Length"},
 			AllowCredentials: true,
 			MaxAge:           getDurationEnv("CORS_MAX_AGE_HOURS", 12) * time.Hour,

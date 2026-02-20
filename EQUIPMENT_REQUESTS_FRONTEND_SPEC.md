@@ -40,10 +40,20 @@ System do zarządzania zamówieniami sprzętu zintegrowany z Google Sheets i sys
 10. **Export do CSV/Excel**
 11. **Search/filtering** po odbiorcach, lokalizacjach
 
+### Nice-to-Have (Priority 2) — kontynuacja Phase 4
+8. **Dashboard ze statystykami** (ile pending, in_progress, completed, ile z transferem)
+9. **Category mapping management** (ręczne dopasowanie nazw → kategorie) — **API gotowe**
+10. **Export do CSV/Excel**
+11. **Search/filtering** po odbiorcach, lokalizacjach
+
+### Zrealizowane w Phase 4
+12. **Real-time updates via SSE** — `GET /equipment-requests/stream` — **DONE**
+13. **Scheduler status** — `GET /equipment-requests/sync-status` — **DONE**
+14. **Category mappings CRUD** — `GET /category-mappings`, `DELETE /category-mappings/:id` — **DONE**
+
 ### Future (Priority 3)
-12. **Real-time updates** (WebSocket/SSE gdy backend będzie wspierał)
-13. **Budget tracking**
-14. **Multiple transfers per quest** (częściowe wydania)
+15. **Budget tracking**
+16. **Multiple transfers per quest** (częściowe wydania)
 
 ---
 
@@ -1312,7 +1322,7 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,https://yourapp.com
 
 ## Known Issues & Limitations
 
-1. **Auto-refresh:** Frontend nie ma real-time updates - użyj polling lub manual refresh
+1. **Auto-refresh:** ~~Frontend nie ma real-time updates - użyj polling lub manual refresh~~ **ROZWIĄZANE (Phase 4):** Backend obsługuje SSE (`GET /equipment-requests/stream`). Użyj `useQuestStream` hook zamiast pollingu.
 2. **Large datasets:** Paginacja max 500 questów per page
 3. **Category matching:** Confidence score nie zawsze odzwierciedla jakość - może być false positive
 4. **Sync timing:** Auto-sync jest asynchroniczny - może trwać kilka sekund
@@ -1320,6 +1330,8 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,https://yourapp.com
 6. **Single transfer per quest:** Jeden quest może mieć tylko jeden transfer. Jeśli transfer anulowany, quest wraca do `pending` i można stworzyć nowy
 7. **Location resolution:** Auto-resolve lokalizacji działa tylko gdy pavilion+location dokładnie pasują do tabeli `locations` (ILIKE). Jeśli nie — user musi podać `to_location_id` ręcznie
 8. **Stock resolution:** Auto-resolve stock items szuka po `category_id` + `from_location_id`. Jeśli brak stocku w danej lokalizacji, item ląduje w `unresolved_items`
+9. **SSE reconnect:** `EventSource` automatycznie się reconnektuje po utracie połączenia (built-in browser behavior). Nie implementuj własnego retry loop.
+10. **SSE auth:** Backend wymaga `Authorization: Bearer` header (JWTMiddleware nie obsługuje query param). Natywny browser `EventSource` nie obsługuje custom headers — **wymagany `npm install eventsource`** jako polyfill z identycznym API.
 
 ---
 
@@ -1332,4 +1344,628 @@ Pytania? Problemy?
 
 ---
 
-**Good luck! 🚀**
+## Phase 4 — Real-Time Updates, Sync Status & Category Mapping Management
+
+### Nowe endpointy (Phase 4)
+
+#### P4.1 — GET `/equipment-requests/stream` (SSE)
+
+Otwiera długie połączenie SSE. Backend wysyła event `quest_update` po każdym zakończonym syncu (ręcznym lub automatycznym).
+
+```
+GET /api/equipment-requests/stream
+Authorization: Bearer <token>   ← uwaga: EventSource nie obsługuje custom headers, patrz sekcja Known Issues
+Content-Type: text/event-stream
+```
+
+**Event format:**
+```
+event: quest_update
+data: {"type":"sync_completed","stats":{"quests_created":2,"quests_updated":1,"quests_unchanged":8,"items_added":3,"items_removed":0}}
+```
+
+**Zachowanie:**
+- Połączenie trwa do momentu zamknięcia przez klienta lub utratę połączenia
+- Browser `EventSource` automatycznie reconnektuje
+- Jeden event na każdy zakończony sync — nie emituje nic gdy brak zmian w sesji
+
+---
+
+#### P4.2 — GET `/equipment-requests/sync-status`
+
+Zwraca aktualny stan schedulera (auto-sync).
+
+**Response 200 OK:**
+```json
+{
+  "enabled": true,
+  "interval": "15m0s",
+  "last_sync": "2026-02-19T12:00:00Z",
+  "next_sync": "2026-02-19T12:15:00Z",
+  "last_error": ""
+}
+```
+
+Pola:
+| Pole | Typ | Opis |
+|------|-----|------|
+| `enabled` | bool | Czy scheduler jest aktywny |
+| `interval` | string | Interwał syncu (format Go Duration: "15m0s") |
+| `last_sync` | string? | ISO datetime ostatniego udanego synca |
+| `next_sync` | string? | ISO datetime następnego synca (obliczone: `last_sync + interval`) |
+| `last_error` | string | Ostatni błąd (pusty string jeśli brak) |
+
+---
+
+#### P4.3 — GET `/equipment-requests/category-mappings`
+
+Zwraca listę ręcznych mapowań (posortowane po `usage_count DESC`).
+
+**Response 200 OK:**
+```json
+{
+  "count": 3,
+  "mappings": [
+    {
+      "id": 1,
+      "form_item_name": "Laptop Dell XPS",
+      "category_id": 123,
+      "usage_count": 15,
+      "created_by": null,
+      "created_at": "2026-01-10T09:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### P4.4 — DELETE `/equipment-requests/category-mappings/:id`
+
+Usuwa mapowanie. Zwraca `204 No Content` — **brak body w response**.
+
+**Błędy:**
+- `404` gdy mapping nie istnieje
+- `400` gdy ID nie jest liczbą
+
+---
+
+### Rozszerzone TypeScript Types (Phase 4)
+
+```typescript
+// Dołącz do src/features/equipment-requests/types.ts
+
+// SSE event — wysyłany po każdym syncu
+export interface QuestEvent {
+  type: 'sync_completed';
+  stats?: SyncStats; // ta sama struktura co w SyncResponse
+}
+
+// Stan schedulera
+export interface SyncStatusResponse {
+  enabled: boolean;
+  interval?: string;    // np. "15m0s" — parse za pomocą parseDuration()
+  last_sync?: string;   // ISO datetime
+  next_sync?: string;   // ISO datetime
+  last_error?: string;  // pusty string = brak błędu
+}
+
+// Rozszerzone CategoryMapping — nowe pola z backendu
+export interface CategoryMapping {
+  id: number;
+  form_item_name: string;
+  category_id: number;
+  usage_count: number;  // NEW: ile razy użyte w syncu
+  created_by?: number;
+  created_at: string;
+}
+
+export interface CategoryMappingsResponse {
+  count: number;
+  mappings: CategoryMapping[];
+}
+```
+
+---
+
+### Rozszerzone API Client (Phase 4)
+
+```typescript
+// Dołącz do src/api/equipmentRequests.ts
+
+export const equipmentRequestsAPI = {
+  // ... poprzednie metody ...
+
+  // GET /sync-status
+  getSyncStatus: async (): Promise<SyncStatusResponse> => {
+    const response = await api.get('/equipment-requests/sync-status');
+    return response.data;
+  },
+
+  // GET /category-mappings
+  getCategoryMappings: async (): Promise<CategoryMappingsResponse> => {
+    const response = await api.get('/equipment-requests/category-mappings');
+    return response.data;
+  },
+
+  // DELETE /category-mappings/:id — returns void (204 No Content)
+  deleteCategoryMapping: async (id: number): Promise<void> => {
+    await api.delete(`/equipment-requests/category-mappings/${id}`);
+  },
+
+  // SSE stream — zwraca EventSource lub null gdy brak wsparcia
+  // UWAGA: EventSource nie obsługuje Authorization header.
+  // Opcje:
+  //   A) Token jako query param (wymaga zmian backendu)
+  //   B) Cookie-based auth (wymaga zmian backendu)
+  //   C) npm: eventsource (polyfill z headerami)
+  //   D) Fetch + ReadableStream (bardziej złożone)
+  //
+  // Poniżej: wariant z query param (najprostszy)
+  openQuestStream: (token: string): EventSource => {
+    const url = `${API_BASE_URL}/equipment-requests/stream?token=${encodeURIComponent(token)}`;
+    return new EventSource(url);
+  },
+};
+```
+
+---
+
+### Nowe Hooki (Phase 4)
+
+#### `useQuestStream` — SSE
+
+```typescript
+// src/features/equipment-requests/hooks/useQuestStream.ts
+import { useEffect, useRef, useState } from 'react';
+import type { QuestEvent } from '../types';
+
+interface UseQuestStreamOptions {
+  onEvent: (event: QuestEvent) => void;
+  enabled?: boolean; // domyślnie true
+}
+
+export const useQuestStream = ({ onEvent, enabled = true }: UseQuestStreamOptions) => {
+  const [connected, setConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const esRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const token = localStorage.getItem('auth_token') ?? '';
+    const url = `${import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api'}/equipment-requests/stream?token=${encodeURIComponent(token)}`;
+
+    const es = new EventSource(url);
+    esRef.current = es;
+
+    es.onopen = () => {
+      setConnected(true);
+      setError(null);
+    };
+
+    es.addEventListener('quest_update', (e: MessageEvent) => {
+      try {
+        const data: QuestEvent = JSON.parse(e.data);
+        onEvent(data);
+      } catch {
+        console.warn('[SSE] Failed to parse quest_update event', e.data);
+      }
+    });
+
+    es.onerror = () => {
+      // EventSource sam się reconnektuje po błędzie — tylko logujemy
+      setConnected(false);
+      setError('SSE connection lost — reconnecting...');
+    };
+
+    return () => {
+      es.close();
+      esRef.current = null;
+      setConnected(false);
+    };
+  }, [enabled]); // onEvent powinien być wrapped w useCallback przez wywołującego
+
+  return { connected, error };
+};
+```
+
+**Użycie w komponencie:**
+
+```typescript
+const { connected } = useQuestStream({
+  onEvent: (event) => {
+    if (event.type === 'sync_completed') {
+      refresh(); // odśwież listę questów
+    }
+  },
+});
+```
+
+---
+
+#### `useSyncStatus` — stan schedulera
+
+```typescript
+// src/features/equipment-requests/hooks/useSyncStatus.ts
+import { useState, useEffect, useCallback } from 'react';
+import { equipmentRequestsAPI } from '@/api/equipmentRequests';
+import type { SyncStatusResponse } from '../types';
+
+export const useSyncStatus = (refreshIntervalMs = 60_000) => {
+  const [status, setStatus] = useState<SyncStatusResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetch = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await equipmentRequestsAPI.getSyncStatus();
+      setStatus(data);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to fetch sync status');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch();
+    const id = setInterval(fetch, refreshIntervalMs);
+    return () => clearInterval(id);
+  }, [fetch, refreshIntervalMs]);
+
+  // Helper: parsuje "15m0s" → czytelny tekst
+  const formatInterval = (interval?: string) => {
+    if (!interval) return '';
+    const match = interval.match(/^(?:(\d+)h)?(?:(\d+)m)?/);
+    if (!match) return interval;
+    const h = match[1] ? `${match[1]}h ` : '';
+    const m = match[2] ? `${match[2]}min` : '';
+    return `${h}${m}`.trim();
+  };
+
+  return { status, loading, error, refresh: fetch, formatInterval };
+};
+```
+
+---
+
+#### `useCategoryMappings` — lista i usuwanie
+
+```typescript
+// src/features/equipment-requests/hooks/useCategoryMappings.ts
+import { useState, useEffect, useCallback } from 'react';
+import { equipmentRequestsAPI } from '@/api/equipmentRequests';
+import type { CategoryMapping } from '../types';
+
+export const useCategoryMappings = () => {
+  const [mappings, setMappings] = useState<CategoryMapping[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null); // ID aktualnie usuwanego
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchMappings = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await equipmentRequestsAPI.getCategoryMappings();
+      setMappings(data.mappings);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to fetch mappings');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchMappings(); }, [fetchMappings]);
+
+  const deleteMapping = async (id: number) => {
+    try {
+      setDeleting(id);
+      setError(null);
+      await equipmentRequestsAPI.deleteCategoryMapping(id);
+      setMappings((prev) => prev.filter((m) => m.id !== id));
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setError('Mapping already deleted');
+        await fetchMappings(); // resync
+      } else {
+        setError(err.response?.data?.error || 'Failed to delete mapping');
+      }
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  return { mappings, loading, deleting, error, deleteMapping, refresh: fetchMappings };
+};
+```
+
+---
+
+#### Zaktualizowany `useQuests` — SSE auto-refresh
+
+```typescript
+// ZMIANA w src/features/equipment-requests/hooks/useQuests.ts
+// Dodaj integrację z useQuestStream:
+
+import { useCallback } from 'react';
+import { useQuestStream } from './useQuestStream';
+
+export const useQuests = () => {
+  // ... poprzedni kod ...
+
+  const fetchQuests = useCallback(async () => {
+    // ... bez zmian ...
+  }, [filters]);
+
+  // SSE — auto-refresh po każdym syncu
+  const { connected: sseConnected } = useQuestStream({
+    onEvent: (event) => {
+      if (event.type === 'sync_completed') {
+        fetchQuests();
+      }
+    },
+  });
+
+  return {
+    quests,
+    loading,
+    error,
+    filters,
+    setFilters,
+    updateStatus,
+    canChangeStatus,
+    refresh: fetchQuests,
+    sseConnected, // expose dla UI (wskaźnik połączenia)
+  };
+};
+```
+
+---
+
+### Nowe Komponenty (Phase 4)
+
+#### Zaktualizowane drzewo komponentów
+
+```
+src/
+├── features/
+│   └── equipment-requests/
+│       ├── components/
+│       │   ├── QuestList.tsx              (zaktualizowany — SSE indicator)
+│       │   ├── QuestCard.tsx
+│       │   ├── QuestDetail.tsx
+│       │   ├── QuestFilters.tsx
+│       │   ├── SyncButton.tsx
+│       │   ├── SyncStatus.tsx             (zaktualizowany — scheduler info)
+│       │   ├── SyncStatusBadge.tsx        NEW: kompaktowy badge z next sync
+│       │   ├── StreamIndicator.tsx        NEW: zielona/czerwona kropka SSE
+│       │   ├── StatusBadge.tsx
+│       │   ├── TransferPreview.tsx
+│       │   ├── TransferCreationForm.tsx
+│       │   ├── LinkedTransferCard.tsx
+│       │   ├── CategoryMappingsList.tsx   NEW: tabela mapowań z delete
+│       │   └── CategoryMappingForm.tsx    (istniejący, bez zmian)
+│       ├── hooks/
+│       │   ├── useQuests.ts              (zaktualizowany — SSE)
+│       │   ├── useQuestDetail.ts
+│       │   ├── useSync.ts
+│       │   ├── useTransferFromQuest.ts
+│       │   ├── useQuestStream.ts          NEW: SSE EventSource
+│       │   ├── useSyncStatus.ts           NEW: scheduler state
+│       │   └── useCategoryMappings.ts     NEW: list + delete
+│       └── types.ts                      (zaktualizowany — nowe typy)
+├── api/
+│   └── equipmentRequests.ts              (zaktualizowany — nowe funkcje)
+└── App.tsx
+```
+
+---
+
+#### `StreamIndicator` — wskaźnik SSE
+
+```typescript
+// src/features/equipment-requests/components/StreamIndicator.tsx
+interface Props { connected: boolean }
+
+export const StreamIndicator: React.FC<Props> = ({ connected }) => (
+  <span
+    title={connected ? 'Real-time updates active' : 'Connecting to real-time updates...'}
+    style={{
+      display: 'inline-block',
+      width: 8,
+      height: 8,
+      borderRadius: '50%',
+      backgroundColor: connected ? '#34D399' : '#F87171',
+      marginLeft: 6,
+      verticalAlign: 'middle',
+    }}
+  />
+);
+```
+
+---
+
+#### `SyncStatusBadge` — kompaktowy badge
+
+```typescript
+// src/features/equipment-requests/components/SyncStatusBadge.tsx
+import { useSyncStatus } from '../hooks/useSyncStatus';
+
+export const SyncStatusBadge: React.FC = () => {
+  const { status, formatInterval } = useSyncStatus(60_000);
+
+  if (!status) return null;
+
+  const lastSyncText = status.last_sync
+    ? `Last sync: ${new Date(status.last_sync).toLocaleTimeString()}`
+    : 'No sync yet';
+
+  const nextSyncText = status.next_sync
+    ? ` · Next: ${new Date(status.next_sync).toLocaleTimeString()}`
+    : '';
+
+  const intervalText = status.enabled && status.interval
+    ? ` (every ${formatInterval(status.interval)})`
+    : ' (manual only)';
+
+  return (
+    <div className="sync-status-badge" style={{ fontSize: 12, color: '#6B7280' }}>
+      {status.last_error ? (
+        <span style={{ color: '#F87171' }}>Sync error: {status.last_error}</span>
+      ) : (
+        <span>{lastSyncText}{nextSyncText}{intervalText}</span>
+      )}
+    </div>
+  );
+};
+```
+
+**UI integracja — w nagłówku QuestList:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Equipment Requests             ● [Synchronize Now]          │
+│ Last sync: 12:00 · Next: 12:15 (every 15min)               │
+└─────────────────────────────────────────────────────────────┘
+```
+- `●` = `StreamIndicator` (zielony = SSE aktywne)
+- Pod headerem = `SyncStatusBadge`
+
+---
+
+#### `CategoryMappingsList` — zarządzanie mapowaniami
+
+```typescript
+// src/features/equipment-requests/components/CategoryMappingsList.tsx
+import { useCategoryMappings } from '../hooks/useCategoryMappings';
+
+export const CategoryMappingsList: React.FC = () => {
+  const { mappings, loading, deleting, error, deleteMapping } = useCategoryMappings();
+
+  if (loading) return <div>Loading mappings...</div>;
+
+  return (
+    <div className="category-mappings">
+      <h3>Category Mappings ({mappings.length})</h3>
+      {error && <div className="error">{error}</div>}
+
+      <table>
+        <thead>
+          <tr>
+            <th>Form Item Name</th>
+            <th>Category ID</th>
+            <th>Used (times)</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {mappings.map((m) => (
+            <tr key={m.id} style={{ opacity: deleting === m.id ? 0.5 : 1 }}>
+              <td>{m.form_item_name}</td>
+              <td>#{m.category_id}</td>
+              <td>{m.usage_count}</td>
+              <td>{new Date(m.created_at).toLocaleDateString()}</td>
+              <td>
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete mapping "${m.form_item_name}"?`)) {
+                      deleteMapping(m.id);
+                    }
+                  }}
+                  disabled={deleting === m.id}
+                >
+                  {deleting === m.id ? 'Deleting...' : 'Delete'}
+                </button>
+              </td>
+            </tr>
+          ))}
+          {mappings.length === 0 && (
+            <tr><td colSpan={5} style={{ textAlign: 'center' }}>No mappings yet</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+```
+
+**UI layout — w osobnej zakładce lub accordion w nagłówku:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Category Mappings (3)                       [+ Add Mapping] │
+├─────────────────────────────────────────────────────────────┤
+│ Form Item Name        Category ID  Used  Created    Action  │
+├─────────────────────────────────────────────────────────────┤
+│ Laptop Dell XPS       #123         15    2026-01-10  [Del]  │
+│ Projektor Epson       #456         8     2026-01-15  [Del]  │
+│ Kabel HDMI 2m         #789         3     2026-02-01  [Del]  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### SSE Authentication — Wymagana konfiguracja
+
+**Backend wymaga `Authorization: Bearer <token>` header** (`JWTMiddleware` w [jwt_middleware.go](internal/security/jwt_middleware.go) czyta wyłącznie z headera — brak fallbacku na query param). Natywny browser `EventSource` nie obsługuje custom headers — **wymagany `eventsource` npm package**.
+
+```bash
+npm install eventsource
+# typy (opcjonalnie, jeśli TypeScript)
+npm install -D @types/eventsource
+```
+
+```typescript
+import EventSource from 'eventsource';
+
+const token = localStorage.getItem('auth_token') ?? '';
+const es = new EventSource('/api/equipment-requests/stream', {
+  headers: { Authorization: `Bearer ${token}` },
+});
+```
+
+Zaktualizowany `useQuestStream` z paczką:
+
+```typescript
+// src/features/equipment-requests/hooks/useQuestStream.ts
+import EventSource from 'eventsource'; // <-- zastąp natywny
+import { useEffect, useRef, useState } from 'react';
+import type { QuestEvent } from '../types';
+
+// reszta hooka bez zmian — API jest identyczne z natywnym EventSource
+```
+
+> **Uwaga:** Jeśli w przyszłości backend doda obsługę `?token=` query param w JWTMiddleware, można wrócić do natywnego `EventSource`.
+
+---
+
+### Checklist Testowania — Phase 4
+
+#### SSE / Real-time Updates
+- [ ] SSE połączenie nawiązywane przy załadowaniu komponentu QuestList
+- [ ] `StreamIndicator` zmienia kolor z czerwonego na zielony po połączeniu
+- [ ] `POST /sync` wywołany ręcznie → lista questów odświeża się automatycznie (bez kliknięcia)
+- [ ] Auto-sync schedulera → lista questów odświeża się automatycznie
+- [ ] Utrata połączenia → `StreamIndicator` czerwony, EventSource reconnektuje
+- [ ] Ponowne połączenie → `StreamIndicator` zielony, lista aktualna
+- [ ] Zamknięcie karty/komponentu → połączenie SSE prawidłowo zamykane (bez wycieków)
+- [ ] Wiele otwartych kart → każda ma niezależne połączenie SSE
+
+#### Sync Status
+- [ ] `SyncStatusBadge` pokazuje `last_sync`, `next_sync`, `interval`
+- [ ] Gdy scheduler wyłączony (`enabled: false`): brak `next_sync`, tekst "(manual only)"
+- [ ] Gdy brak poprzedniego synca: "No sync yet"
+- [ ] Gdy `last_error` niepusty: pokazuje błąd na czerwono
+- [ ] Badge odświeża się co ~1 minutę (lub po manual refresh)
+
+#### Category Mappings
+- [ ] `CategoryMappingsList` ładuje i wyświetla mappings posortowane po `usage_count DESC`
+- [ ] Pusta lista: wyświetla komunikat "No mappings yet"
+- [ ] Delete: klik "Delete" → potwierdzenie → mapping znika z listy
+- [ ] Delete: mapping nie istnieje (404) → error message + resync listy
+- [ ] Delete: spinner/disabled state podczas usuwania
+- [ ] `usage_count` wyświetlany poprawnie (liczba użyć w syncu)
+- [ ] `+ Add Mapping` form tworzy mapowanie i odświeża listę
