@@ -292,7 +292,6 @@ func (r *userRepositoryImpl) MergeDiscordAccount(targetID, sourceID int) (bool, 
 			"discord_id":       nil,
 			"discord_username": nil,
 			"avatar_url":       nil,
-			"auth_provider":    nil,
 			"active":           false,
 		}).Where(goqu.Ex{"id": sourceID}).Executor().Exec()
 		if err != nil {
