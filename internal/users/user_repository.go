@@ -52,7 +52,7 @@ func (r *userRepositoryImpl) PersistUser(req models.CreateUserRequest, hashedPas
 
 func (r *userRepositoryImpl) GetUsers() ([]models.User, error) {
 	var users []models.User
-	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "role", "points", "active").
+	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "role", "points", "active", "discord_username", "auth_provider").
 		From("users")
 
 	err := query.Executor().ScanStructs(&users)
@@ -66,7 +66,8 @@ func (r *userRepositoryImpl) GetUsers() ([]models.User, error) {
 
 func (r *userRepositoryImpl) GetUser(id int) (*models.User, error) {
 	var user models.User
-	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "password_hash", "role", "points", "active").
+	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "password_hash", "role", "points", "active",
+		"discord_id", "discord_username", "avatar_url", "auth_provider").
 		From("users").
 		Where(goqu.Ex{"id": id})
 

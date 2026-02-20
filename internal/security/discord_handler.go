@@ -91,7 +91,7 @@ func (h *DiscordHandler) DiscordCallback(c *gin.Context) {
 
 	// 6. Check if the account is active
 	if !user.Active {
-		redirectWithError("Account is inactive. Contact the administrator.")
+		redirectWithError("Account is inactive. Contact the admin and login again.")
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *DiscordHandler) findOrCreateUser(discordUser *oauth.DiscordUser) (*mode
 		DiscordID:       &discordUser.ID,
 		DiscordUsername: &discordUser.Username,
 		AvatarURL:       &avatarURL,
-		AuthProvider:    "discord",
+		AuthProvider:    strPtr("discord"),
 		Role:            roles.User,
 		Active:          false, // Manual activation by admin required
 	}
@@ -228,4 +228,8 @@ func generateState() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func strPtr(s string) *string {
+	return &s
 }

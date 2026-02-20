@@ -14,7 +14,7 @@ type User struct {
 	DiscordID       *string `json:"discord_id,omitempty" db:"discord_id"`
 	DiscordUsername *string `json:"discord_username,omitempty" db:"discord_username"`
 	AvatarURL       *string `json:"avatar_url,omitempty" db:"avatar_url"`
-	AuthProvider    string  `json:"auth_provider" db:"auth_provider"`
+	AuthProvider    *string `json:"auth_provider" db:"auth_provider"`
 }
 
 type CreateUserRequest struct {
