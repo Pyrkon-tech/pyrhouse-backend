@@ -289,15 +289,6 @@ func (r *userRepositoryImpl) MergeDiscordAccount(targetID, sourceID int) (bool, 
 		}
 
 		_, err = tx.Update("users").Set(goqu.Record{
-			"discord_id":       source.DiscordID,
-			"discord_username": source.DiscordUsername,
-			"avatar_url":       source.AvatarURL,
-		}).Where(goqu.Ex{"id": targetID}).Executor().Exec()
-		if err != nil {
-			return fmt.Errorf("failed to transfer discord info: %w", err)
-		}
-
-		_, err = tx.Update("users").Set(goqu.Record{
 			"discord_id":       nil,
 			"discord_username": nil,
 			"avatar_url":       nil,
@@ -306,6 +297,15 @@ func (r *userRepositoryImpl) MergeDiscordAccount(targetID, sourceID int) (bool, 
 		}).Where(goqu.Ex{"id": sourceID}).Executor().Exec()
 		if err != nil {
 			return fmt.Errorf("failed to clear source account: %w", err)
+		}
+
+		_, err = tx.Update("users").Set(goqu.Record{
+			"discord_id":       source.DiscordID,
+			"discord_username": source.DiscordUsername,
+			"avatar_url":       source.AvatarURL,
+		}).Where(goqu.Ex{"id": targetID}).Executor().Exec()
+		if err != nil {
+			return fmt.Errorf("failed to transfer discord info: %w", err)
 		}
 
 		return nil
