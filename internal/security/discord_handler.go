@@ -15,11 +15,13 @@ import (
 
 // DiscordUserRepository defines the repository methods required by DiscordHandler
 type DiscordUserRepository interface {
+	GetUser(id int) (*models.User, error)
 	FindUserByDiscordID(discordID string) (*models.User, error)
 	FindUserByUsername(username string) (*models.User, error)
 	CreateDiscordUser(user *models.User) (*models.User, error)
 	UpdateDiscordInfo(userID int, username string, avatarURL string) error
 	LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error
+	MergeDiscordAccount(targetID, sourceID int) (sourceDeleted bool, err error)
 }
 
 type DiscordHandler struct {
@@ -173,6 +175,7 @@ func (h *DiscordHandler) RegisterRoutes(router *gin.RouterGroup) {
 
 func (h *DiscordHandler) RegisterProtectedRoutes(router *gin.RouterGroup) {
 	router.POST("/users/:id/link-discord", Authorize("user"), h.LinkDiscord)
+	router.POST("/users/:id/merge-discord", Authorize("moderator"), h.MergeDiscordAccount)
 }
 
 func (h *DiscordHandler) LinkDiscord(c *gin.Context) {
@@ -222,6 +225,71 @@ func (h *DiscordHandler) LinkDiscord(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Discord account has been linked"})
+}
+
+func (h *DiscordHandler) MergeDiscordAccount(c *gin.Context) {
+	targetID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	var req struct {
+		SourceUserID int `json:"source_user_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data", "details": err.Error()})
+		return
+	}
+
+	if req.SourceUserID == targetID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Source and target user cannot be the same"})
+		return
+	}
+
+	targetUser, err := h.userRepo.GetUser(targetID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch target user"})
+		return
+	}
+	if targetUser == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Target user not found"})
+		return
+	}
+	if targetUser.DiscordID != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Target user already has a Discord account linked"})
+		return
+	}
+
+	sourceUser, err := h.userRepo.GetUser(req.SourceUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch source user"})
+		return
+	}
+	if sourceUser == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Source user not found"})
+		return
+	}
+	if sourceUser.DiscordID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Source user has no Discord account to transfer"})
+		return
+	}
+
+	sourceDeleted, err := h.userRepo.MergeDiscordAccount(targetID, req.SourceUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to merge accounts", "details": err.Error()})
+		return
+	}
+
+	message := "Discord account linked successfully. Source account was deactivated but could not be deleted due to existing data."
+	if sourceDeleted {
+		message = "Accounts merged successfully. Source account has been deleted."
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        message,
+		"source_deleted": sourceDeleted,
+	})
 }
 
 func generateState() string {

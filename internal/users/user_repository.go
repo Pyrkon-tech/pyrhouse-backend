@@ -25,6 +25,7 @@ type UserRepository interface {
 	CreateDiscordUser(user *models.User) (*models.User, error)
 	UpdateDiscordInfo(userID int, username string, avatarURL string) error
 	LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error
+	MergeDiscordAccount(targetID, sourceID int) (sourceDeleted bool, err error)
 }
 
 type userRepositoryImpl struct {
@@ -71,9 +72,12 @@ func (r *userRepositoryImpl) GetUser(id int) (*models.User, error) {
 		From("users").
 		Where(goqu.Ex{"id": id})
 
-	_, err := query.Executor().ScanStruct(&user)
+	found, err := query.Executor().ScanStruct(&user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	if !found {
+		return nil, nil
 	}
 
 	return &user, nil
@@ -270,6 +274,50 @@ func (r *userRepositoryImpl) UpdateDiscordInfo(userID int, username string, avat
 		return fmt.Errorf("failed to update discord info: %w", err)
 	}
 	return nil
+}
+
+func (r *userRepositoryImpl) MergeDiscordAccount(targetID, sourceID int) (bool, error) {
+	err := repository.WithTransaction(r.repository.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		var source models.User
+		found, err := tx.Select("discord_id", "discord_username", "avatar_url").
+			From("users").Where(goqu.Ex{"id": sourceID}).Executor().ScanStruct(&source)
+		if err != nil {
+			return fmt.Errorf("failed to read source user: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("source user not found")
+		}
+
+		_, err = tx.Update("users").Set(goqu.Record{
+			"discord_id":       source.DiscordID,
+			"discord_username": source.DiscordUsername,
+			"avatar_url":       source.AvatarURL,
+		}).Where(goqu.Ex{"id": targetID}).Executor().Exec()
+		if err != nil {
+			return fmt.Errorf("failed to transfer discord info: %w", err)
+		}
+
+		_, err = tx.Update("users").Set(goqu.Record{
+			"discord_id":       nil,
+			"discord_username": nil,
+			"avatar_url":       nil,
+			"auth_provider":    nil,
+			"active":           false,
+		}).Where(goqu.Ex{"id": sourceID}).Executor().Exec()
+		if err != nil {
+			return fmt.Errorf("failed to clear source account: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+
+	if err := r.DeleteUser(sourceID); err != nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (r *userRepositoryImpl) LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error {
