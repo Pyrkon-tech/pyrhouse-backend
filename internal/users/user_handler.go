@@ -265,7 +265,7 @@ func (h *UsersHandler) validateFullnameChange(ctx *UpdateUserContext) error {
 		return fmt.Errorf("empty fullname")
 	}
 
-	if *ctx.req.Fullname != ctx.user.Fullname {
+	if ctx.user.Fullname == nil || *ctx.req.Fullname != *ctx.user.Fullname {
 		ctx.changes.Fullname = ctx.req.Fullname
 	}
 	return nil

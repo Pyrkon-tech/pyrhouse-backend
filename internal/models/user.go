@@ -5,7 +5,7 @@ import "warehouse/internal/roles"
 type User struct {
 	ID           int        `json:"id" db:"id"`
 	Username     string     `json:"username" db:"username"`
-	Fullname     string     `json:"fullname" db:"fullname"`
+	Fullname     *string    `json:"fullname" db:"fullname"`
 	PasswordHash *string    `json:"-" db:"password_hash"`
 	Role         roles.Role `json:"role" db:"role"`
 	Points       int        `json:"points" db:"points"`

@@ -49,7 +49,7 @@ type FlatComment struct {
 	CreatedAt time.Time `db:"created_at"`
 	UserID    int       `db:"user_id"`
 	Username  string    `db:"comment_user_username"`
-	Fullname  string    `db:"comment_user_fullname"`
+	Fullname  *string   `db:"comment_user_fullname"`
 }
 
 type RequestResponse struct {
@@ -68,9 +68,9 @@ type RequestResponse struct {
 }
 
 type User struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Fullname string `json:"fullname"`
+	ID       int     `json:"id"`
+	Username string  `json:"username"`
+	Fullname *string `json:"fullname"`
 }
 
 type FlatRequestResponse struct {
@@ -110,7 +110,7 @@ func (fr *FlatRequestResponse) TransformToRequestResponse() *RequestResponse {
 		res.CreatedByUser = &User{
 			ID:       *fr.UserID,
 			Username: *fr.UserUsername,
-			Fullname: *fr.UserFullname,
+			Fullname: fr.UserFullname,
 		}
 	}
 
@@ -118,7 +118,7 @@ func (fr *FlatRequestResponse) TransformToRequestResponse() *RequestResponse {
 		res.AssignedToUser = &User{
 			ID:       *fr.AssignedToID,
 			Username: *fr.AssignedToUsername,
-			Fullname: *fr.AssignedToFullname,
+			Fullname: fr.AssignedToFullname,
 		}
 	}
 
