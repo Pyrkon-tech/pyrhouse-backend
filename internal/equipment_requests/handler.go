@@ -454,8 +454,14 @@ func (h *Handler) CreateLocationMapping(c *gin.Context) {
 
 	err := h.service.questRepo.CreateLocationMapping(c.Request.Context(), mapping)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to create location mapping",
+		status := http.StatusInternalServerError
+		errorMsg := "Failed to create location mapping"
+		if strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			status = http.StatusConflict
+			errorMsg = "Location mapping already exists for this pavilion and location name"
+		}
+		c.JSON(status, gin.H{
+			"error":   errorMsg,
 			"details": err.Error(),
 		})
 		return

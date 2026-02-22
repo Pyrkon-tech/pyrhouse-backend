@@ -719,7 +719,7 @@ func (r *Repository) GetLocationMapping(ctx context.Context, pavilion, locationN
 	return &mapping.LocationID, nil
 }
 
-// CreateLocationMapping creates a manual location mapping
+// CreateLocationMapping creates a manual location mapping and populates id, created_at on the struct
 func (r *Repository) CreateLocationMapping(ctx context.Context, mapping *LocationMapping) error {
 	record := goqu.Record{
 		"pavilion":      mapping.Pavilion,
@@ -727,11 +727,12 @@ func (r *Repository) CreateLocationMapping(ctx context.Context, mapping *Locatio
 		"location_id":   mapping.LocationID,
 	}
 
-	_, err := r.repo.GoquDBWrapper.
+	query := r.repo.GoquDBWrapper.
 		Insert("equipment_request_location_mapping").
 		Rows(record).
-		Executor().Exec()
+		Returning("id", "created_at", "usage_count")
 
+	_, err := query.Executor().ScanStruct(mapping)
 	if err != nil {
 		return fmt.Errorf("failed to create location mapping: %w", err)
 	}
