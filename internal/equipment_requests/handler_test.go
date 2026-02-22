@@ -69,9 +69,13 @@ func (m *mockQuestRepository) GetQuestByKey(ctx context.Context, questKey string
 func (m *mockQuestRepository) ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error) {
 	result := []Quest{}
 	for _, q := range m.quests {
-		if filter.Status == "" || q.Status == filter.Status {
-			result = append(result, q)
+		if filter.Status != "" && q.Status != filter.Status {
+			continue
 		}
+		if filter.LocationID != nil && (q.LocationID == nil || *q.LocationID != *filter.LocationID) {
+			continue
+		}
+		result = append(result, q)
 	}
 
 	// Apply pagination

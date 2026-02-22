@@ -16,6 +16,7 @@ type Quest struct {
 	TransferID       *int        `json:"transfer_id,omitempty"`     // Linked transfer ID (set when transfer is created from quest)
 	TransferStatus   *string     `json:"transfer_status,omitempty"` // Status of linked transfer (derived, not stored)
 	LocationID       *int        `json:"location_id,omitempty"`     // Resolved location ID (nullable if unresolved)
+	LocationName     *string     `json:"location_name,omitempty"`   // Resolved location name (derived from JOIN, not stored)
 	LocationResolved bool        `json:"location_resolved"`         // Whether location was resolved
 	SourceRows       []int       `json:"source_rows"`
 	LastSynced       time.Time   `json:"last_synced"`

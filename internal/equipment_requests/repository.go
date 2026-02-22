@@ -64,6 +64,7 @@ func NewRepository(repo *repository.Repository) *Repository {
 // QuestFilter for listing quests with pagination and filtering
 type QuestFilter struct {
 	Status         string
+	LocationID     *int
 	Limit          int
 	Offset         int
 	DeliveryAfter  *time.Time
@@ -111,6 +112,7 @@ type QuestDB struct {
 	Status              string     `db:"status"`
 	TransferID          *int       `db:"transfer_id"`
 	LocationID          *int       `db:"location_id"`
+	LocationName        *string    `db:"location_name"`
 	LocationResolved    bool       `db:"location_resolved"`
 	LastSyncedAt        time.Time  `db:"last_synced_at"`
 	CreatedAt           time.Time  `db:"created_at"`
@@ -213,14 +215,26 @@ func (r *Repository) UpdateQuest(ctx context.Context, questID string, quest *Que
 	})
 }
 
+// questBaseQuery returns the base SELECT with LEFT JOIN on locations for location_name.
+func (r *Repository) questBaseQuery() *goqu.SelectDataset {
+	return r.repo.GoquDBWrapper.
+		Select(
+			goqu.I("q.*"),
+			goqu.I("l.name").As("location_name"),
+		).
+		From(goqu.T("equipment_request_quests").As("q")).
+		LeftJoin(
+			goqu.T("locations").As("l"),
+			goqu.On(goqu.Ex{"q.location_id": goqu.I("l.id")}),
+		)
+}
+
 // GetQuestByID retrieves quest with its items by quest_id (quest-abc123)
 func (r *Repository) GetQuestByID(ctx context.Context, questID string) (*Quest, error) {
 	var questDB QuestDB
 
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_quests").
-		Where(goqu.Ex{"quest_id": questID})
+	query := r.questBaseQuery().
+		Where(goqu.Ex{"q.quest_id": questID})
 
 	found, err := query.Executor().ScanStruct(&questDB)
 	if err != nil {
@@ -243,10 +257,8 @@ func (r *Repository) GetQuestByID(ctx context.Context, questID string) (*Quest, 
 func (r *Repository) GetQuestByKey(ctx context.Context, questKey string) (*Quest, error) {
 	var questDB QuestDB
 
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_quests").
-		Where(goqu.Ex{"quest_key": questKey})
+	query := r.questBaseQuery().
+		Where(goqu.Ex{"q.quest_key": questKey})
 
 	found, err := query.Executor().ScanStruct(&questDB)
 	if err != nil {
@@ -267,24 +279,25 @@ func (r *Repository) GetQuestByKey(ctx context.Context, questKey string) (*Quest
 
 // ListQuests retrieves quests with filtering and pagination
 func (r *Repository) ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error) {
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_quests").
+	query := r.questBaseQuery().
 		Order(
-			goqu.L("CASE status WHEN 'pending' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END").Asc(),
-			goqu.L("CASE WHEN status IN ('pending', 'in_progress') THEN delivery_date END").Asc(),
-			goqu.L("CASE WHEN status = 'completed' THEN completed_at END").Desc().NullsLast(),
+			goqu.L("CASE q.status WHEN 'pending' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END").Asc(),
+			goqu.L("CASE WHEN q.status IN ('pending', 'in_progress') THEN q.delivery_date END").Asc(),
+			goqu.L("CASE WHEN q.status = 'completed' THEN q.completed_at END").Desc().NullsLast(),
 		)
 
 	// Apply filters
 	if filter.Status != "" {
-		query = query.Where(goqu.Ex{"status": filter.Status})
+		query = query.Where(goqu.Ex{"q.status": filter.Status})
+	}
+	if filter.LocationID != nil {
+		query = query.Where(goqu.Ex{"q.location_id": *filter.LocationID})
 	}
 	if filter.DeliveryAfter != nil {
-		query = query.Where(goqu.I("delivery_date").Gte(*filter.DeliveryAfter))
+		query = query.Where(goqu.I("q.delivery_date").Gte(*filter.DeliveryAfter))
 	}
 	if filter.DeliveryBefore != nil {
-		query = query.Where(goqu.I("delivery_date").Lte(*filter.DeliveryBefore))
+		query = query.Where(goqu.I("q.delivery_date").Lte(*filter.DeliveryBefore))
 	}
 
 	// Pagination
@@ -537,6 +550,8 @@ func (r *Repository) questToRecord(quest *Quest) goqu.Record {
 	}
 	if quest.LocationID != nil {
 		record["location_id"] = *quest.LocationID
+	} else {
+		record["location_id"] = nil
 	}
 
 	return record
@@ -584,10 +599,8 @@ func (r *Repository) itemToRecord(questDBID int, item *QuestItem, sourceRow int)
 func (r *Repository) GetQuestByTransferID(ctx context.Context, transferID int) (*Quest, error) {
 	var questDB QuestDB
 
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_quests").
-		Where(goqu.Ex{"transfer_id": transferID})
+	query := r.questBaseQuery().
+		Where(goqu.Ex{"q.transfer_id": transferID})
 
 	found, err := query.Executor().ScanStruct(&questDB)
 	if err != nil {
@@ -811,11 +824,9 @@ func (r *Repository) UpdateQuestLocationResolution(ctx context.Context, questID 
 
 // ListUnresolvedLocationQuests returns quests with location_resolved = false
 func (r *Repository) ListUnresolvedLocationQuests(ctx context.Context) ([]Quest, error) {
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_quests").
-		Where(goqu.Ex{"location_resolved": false}).
-		Order(goqu.I("delivery_date").Asc(), goqu.I("created_at").Asc())
+	query := r.questBaseQuery().
+		Where(goqu.Ex{"q.location_resolved": false}).
+		Order(goqu.I("q.delivery_date").Asc(), goqu.I("q.created_at").Asc())
 
 	var questsDB []QuestDB
 	if err := query.Executor().ScanStructs(&questsDB); err != nil {
@@ -844,6 +855,7 @@ func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 		Status:           questDB.Status,
 		TransferID:       questDB.TransferID,
 		LocationID:       questDB.LocationID,
+		LocationName:     questDB.LocationName,
 		LocationResolved: questDB.LocationResolved,
 		LastSynced:       questDB.LastSyncedAt,
 		Items:            make([]QuestItem, len(itemsDB)),

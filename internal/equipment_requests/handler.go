@@ -95,6 +95,12 @@ func (h *Handler) ListQuests(c *gin.Context) {
 		Offset: getIntQuery(c, "offset", 0),
 	}
 
+	if locID := c.Query("location_id"); locID != "" {
+		if id, err := strconv.Atoi(locID); err == nil {
+			filter.LocationID = &id
+		}
+	}
+
 	if filter.Limit > 500 {
 		filter.Limit = 500
 	}
