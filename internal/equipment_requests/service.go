@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,14 +20,14 @@ type TransferCreator interface {
 }
 
 type Service struct {
-	sheetReader      *googlesheets.DutyScheduleService
-	categoryRepo     *category.CategoryRepository
-	questRepo        QuestRepositoryInterface
-	transferCreator  TransferCreator
-	sheetID          string
-	sheetName        string
-	fuzzyThreshold   int
-	categories       []models.ItemCategory // cached
+	sheetReader     *googlesheets.DutyScheduleService
+	categoryRepo    *category.CategoryRepository
+	questRepo       QuestRepositoryInterface
+	transferCreator TransferCreator
+	sheetID         string
+	sheetName       string
+	fuzzyThreshold  int
+	categories      []models.ItemCategory // cached
 
 	// SSE broadcaster
 	sseMu      sync.RWMutex
@@ -359,7 +360,8 @@ func (s *Service) upsertQuest(ctx context.Context, quest *Quest, stats *SyncStat
 	existing, err := s.questRepo.GetQuestByKey(ctx, quest.QuestKey)
 
 	if err != nil || existing == nil {
-		// Create new quest
+		// Resolve location before create
+		s.resolveAndSetQuestLocation(ctx, quest)
 		if err := s.questRepo.CreateQuest(ctx, quest); err != nil {
 			return fmt.Errorf("failed to create quest: %w", err)
 		}
@@ -375,7 +377,8 @@ func (s *Service) upsertQuest(ctx context.Context, quest *Quest, stats *SyncStat
 			return nil
 		}
 
-		// Update existing quest by quest_id
+		// Resolve location and set on quest before update
+		s.resolveAndSetQuestLocation(ctx, quest)
 		if err := s.questRepo.UpdateQuest(ctx, existing.ID, quest); err != nil {
 			return fmt.Errorf("failed to update quest: %w", err)
 		}
@@ -386,6 +389,18 @@ func (s *Service) upsertQuest(ctx context.Context, quest *Quest, stats *SyncStat
 	}
 
 	return nil
+}
+
+func (s *Service) resolveAndSetQuestLocation(ctx context.Context, quest *Quest) {
+	id, matchType, _ := s.ResolveQuestLocationWithMatchType(quest)
+	if id != nil {
+		quest.LocationID = id
+		quest.LocationResolved = true
+		log.Printf("[equipment-requests] Resolved location for quest %s: location_id=%d (match=%s)", quest.ID, *id, matchType)
+	} else {
+		quest.LocationID = nil
+		quest.LocationResolved = false
+	}
 }
 
 // matchCategoryWithFuzzy matches item name to category using fuzzy matching
@@ -539,11 +554,56 @@ func toLower(s string) string {
 // ============================================================================
 
 // ResolveQuestLocation resolves quest destination pavilion+location to a location ID
+// using multi-strategy matching: manual mapping → exact → normalized → name-only.
 func (s *Service) ResolveQuestLocation(quest *Quest) (*int, error) {
-	return s.questRepo.ResolveLocationByPavilionAndName(
-		quest.Destination.Pavilion,
-		quest.Destination.Location,
-	)
+	id, _, err := s.ResolveQuestLocationWithMatchType(quest)
+	return id, err
+}
+
+// ResolveQuestLocationWithMatchType returns location ID and match type (manual, exact, normalized, name_only, none).
+func (s *Service) ResolveQuestLocationWithMatchType(quest *Quest) (*int, string, error) {
+	pav := strings.TrimSpace(quest.Destination.Pavilion)
+	loc := strings.TrimSpace(quest.Destination.Location)
+
+	if pav == "" || loc == "" {
+		return nil, "none", nil
+	}
+
+	ctx := context.Background()
+
+	// 1. Manual mapping (highest priority)
+	if id, err := s.questRepo.GetLocationMapping(ctx, pav, loc); err == nil && id != nil {
+		_ = s.questRepo.IncrementLocationMappingUsage(ctx, pav, loc)
+		return id, "manual", nil
+	}
+
+	// 2. Exact match — pavilion + name
+	if id, err := s.questRepo.ResolveLocationByPavilionAndName(pav, loc); err == nil && id != nil {
+		return id, "exact", nil
+	}
+
+	// 3. Normalized match — strip "Pawilon " prefix
+	normalized := normalizePavilion(pav)
+	if normalized != pav {
+		if id, err := s.questRepo.ResolveLocationByPavilionAndName(normalized, loc); err == nil && id != nil {
+			return id, "normalized", nil
+		}
+	}
+
+	// 4. Name-only fallback (if exactly one location matches)
+	if id, err := s.questRepo.ResolveLocationByNameOnly(loc); err == nil && id != nil {
+		return id, "name_only", nil
+	}
+
+	return nil, "none", nil
+}
+
+func normalizePavilion(pav string) string {
+	stripped := strings.TrimPrefix(strings.ToLower(pav), "pawilon ")
+	if stripped != strings.ToLower(pav) {
+		return strings.TrimSpace(stripped)
+	}
+	return pav
 }
 
 // ResolveQuestStockItems maps quest items (by category_id) to actual stock items at a source location

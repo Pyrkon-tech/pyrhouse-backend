@@ -23,6 +23,7 @@ type QuestRepositoryInterface interface {
 	UnlinkQuestFromTransfer(ctx context.Context, questID string) error
 	FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error)
 	ResolveLocationByPavilionAndName(pavilion, name string) (*int, error)
+	ResolveLocationByNameOnly(name string) (*int, error)
 	CreateSyncLog(ctx context.Context, log *SyncLog) error
 	GetLatestSyncLog(ctx context.Context) (*SyncLog, error)
 	GetCategoryMapping(ctx context.Context, itemName string) (*int, error)
@@ -30,6 +31,17 @@ type QuestRepositoryInterface interface {
 	IncrementMappingUsage(ctx context.Context, itemName string) error
 	ListCategoryMappings(ctx context.Context) ([]CategoryMapping, error)
 	DeleteCategoryMapping(ctx context.Context, id int) error
+
+	// Location mapping
+	GetLocationMapping(ctx context.Context, pavilion, locationName string) (*int, error)
+	CreateLocationMapping(ctx context.Context, mapping *LocationMapping) error
+	ListLocationMappings(ctx context.Context) ([]LocationMapping, error)
+	DeleteLocationMapping(ctx context.Context, id int) error
+	IncrementLocationMappingUsage(ctx context.Context, pavilion, locationName string) error
+
+	// Location resolution tracking
+	UpdateQuestLocationResolution(ctx context.Context, questID string, locationID *int, resolved bool) error
+	ListUnresolvedLocationQuests(ctx context.Context) ([]Quest, error)
 }
 
 // StockMatch represents a non-serialized stock item found at a location for a given category
@@ -76,45 +88,47 @@ type SyncLog struct {
 
 // CategoryMapping represents manual item-to-category mapping
 type CategoryMapping struct {
-	ID           int       `db:"id" json:"id"`
-	FormItemName string    `db:"form_item_name" json:"form_item_name"`
-	CategoryID   int       `db:"category_id" json:"category_id"`
-	CreatedBy    *int      `db:"created_by" json:"created_by,omitempty"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	ID           int        `db:"id" json:"id"`
+	FormItemName string     `db:"form_item_name" json:"form_item_name"`
+	CategoryID   int        `db:"category_id" json:"category_id"`
+	CreatedBy    *int       `db:"created_by" json:"created_by,omitempty"`
+	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
 	LastUsedAt   *time.Time `db:"last_used_at" json:"last_used_at,omitempty"`
-	UseCount     int       `db:"use_count" json:"use_count"`
+	UseCount     int        `db:"use_count" json:"use_count"`
 }
 
 // QuestDB represents quest as stored in database
 type QuestDB struct {
-	ID                   int        `db:"id"`
-	QuestKey             string     `db:"quest_key"`
-	QuestID              string     `db:"quest_id"`
-	DestinationPavilion  string     `db:"destination_pavilion"`
-	DestinationLocation  string     `db:"destination_location"`
-	Recipient            string     `db:"recipient"`
-	DeliveryDate         time.Time  `db:"delivery_date"`
-	PickupTime           *string    `db:"pickup_time"`
-	BudgetOwner          *string    `db:"budget_owner"`
-	Status               string     `db:"status"`
-	TransferID           *int       `db:"transfer_id"`
-	LastSyncedAt         time.Time  `db:"last_synced_at"`
-	CreatedAt            time.Time  `db:"created_at"`
-	CompletedAt          *time.Time `db:"completed_at"`
+	ID                  int        `db:"id"`
+	QuestKey            string     `db:"quest_key"`
+	QuestID             string     `db:"quest_id"`
+	DestinationPavilion string     `db:"destination_pavilion"`
+	DestinationLocation string     `db:"destination_location"`
+	Recipient           string     `db:"recipient"`
+	DeliveryDate        time.Time  `db:"delivery_date"`
+	PickupTime          *string    `db:"pickup_time"`
+	BudgetOwner         *string    `db:"budget_owner"`
+	Status              string     `db:"status"`
+	TransferID          *int       `db:"transfer_id"`
+	LocationID          *int       `db:"location_id"`
+	LocationResolved    bool       `db:"location_resolved"`
+	LastSyncedAt        time.Time  `db:"last_synced_at"`
+	CreatedAt           time.Time  `db:"created_at"`
+	CompletedAt         *time.Time `db:"completed_at"`
 }
 
 // ItemDB represents item as stored in database
 type ItemDB struct {
-	ID                      int      `db:"id"`
-	QuestID                 int      `db:"quest_id"`
-	ItemName                string   `db:"item_name"`
-	Quantity                int      `db:"quantity"`
-	CategoryID              *int     `db:"category_id"`
-	CategoryMatchType       string   `db:"category_match_type"`
-	CategoryMatchConfidence *float64 `db:"category_match_confidence"`
-	BudgetOwner             *string  `db:"budget_owner"`
-	Notes                   *string  `db:"notes"`
-	SourceRowNumber         *int     `db:"source_row_number"`
+	ID                      int       `db:"id"`
+	QuestID                 int       `db:"quest_id"`
+	ItemName                string    `db:"item_name"`
+	Quantity                int       `db:"quantity"`
+	CategoryID              *int      `db:"category_id"`
+	CategoryMatchType       string    `db:"category_match_type"`
+	CategoryMatchConfidence *float64  `db:"category_match_confidence"`
+	BudgetOwner             *string   `db:"budget_owner"`
+	Notes                   *string   `db:"notes"`
+	SourceRowNumber         *int      `db:"source_row_number"`
 	CreatedAt               time.Time `db:"created_at"`
 }
 
@@ -505,13 +519,14 @@ func (r *Repository) getItemsByQuestDBID(ctx context.Context, questDBID int) ([]
 // Helper: Convert Quest to database record
 func (r *Repository) questToRecord(quest *Quest) goqu.Record {
 	record := goqu.Record{
-		"quest_key":             quest.QuestKey,
-		"quest_id":              quest.ID,
-		"destination_pavilion":  quest.Destination.Pavilion,
-		"destination_location":  quest.Destination.Location,
-		"recipient":             quest.Recipient,
-		"delivery_date":         quest.DeliveryDate,
-		"status":                quest.Status,
+		"quest_key":            quest.QuestKey,
+		"quest_id":             quest.ID,
+		"destination_pavilion": quest.Destination.Pavilion,
+		"destination_location": quest.Destination.Location,
+		"recipient":            quest.Recipient,
+		"delivery_date":        quest.DeliveryDate,
+		"status":               quest.Status,
+		"location_resolved":    quest.LocationResolved,
 	}
 
 	if quest.PickupTime != "" {
@@ -520,32 +535,47 @@ func (r *Repository) questToRecord(quest *Quest) goqu.Record {
 	if quest.BudgetOwner != "" {
 		record["budget_owner"] = quest.BudgetOwner
 	}
+	if quest.LocationID != nil {
+		record["location_id"] = *quest.LocationID
+	}
 
 	return record
 }
 
-// Helper: Convert QuestItem to database record
+// Helper: Convert QuestItem to database record.
+// All columns must be present for batch insert — goqu requires identical keys across rows.
 func (r *Repository) itemToRecord(questDBID int, item *QuestItem, sourceRow int) goqu.Record {
 	record := goqu.Record{
-		"quest_id":             questDBID,
-		"item_name":            item.Name,
-		"quantity":             item.Quantity,
-		"category_match_type":  item.CategoryMatch,
-		"source_row_number":    sourceRow,
+		"quest_id":            questDBID,
+		"item_name":           item.Name,
+		"quantity":            item.Quantity,
+		"category_match_type": item.CategoryMatch,
+		"source_row_number":   sourceRow,
 	}
 
+	var catID interface{}
 	if item.CategoryID != nil {
-		record["category_id"] = *item.CategoryID
+		catID = *item.CategoryID
 	}
+	record["category_id"] = catID
+
+	var conf interface{}
 	if item.CategoryMatchConfidence != 0.0 {
-		record["category_match_confidence"] = item.CategoryMatchConfidence
+		conf = item.CategoryMatchConfidence
 	}
+	record["category_match_confidence"] = conf
+
+	var notes interface{}
 	if item.Notes != "" {
-		record["notes"] = item.Notes
+		notes = item.Notes
 	}
+	record["notes"] = notes
+
+	var budgetOwner interface{}
 	if item.BudgetOwner != "" {
-		record["budget_owner"] = item.BudgetOwner
+		budgetOwner = item.BudgetOwner
 	}
+	record["budget_owner"] = budgetOwner
 
 	return record
 }
@@ -647,22 +677,176 @@ func (r *Repository) ResolveLocationByPavilionAndName(pavilion, name string) (*i
 	return &locationID, nil
 }
 
+// ResolveLocationByNameOnly finds a location ID by name only; returns result only if exactly one match.
+func (r *Repository) ResolveLocationByNameOnly(name string) (*int, error) {
+	var rows []struct {
+		ID int `db:"id"`
+	}
+
+	query := r.repo.GoquDBWrapper.
+		Select("id").
+		From("locations").
+		Where(goqu.I("name").ILike(name)).
+		Limit(2)
+
+	if err := query.Executor().ScanStructs(&rows); err != nil {
+		return nil, fmt.Errorf("failed to resolve location by name: %w", err)
+	}
+	if len(rows) != 1 {
+		return nil, nil
+	}
+	return &rows[0].ID, nil
+}
+
+// GetLocationMapping retrieves manual location mapping for pavilion + location_name
+func (r *Repository) GetLocationMapping(ctx context.Context, pavilion, locationName string) (*int, error) {
+	var mapping LocationMapping
+
+	query := r.repo.GoquDBWrapper.
+		Select("*").
+		From("equipment_request_location_mapping").
+		Where(
+			goqu.Ex{"pavilion": pavilion, "location_name": locationName},
+		)
+
+	found, err := query.Executor().ScanStruct(&mapping)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch location mapping: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &mapping.LocationID, nil
+}
+
+// CreateLocationMapping creates a manual location mapping
+func (r *Repository) CreateLocationMapping(ctx context.Context, mapping *LocationMapping) error {
+	record := goqu.Record{
+		"pavilion":      mapping.Pavilion,
+		"location_name": mapping.LocationName,
+		"location_id":   mapping.LocationID,
+	}
+
+	_, err := r.repo.GoquDBWrapper.
+		Insert("equipment_request_location_mapping").
+		Rows(record).
+		Executor().Exec()
+
+	if err != nil {
+		return fmt.Errorf("failed to create location mapping: %w", err)
+	}
+	return nil
+}
+
+// ListLocationMappings returns all manual location mappings ordered by usage
+func (r *Repository) ListLocationMappings(ctx context.Context) ([]LocationMapping, error) {
+	var mappings []LocationMapping
+
+	query := r.repo.GoquDBWrapper.
+		Select("*").
+		From("equipment_request_location_mapping").
+		Order(
+			goqu.I("usage_count").Desc(),
+			goqu.I("created_at").Desc(),
+		)
+
+	if err := query.Executor().ScanStructs(&mappings); err != nil {
+		return nil, fmt.Errorf("failed to list location mappings: %w", err)
+	}
+	return mappings, nil
+}
+
+// DeleteLocationMapping removes a manual location mapping by ID
+func (r *Repository) DeleteLocationMapping(ctx context.Context, id int) error {
+	result, err := r.repo.GoquDBWrapper.
+		Delete("equipment_request_location_mapping").
+		Where(goqu.Ex{"id": id}).
+		Executor().Exec()
+
+	if err != nil {
+		return fmt.Errorf("failed to delete location mapping: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("location mapping %d not found", id)
+	}
+	return nil
+}
+
+// IncrementLocationMappingUsage updates usage_count for a mapping
+func (r *Repository) IncrementLocationMappingUsage(ctx context.Context, pavilion, locationName string) error {
+	_, err := r.repo.GoquDBWrapper.
+		Update("equipment_request_location_mapping").
+		Set(goqu.Record{"usage_count": goqu.L("usage_count + 1")}).
+		Where(goqu.Ex{"pavilion": pavilion, "location_name": locationName}).
+		Executor().Exec()
+
+	if err != nil {
+		return fmt.Errorf("failed to increment location mapping usage: %w", err)
+	}
+	return nil
+}
+
+// UpdateQuestLocationResolution sets location_id and location_resolved for a quest
+func (r *Repository) UpdateQuestLocationResolution(ctx context.Context, questID string, locationID *int, resolved bool) error {
+	updates := goqu.Record{"location_resolved": resolved}
+	if locationID != nil {
+		updates["location_id"] = *locationID
+	} else {
+		updates["location_id"] = nil
+	}
+
+	_, err := r.repo.GoquDBWrapper.
+		Update("equipment_request_quests").
+		Set(updates).
+		Where(goqu.Ex{"quest_id": questID}).
+		Executor().Exec()
+
+	if err != nil {
+		return fmt.Errorf("failed to update quest location resolution: %w", err)
+	}
+	return nil
+}
+
+// ListUnresolvedLocationQuests returns quests with location_resolved = false
+func (r *Repository) ListUnresolvedLocationQuests(ctx context.Context) ([]Quest, error) {
+	query := r.repo.GoquDBWrapper.
+		Select("*").
+		From("equipment_request_quests").
+		Where(goqu.Ex{"location_resolved": false}).
+		Order(goqu.I("delivery_date").Asc(), goqu.I("created_at").Asc())
+
+	var questsDB []QuestDB
+	if err := query.Executor().ScanStructs(&questsDB); err != nil {
+		return nil, fmt.Errorf("failed to list unresolved location quests: %w", err)
+	}
+
+	quests := make([]Quest, len(questsDB))
+	for i, questDB := range questsDB {
+		items, err := r.getItemsByQuestDBID(ctx, questDB.ID)
+		if err != nil {
+			return nil, err
+		}
+		quests[i] = *r.recordToQuest(&questDB, items)
+	}
+	return quests, nil
+}
+
 // Helper: Convert DB records to Quest
 func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 	quest := &Quest{
-		ID:       questDB.QuestID,
-		QuestKey: questDB.QuestKey,
-		Destination: Destination{
-			Pavilion: questDB.DestinationPavilion,
-			Location: questDB.DestinationLocation,
-		},
-		Recipient:    questDB.Recipient,
-		DeliveryDate: questDB.DeliveryDate.Format("2006-01-02"),
-		Status:       questDB.Status,
-		TransferID:   questDB.TransferID,
-		LastSynced:   questDB.LastSyncedAt,
-		Items:        make([]QuestItem, len(itemsDB)),
-		SourceRows:   make([]int, len(itemsDB)),
+		ID:               questDB.QuestID,
+		QuestKey:         questDB.QuestKey,
+		Destination:      Destination{Pavilion: questDB.DestinationPavilion, Location: questDB.DestinationLocation},
+		Recipient:        questDB.Recipient,
+		DeliveryDate:     questDB.DeliveryDate.Format("2006-01-02"),
+		Status:           questDB.Status,
+		TransferID:       questDB.TransferID,
+		LocationID:       questDB.LocationID,
+		LocationResolved: questDB.LocationResolved,
+		LastSynced:       questDB.LastSyncedAt,
+		Items:            make([]QuestItem, len(itemsDB)),
+		SourceRows:       make([]int, len(itemsDB)),
 	}
 
 	if questDB.PickupTime != nil {
@@ -675,9 +859,9 @@ func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 	// Convert items
 	for i, itemDB := range itemsDB {
 		quest.Items[i] = QuestItem{
-			Name:         itemDB.ItemName,
-			Quantity:     itemDB.Quantity,
-			CategoryID:   itemDB.CategoryID,
+			Name:          itemDB.ItemName,
+			Quantity:      itemDB.Quantity,
+			CategoryID:    itemDB.CategoryID,
 			CategoryMatch: itemDB.CategoryMatchType,
 		}
 

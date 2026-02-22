@@ -173,6 +173,51 @@ func (m *mockQuestRepository) ResolveLocationByPavilionAndName(pavilion, name st
 	return nil, nil
 }
 
+func (m *mockQuestRepository) ResolveLocationByNameOnly(name string) (*int, error) {
+	return nil, nil
+}
+
+func (m *mockQuestRepository) GetLocationMapping(ctx context.Context, pavilion, locationName string) (*int, error) {
+	return nil, nil
+}
+
+func (m *mockQuestRepository) CreateLocationMapping(ctx context.Context, mapping *LocationMapping) error {
+	return nil
+}
+
+func (m *mockQuestRepository) ListLocationMappings(ctx context.Context) ([]LocationMapping, error) {
+	return nil, nil
+}
+
+func (m *mockQuestRepository) DeleteLocationMapping(ctx context.Context, id int) error {
+	return nil
+}
+
+func (m *mockQuestRepository) IncrementLocationMappingUsage(ctx context.Context, pavilion, locationName string) error {
+	return nil
+}
+
+func (m *mockQuestRepository) UpdateQuestLocationResolution(ctx context.Context, questID string, locationID *int, resolved bool) error {
+	for i, q := range m.quests {
+		if q.ID == questID {
+			m.quests[i].LocationID = locationID
+			m.quests[i].LocationResolved = resolved
+			return nil
+		}
+	}
+	return assert.AnError
+}
+
+func (m *mockQuestRepository) ListUnresolvedLocationQuests(ctx context.Context) ([]Quest, error) {
+	result := []Quest{}
+	for _, q := range m.quests {
+		if !q.LocationResolved {
+			result = append(result, q)
+		}
+	}
+	return result, nil
+}
+
 func (m *mockQuestRepository) ListCategoryMappings(ctx context.Context) ([]CategoryMapping, error) {
 	return m.categoryMappings, nil
 }
@@ -740,11 +785,11 @@ func TestHandler_PreviewTransferFromQuest(t *testing.T) {
 			questID:        "quest-2",
 			fromLocationID: "1",
 			quest: &Quest{
-				ID:     "quest-2",
-				Status: "pending",
+				ID:          "quest-2",
+				Status:      "pending",
 				Destination: Destination{Pavilion: "P1", Location: "L1"},
-				Items:  []QuestItem{{Name: "Laptop", Quantity: 2}},
-				SourceRows: []int{1},
+				Items:       []QuestItem{{Name: "Laptop", Quantity: 2}},
+				SourceRows:  []int{1},
 			},
 			expectedStatus: http.StatusOK,
 		},

@@ -2024,6 +2024,163 @@ paths:
         "500":
           $ref: "#/components/responses/DefaultError"
 
+  /equipment-requests/location-mappings:
+    get:
+      tags:
+        - equipment-requests
+      summary: List location mappings
+      description: Returns all manual pavilion+location_name → location_id mappings ordered by usage.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of location mappings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  mappings:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LocationMapping"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags:
+        - equipment-requests
+      summary: Create location mapping
+      description: Creates a manual override for pavilion+location_name → location_id.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pavilion
+                - location_name
+                - location_id
+              properties:
+                pavilion:
+                  type: string
+                  example: "6"
+                location_name:
+                  type: string
+                  example: "Magazyn Techniczny"
+                location_id:
+                  type: integer
+                  example: 3
+      responses:
+        "201":
+          description: Mapping created
+        "400":
+          description: Invalid request
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /equipment-requests/location-mappings/{id}:
+    delete:
+      tags:
+        - equipment-requests
+      summary: Delete location mapping
+      description: Removes a manual location mapping by ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Mapping deleted
+        "400":
+          description: Invalid mapping ID
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Location mapping not found
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /equipment-requests/quests/unresolved-locations:
+    get:
+      tags:
+        - equipment-requests
+      summary: List quests with unresolved locations
+      description: Returns quests where location_resolved is false (destination could not be auto-matched).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of quests needing manual location assignment
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  quests:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EquipmentRequestQuest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /equipment-requests/quests/{id}/location:
+    patch:
+      tags:
+        - equipment-requests
+      summary: Manually assign location to quest
+      description: Assigns a location to a quest and optionally saves it as a mapping for future syncs.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Quest ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - location_id
+              properties:
+                location_id:
+                  type: integer
+                  example: 3
+                save_mapping:
+                  type: boolean
+                  default: false
+                  description: If true, saves this assignment as a mapping for future syncs
+      responses:
+        "200":
+          description: Location assigned successfully
+        "400":
+          description: Invalid request
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Quest not found
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
   /equipment-requests/stream:
     get:
       tags:
@@ -2386,6 +2543,16 @@ components:
             - completed
             - cancelled
           example: "in_transit"
+        location_id:
+          type: integer
+          nullable: true
+          description: Resolved location ID from pavilion+location (null if unresolved)
+          example: 3
+        location_resolved:
+          type: boolean
+          description: Whether the destination location was successfully resolved
+          default: false
+          example: true
         source_rows:
           type: array
           description: Source spreadsheet row numbers for debugging
@@ -2537,6 +2704,29 @@ components:
           format: date-time
           description: When this mapping was created
           example: "2026-02-16T10:15:00Z"
+
+    LocationMapping:
+      type: object
+      description: Manual mapping from pavilion+location_name (form values) to location_id
+      properties:
+        id:
+          type: integer
+          example: 1
+        pavilion:
+          type: string
+          example: "6"
+        location_name:
+          type: string
+          example: "Magazyn Techniczny"
+        location_id:
+          type: integer
+          example: 3
+        created_at:
+          type: string
+          format: date-time
+        usage_count:
+          type: integer
+          example: 5
 
     SyncStatus:
       type: object

@@ -378,12 +378,12 @@ func TestService_matchCategoryWithFuzzy(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                    string
-		itemName                string
-		expectedMatchType       string
-		expectedCategoryID      *int
-		minConfidence           float64
-		maxConfidence           float64
+		name               string
+		itemName           string
+		expectedMatchType  string
+		expectedCategoryID *int
+		minConfidence      float64
+		maxConfidence      float64
 	}{
 		{
 			name:               "Exact match",
@@ -515,6 +515,47 @@ func TestToLower(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := toLower(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func Test_normalizePavilion(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Pawilon 6 strips to 6",
+			input:    "Pawilon 6",
+			expected: "6",
+		},
+		{
+			name:     "pawilon 10 strips to 10",
+			input:    "pawilon 10",
+			expected: "10",
+		},
+		{
+			name:     "WTC unchanged",
+			input:    "WTC",
+			expected: "WTC",
+		},
+		{
+			name:     "6 unchanged (no prefix)",
+			input:    "6",
+			expected: "6",
+		},
+		{
+			name:     "PAWILON 6 strips",
+			input:    "PAWILON 6",
+			expected: "6",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizePavilion(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

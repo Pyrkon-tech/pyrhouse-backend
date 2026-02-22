@@ -36,8 +36,10 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 
 		// Quest management
 		equipmentRoutes.GET("/quests", h.ListQuests)
+		equipmentRoutes.GET("/quests/unresolved-locations", h.ListUnresolvedLocationQuests)
 		equipmentRoutes.GET("/quests/:id", h.GetQuest)
 		equipmentRoutes.PATCH("/quests/:id/status", h.UpdateQuestStatus)
+		equipmentRoutes.PATCH("/quests/:id/location", h.UpdateQuestLocation)
 
 		// Quest → Transfer integration
 		equipmentRoutes.POST("/quests/:id/transfer", h.CreateTransferFromQuest)
@@ -47,6 +49,11 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		equipmentRoutes.POST("/category-mapping", h.CreateCategoryMapping)
 		equipmentRoutes.GET("/category-mappings", h.ListCategoryMappings)
 		equipmentRoutes.DELETE("/category-mappings/:id", h.DeleteCategoryMapping)
+
+		// Location mapping management
+		equipmentRoutes.GET("/location-mappings", h.ListLocationMappings)
+		equipmentRoutes.POST("/location-mappings", h.CreateLocationMapping)
+		equipmentRoutes.DELETE("/location-mappings/:id", h.DeleteLocationMapping)
 
 		// Real-time updates (SSE)
 		equipmentRoutes.GET("/stream", h.StreamQuests)
@@ -406,6 +413,158 @@ func (h *Handler) DeleteCategoryMapping(c *gin.Context) {
 	c.AbortWithStatus(http.StatusNoContent)
 }
 
+// ListLocationMappings returns all manual location mappings.
+func (h *Handler) ListLocationMappings(c *gin.Context) {
+	mappings, err := h.service.questRepo.ListLocationMappings(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to fetch location mappings",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"count":    len(mappings),
+		"mappings": mappings,
+	})
+}
+
+// CreateLocationMapping creates a manual location mapping.
+func (h *Handler) CreateLocationMapping(c *gin.Context) {
+	var req struct {
+		Pavilion     string `json:"pavilion" binding:"required"`
+		LocationName string `json:"location_name" binding:"required"`
+		LocationID   int    `json:"location_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	mapping := &LocationMapping{
+		Pavilion:     req.Pavilion,
+		LocationName: req.LocationName,
+		LocationID:   req.LocationID,
+	}
+
+	err := h.service.questRepo.CreateLocationMapping(c.Request.Context(), mapping)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to create location mapping",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Location mapping created successfully",
+		"mapping": mapping,
+	})
+}
+
+// DeleteLocationMapping removes a manual location mapping by ID.
+func (h *Handler) DeleteLocationMapping(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid mapping ID",
+			"details": "ID must be a positive integer",
+		})
+		return
+	}
+
+	if err := h.service.questRepo.DeleteLocationMapping(c.Request.Context(), id); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Location mapping not found",
+				"details": err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to delete location mapping",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.AbortWithStatus(http.StatusNoContent)
+}
+
+// ListUnresolvedLocationQuests returns quests with location_resolved = false.
+func (h *Handler) ListUnresolvedLocationQuests(c *gin.Context) {
+	quests, err := h.service.questRepo.ListUnresolvedLocationQuests(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to fetch unresolved location quests",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"count":  len(quests),
+		"quests": quests,
+	})
+}
+
+// UpdateQuestLocation manually assigns a location to a quest. Optionally saves as mapping for future use.
+func (h *Handler) UpdateQuestLocation(c *gin.Context) {
+	questID := c.Param("id")
+
+	var req struct {
+		LocationID  int  `json:"location_id" binding:"required"`
+		SaveMapping bool `json:"save_mapping"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	quest, err := h.service.questRepo.GetQuestByID(c.Request.Context(), questID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "Quest not found",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if err := h.service.questRepo.UpdateQuestLocationResolution(c.Request.Context(), questID, &req.LocationID, true); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to update quest location",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if req.SaveMapping {
+		mapping := &LocationMapping{
+			Pavilion:     quest.Destination.Pavilion,
+			LocationName: quest.Destination.Location,
+			LocationID:   req.LocationID,
+		}
+		if err := h.service.questRepo.CreateLocationMapping(c.Request.Context(), mapping); err != nil {
+			// Log but don't fail - location was already assigned
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Quest location updated successfully",
+		"location_id": req.LocationID,
+	})
+}
+
 // Helper functions
 
 func getIntQuery(c *gin.Context, key string, defaultValue int) int {
@@ -430,4 +589,3 @@ func contains(slice []string, item string) bool {
 	}
 	return false
 }
-
