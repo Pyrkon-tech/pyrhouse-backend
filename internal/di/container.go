@@ -19,6 +19,7 @@ import (
 	"warehouse/internal/repository"
 	"warehouse/internal/security"
 	"warehouse/internal/service_desk"
+	"warehouse/internal/settings"
 	"warehouse/internal/users"
 )
 
@@ -40,6 +41,8 @@ type Container struct {
 	EquipmentRequestScheduler *equipment_requests.Scheduler
 	OriginHandler             *origins.Handler
 	OriginService             *origins.Service
+	SettingsHandler           *settings.Handler
+	SettingsRepo              *settings.Repository
 }
 
 func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
@@ -48,6 +51,8 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	assetRepo := assets.NewRepository(repo)
 	userRepo := users.NewRepository(repo)
 	auditLog := auditlog.NewAuditLog(auditLogRepo)
+	settingsRepo := settings.NewRepository(repo)
+	settingsHandler := settings.NewHandler(settingsRepo)
 	originRepo := origins.NewRepository(repo)
 	originService := origins.NewService(originRepo)
 	originHandler := origins.NewHandler(originService)
@@ -85,6 +90,7 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 			googleSheetsHandler.DutyScheduleService,
 			categoryRepo,
 			equipmentRequestRepo,
+			settingsRepo,
 			cfg.EquipmentRequest.SheetID,
 			cfg.EquipmentRequest.SheetName,
 			cfg.EquipmentRequest.FuzzyThreshold,
@@ -131,6 +137,8 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		EquipmentRequestScheduler: equipmentRequestScheduler,
 		OriginHandler:             originHandler,
 		OriginService:             originService,
+		SettingsHandler:           settingsHandler,
+		SettingsRepo:              settingsRepo,
 	}
 }
 

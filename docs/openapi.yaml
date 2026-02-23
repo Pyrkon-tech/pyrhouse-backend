@@ -32,6 +32,8 @@ tags:
     description: Equipment request form integration - Google Sheets sync and quest aggregation
   - name: origins
     description: Origin management — predefined and custom asset/stock sources
+  - name: settings
+    description: Application settings management (admin only)
 
 paths:
   /health:
@@ -2384,6 +2386,96 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /settings:
+    get:
+      tags:
+        - settings
+      summary: List all settings
+      description: Returns all application settings. Optionally filter by key prefix. Values are hidden in the list view — use GET /settings/:key to read a specific value.
+      parameters:
+        - in: query
+          name: prefix
+          schema:
+            type: string
+          description: Filter settings by key prefix (e.g. "equipment_request")
+      responses:
+        "200":
+          description: List of settings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AppSettingSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /settings/{key}:
+    get:
+      tags:
+        - settings
+      summary: Get a setting by key
+      description: Returns a single setting including its value.
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+          description: Setting key (e.g. "equipment_request.sheet_id")
+      responses:
+        "200":
+          description: Setting found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSetting"
+        "404":
+          description: Setting not found
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags:
+        - settings
+      summary: Update a setting
+      description: Updates the value of an existing setting. Only existing keys can be updated.
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+          description: Setting key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - value
+              properties:
+                value:
+                  type: string
+                  description: New value for the setting
+      responses:
+        "200":
+          description: Setting updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Setting updated successfully"
+        "400":
+          description: Invalid request
+        "404":
+          description: Setting not found
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 servers:
   - url: https://pyrhouse-backend-f26ml.ondigitalocean.app/api
     description: Production
@@ -2418,6 +2510,33 @@ components:
                 example: "Invalid token"
 
   schemas:
+    AppSetting:
+      type: object
+      properties:
+        key:
+          type: string
+          example: "equipment_request.sheet_id"
+        value:
+          type: string
+          example: "16BytrbWmyWeBGnlSIDZn1Lnb5rdspoQu_rpc5m5Vtbc"
+        description:
+          type: string
+          example: "Google Sheets document ID for equipment requests"
+        updated_at:
+          type: string
+          format: date-time
+    AppSettingSummary:
+      type: object
+      properties:
+        key:
+          type: string
+          example: "equipment_request.sheet_id"
+        description:
+          type: string
+          example: "Google Sheets document ID for equipment requests"
+        updated_at:
+          type: string
+          format: date-time
     Origin:
       type: object
       properties:

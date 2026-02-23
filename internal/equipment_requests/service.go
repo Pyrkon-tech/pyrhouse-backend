@@ -12,6 +12,7 @@ import (
 	"warehouse/internal/integrations/googlesheets"
 	"warehouse/internal/inventory/category"
 	"warehouse/internal/models"
+	"warehouse/internal/settings"
 )
 
 // TransferCreator abstracts transfer creation to avoid circular dependency with transfers package
@@ -24,8 +25,9 @@ type Service struct {
 	categoryRepo    *category.CategoryRepository
 	questRepo       QuestRepositoryInterface
 	transferCreator TransferCreator
-	sheetID         string
-	sheetName       string
+	settingsRepo    *settings.Repository
+	fallbackSheetID   string
+	fallbackSheetName string
 	fuzzyThreshold  int
 	categories      []models.ItemCategory // cached
 
@@ -38,18 +40,38 @@ func NewService(
 	sheetReader *googlesheets.DutyScheduleService,
 	categoryRepo *category.CategoryRepository,
 	questRepo *Repository,
-	sheetID, sheetName string,
+	settingsRepo *settings.Repository,
+	fallbackSheetID, fallbackSheetName string,
 	fuzzyThreshold int,
 ) *Service {
 	return &Service{
-		sheetReader:    sheetReader,
-		categoryRepo:   categoryRepo,
-		questRepo:      questRepo,
-		sheetID:        sheetID,
-		sheetName:      sheetName,
-		fuzzyThreshold: fuzzyThreshold,
-		sseClients:     make(map[chan QuestEvent]struct{}),
+		sheetReader:       sheetReader,
+		categoryRepo:      categoryRepo,
+		questRepo:         questRepo,
+		settingsRepo:      settingsRepo,
+		fallbackSheetID:   fallbackSheetID,
+		fallbackSheetName: fallbackSheetName,
+		fuzzyThreshold:    fuzzyThreshold,
+		sseClients:        make(map[chan QuestEvent]struct{}),
 	}
+}
+
+// getSheetConfig reads sheet ID and name from DB, falling back to env values
+func (s *Service) getSheetConfig(ctx context.Context) (sheetID, sheetName string, err error) {
+	sheetID, _ = s.settingsRepo.Get(ctx, "equipment_request.sheet_id")
+	sheetName, _ = s.settingsRepo.Get(ctx, "equipment_request.sheet_name")
+
+	if sheetID == "" {
+		sheetID = s.fallbackSheetID
+	}
+	if sheetName == "" {
+		sheetName = s.fallbackSheetName
+	}
+
+	if sheetID == "" {
+		return "", "", fmt.Errorf("equipment_request.sheet_id not configured")
+	}
+	return sheetID, sheetName, nil
 }
 
 // ============================================================================
@@ -114,8 +136,14 @@ func (s *Service) SyncQuests(ctx context.Context) ([]Quest, error) {
 		return nil, fmt.Errorf("failed to load categories: %w", err)
 	}
 
-	// 2. Fetch sheet data
-	rows, err := s.sheetReader.FetchSheet(s.sheetID, s.sheetName)
+	// 2. Fetch sheet config from DB (fallback to env)
+	sheetID, sheetName, err := s.getSheetConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sheet config: %w", err)
+	}
+
+	// 3. Fetch sheet data
+	rows, err := s.sheetReader.FetchSheet(sheetID, sheetName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch sheet: %w", err)
 	}
@@ -124,7 +152,7 @@ func (s *Service) SyncQuests(ctx context.Context) ([]Quest, error) {
 		return []Quest{}, nil // Empty or header-only sheet
 	}
 
-	// 3. Parse rows
+	// 4. Parse rows
 	mapper := NewColumnMapper(rows[0])
 	if !mapper.HasRequiredColumns() {
 		return nil, fmt.Errorf("missing required columns: %v", mapper.MissingColumns())
@@ -140,7 +168,7 @@ func (s *Service) SyncQuests(ctx context.Context) ([]Quest, error) {
 		sheetRows = append(sheetRows, *sr)
 	}
 
-	// 4. Match categories
+	// 5. Match categories
 	for i := range sheetRows {
 		match := s.matchCategory(sheetRows[i].Item)
 		sheetRows[i].CategoryID = match.CategoryID
@@ -283,8 +311,14 @@ func (s *Service) SyncQuestsToDatabase(ctx context.Context) (*SyncResult, error)
 		return nil, fmt.Errorf("failed to load categories: %w", err)
 	}
 
-	// 2. Fetch sheet data
-	rows, err := s.sheetReader.FetchSheet(s.sheetID, s.sheetName)
+	// 2. Fetch sheet config from DB (fallback to env)
+	sheetID, sheetName, err := s.getSheetConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sheet config: %w", err)
+	}
+
+	// 3. Fetch sheet data
+	rows, err := s.sheetReader.FetchSheet(sheetID, sheetName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch sheet: %w", err)
 	}
@@ -338,7 +372,7 @@ func (s *Service) SyncQuestsToDatabase(ctx context.Context) (*SyncResult, error)
 		ItemsAdded:      stats.ItemsAdded,
 		Success:         true,
 		DurationMs:      int(duration.Milliseconds()),
-		SheetID:         s.sheetID,
+		SheetID:         sheetID,
 	}
 
 	if err := s.questRepo.CreateSyncLog(ctx, syncLog); err != nil {
