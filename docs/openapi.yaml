@@ -30,6 +30,8 @@ tags:
     description: User account management and RBAC
   - name: equipment-requests
     description: Equipment request form integration - Google Sheets sync and quest aggregation
+  - name: origins
+    description: Origin management — predefined and custom asset/stock sources
 
 paths:
   /health:
@@ -298,13 +300,7 @@ paths:
                   description: Category ID for this asset
                 origin:
                   type: string
-                  description: Source of the asset. Uses predefined keywords (druga-era, probis, targowe) or custom formats (personal-{name}, other-{desc})
-                  enum:
-                    - druga-era
-                    - probis
-                    - targowe
-                    - personal-{}
-                    - other-{}
+                  description: "Origin string — validated against the origins table. Use GET /origins to list available values. For origins with allow_suffix=true (e.g. personal, other), append a suffix with a hyphen (e.g. personal-jan)."
       responses:
         "201":
           description: Asset created
@@ -371,7 +367,7 @@ paths:
                   description: Category ID for all assets
                 origin:
                   type: string
-                  description: Origin source for all assets
+                  description: "Origin string — validated against the origins table. Use GET /origins to list available values."
       responses:
         "201":
           description: Assets created (may include partial errors)
@@ -2231,6 +2227,163 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /origins:
+    get:
+      tags:
+        - origins
+      summary: List active origins
+      description: Returns all active origins sorted by sort_order. Used to populate dropdowns on the frontend.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of active origins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Origin"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags:
+        - origins
+      summary: Create a new origin
+      description: Creates a new origin entry. Requires admin role.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - slug
+                - label
+              properties:
+                slug:
+                  type: string
+                  description: URL-friendly identifier (lowercase, hyphens). Must be unique.
+                  example: "new-source"
+                label:
+                  type: string
+                  description: Human-readable display name
+                  example: "New Source"
+                allow_suffix:
+                  type: boolean
+                  description: "If true, accepts format slug-{suffix} (e.g. personal-jan)"
+                  default: false
+                sort_order:
+                  type: integer
+                  description: Display ordering (lower = first)
+                  default: 0
+      responses:
+        "201":
+          description: Origin created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Origin"
+        "400":
+          description: Invalid request
+        "409":
+          description: Origin with this slug already exists
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /origins/all:
+    get:
+      tags:
+        - origins
+      summary: List all origins (including inactive)
+      description: Returns all origins including deactivated ones. Requires moderator role. Used for admin panel.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of all origins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Origin"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /origins/{id}:
+    patch:
+      tags:
+        - origins
+      summary: Update an origin
+      description: Updates origin properties (label, sort_order, allow_suffix, active). Requires admin role.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                allow_suffix:
+                  type: boolean
+                active:
+                  type: boolean
+                sort_order:
+                  type: integer
+      responses:
+        "200":
+          description: Origin updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Origin"
+        "400":
+          description: Invalid request
+        "404":
+          description: Origin not found
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags:
+        - origins
+      summary: Deactivate an origin (soft delete)
+      description: Sets active=false. Existing records with this origin remain, but new records cannot use it. Requires admin role.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Origin deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Origin deactivated successfully"
+        "404":
+          description: Origin not found
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 servers:
   - url: https://pyrhouse-backend-f26ml.ondigitalocean.app/api
     description: Production
@@ -2265,6 +2418,30 @@ components:
                 example: "Invalid token"
 
   schemas:
+    Origin:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+          description: URL-friendly identifier
+          example: "druga-era"
+        label:
+          type: string
+          description: Human-readable name
+          example: "Druga Era"
+        allow_suffix:
+          type: boolean
+          description: "If true, accepts slug-{suffix} format"
+        active:
+          type: boolean
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
     Error:
       type: object
       properties:

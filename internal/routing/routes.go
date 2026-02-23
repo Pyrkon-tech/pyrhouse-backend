@@ -31,6 +31,7 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 	container.UserHandler.RegisterRoutes(protectedRoutes)
 	container.TransferHandler.RegisterRoutes(protectedRoutes)
 	container.LocationHandler.RegisterRoutes(protectedRoutes)
+	container.OriginHandler.RegisterRoutes(protectedRoutes)
 	container.ServiceDeskHandler.RegisterRoutes(protectedRoutes)
 	if container.GoogleSheetsHandler != nil {
 		container.GoogleSheetsHandler.RegisterRoutes(protectedRoutes)

@@ -113,7 +113,8 @@ func (r *AssetsRepository) PersistItem(itemRequest models.ItemRequest) (*models.
 		"location_id":      itemRequest.LocationId,
 		"item_category_id": itemRequest.CategoryId,
 		"status":           itemRequest.Status,
-		"origin":           itemRequest.Origin,
+		"origin_id":        itemRequest.OriginID,
+		"origin_suffix":    itemRequest.OriginSuffix,
 	}
 
 	if itemRequest.Serial != nil {
@@ -303,7 +304,7 @@ func (r *AssetsRepository) GetTransferAssets(transferID int) (*[]models.Asset, e
 			goqu.I("a.item_serial").As("item_serial"),
 			"a.status",
 			goqu.I("a.pyr_code").As("pyr_code"),
-			goqu.I("a.origin").As("origin"),
+			goqu.L("CASE WHEN a.origin_suffix IS NOT NULL THEN o.slug || '-' || a.origin_suffix ELSE o.slug END").As("origin"),
 			goqu.I("c.id").As("category_id"),
 			goqu.I("c.item_category").As("category_type"),
 			goqu.I("c.label").As("category_label"),
@@ -316,6 +317,10 @@ func (r *AssetsRepository) GetTransferAssets(transferID int) (*[]models.Asset, e
 		LeftJoin(
 			goqu.T("items").As("a"),
 			goqu.On(goqu.Ex{"ta.item_id": goqu.I("a.id")}),
+		).
+		LeftJoin(
+			goqu.T("origins").As("o"),
+			goqu.On(goqu.Ex{"a.origin_id": goqu.I("o.id")}),
 		).
 		LeftJoin(
 			goqu.T("item_category").As("c"),
@@ -427,7 +432,7 @@ func (r *AssetsRepository) getAssetQuery() *goqu.SelectDataset {
 		"i.status",
 		goqu.I("i.item_serial").As("item_serial"),
 		goqu.I("i.pyr_code").As("pyr_code"),
-		goqu.I("i.origin").As("origin"),
+		goqu.L("CASE WHEN i.origin_suffix IS NOT NULL THEN o.slug || '-' || i.origin_suffix ELSE o.slug END").As("origin"),
 		goqu.I("c.id").As("category_id"),
 		goqu.I("c.item_category").As("category_type"),
 		goqu.I("c.label").As("category_label"),
@@ -438,6 +443,10 @@ func (r *AssetsRepository) getAssetQuery() *goqu.SelectDataset {
 		goqu.I("l.pavilion").As("location_pavilion"),
 	).
 		From(goqu.T("items").As("i")).
+		LeftJoin(
+			goqu.T("origins").As("o"),
+			goqu.On(goqu.Ex{"i.origin_id": goqu.I("o.id")}),
+		).
 		LeftJoin(
 			goqu.T("item_category").As("c"),
 			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),
@@ -528,11 +537,15 @@ func (r *AssetsRepository) GetStockForReport() ([]models.FlatStockRecord, error)
 	query := r.repository.GoquDBWrapper.Select(
 		goqu.I("i.id").As("stock_id"),
 		goqu.I("c.label").As("category_label"),
-		goqu.I("i.origin").As("origin"),
+		goqu.L("CASE WHEN i.origin_suffix IS NOT NULL THEN o.slug || '-' || i.origin_suffix ELSE o.slug END").As("origin"),
 		goqu.I("i.quantity").As("quantity"),
 		goqu.I("l.name").As("location_name"),
 	).
 		From(goqu.T("non_serialized_items").As("i")).
+		LeftJoin(
+			goqu.T("origins").As("o"),
+			goqu.On(goqu.Ex{"i.origin_id": goqu.I("o.id")}),
+		).
 		LeftJoin(
 			goqu.T("item_category").As("c"),
 			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),

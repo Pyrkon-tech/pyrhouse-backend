@@ -2,7 +2,6 @@ package assets
 
 import (
 	"time"
-	"warehouse/internal/metadata"
 )
 
 // Asset reprezentuje zasób w systemie
@@ -12,7 +11,7 @@ type Asset struct {
 	Serial     *string           `json:"serial,omitempty" db:"serial"`
 	Status     string            `json:"status" db:"status"`
 	LocationID *string           `json:"location_id,omitempty" db:"location_id"`
-	Origin     metadata.Origin   `json:"origin" db:"origin"`
+	Origin     string            `json:"origin" db:"origin"`
 	CreatedAt  time.Time         `json:"created_at" db:"created_at"`
 	UpdatedAt  time.Time         `json:"updated_at" db:"updated_at"`
 	Metadata   map[string]string `json:"metadata,omitempty" db:"metadata"`

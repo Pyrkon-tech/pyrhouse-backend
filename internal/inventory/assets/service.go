@@ -31,11 +31,13 @@ func (s *AssetService) CreateAssetsWithoutSerial(req models.EmergencyAssetReques
 	err := repository.WithTransaction(s.repo.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		for i := 0; i < req.Quantity; i++ {
 			itemReq := models.ItemRequest{
-				Serial:     nil,
-				LocationId: req.LocationId,
-				Status:     req.Status,
-				CategoryId: req.CategoryId,
-				Origin:     req.Origin,
+				Serial:       nil,
+				LocationId:   req.LocationId,
+				Status:       req.Status,
+				CategoryId:   req.CategoryId,
+				Origin:       req.Origin,
+				OriginID:     req.OriginID,
+				OriginSuffix: req.OriginSuffix,
 			}
 
 			asset, err := s.assetsRepo.PersistItem(itemReq)
@@ -87,11 +89,13 @@ func (s *AssetService) CreateBulkAssets(req models.BulkItemRequest) ([]models.As
 
 	for _, serial := range req.Serials {
 		itemReq := models.ItemRequest{
-			Serial:     serial,
-			LocationId: req.LocationId,
-			Status:     req.Status,
-			CategoryId: req.CategoryId,
-			Origin:     req.Origin,
+			Serial:       serial,
+			LocationId:   req.LocationId,
+			Status:       req.Status,
+			CategoryId:   req.CategoryId,
+			Origin:       req.Origin,
+			OriginID:     req.OriginID,
+			OriginSuffix: req.OriginSuffix,
 		}
 
 		asset, err := s.assetsRepo.PersistItem(itemReq)

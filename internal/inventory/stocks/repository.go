@@ -20,14 +20,14 @@ func NewRepository(r *repository.Repository) *StockRepository {
 
 func (r *StockRepository) PersistStockItem(stockRequest models.CreateStockItemRequest) (*models.StockItem, error) {
 	sql := `
-		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (item_category_id, location_id, origin)
+		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin_id, origin_suffix)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (item_category_id, location_id, origin_id, origin_suffix)
 		DO UPDATE SET quantity = non_serialized_items.quantity + EXCLUDED.quantity
 		RETURNING id, quantity
 	`
 	var id, quantity int
-	err := r.repository.DB.QueryRow(sql, stockRequest.CategoryID, stockRequest.LocationID, stockRequest.Quantity, stockRequest.Origin).Scan(&id, &quantity)
+	err := r.repository.DB.QueryRow(sql, stockRequest.CategoryID, stockRequest.LocationID, stockRequest.Quantity, stockRequest.OriginID, stockRequest.OriginSuffix).Scan(&id, &quantity)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if string(pqErr.Code) == "23503" {
@@ -93,30 +93,7 @@ func (r *StockRepository) GetStockItemsBy(conditions repository.QueryBuilder) (*
 
 func (r *StockRepository) GetStockItem(id int) (*models.StockItem, error) {
 	var flatStock models.FlatStockRecord
-	// Query to fetch flat stock data
-	query := r.repository.GoquDBWrapper.
-		Select(
-			goqu.I("s.id").As("stock_id"),
-			goqu.I("s.quantity").As("quantity"),
-			goqu.I("s.origin").As("origin"),
-			goqu.I("c.id").As("category_id"),
-			goqu.I("c.item_category").As("category_type"),
-			goqu.I("c.label").As("category_label"),
-			goqu.I("c.pyr_id").As("category_pyr_id"),
-			goqu.I("l.id").As("location_id"),
-			goqu.I("l.name").As("location_name"),
-			goqu.I("l.pavilion").As("location_pavilion"),
-		).
-		From(goqu.T("non_serialized_items").As("s")).
-		LeftJoin(
-			goqu.T("item_category").As("c"),
-			goqu.On(goqu.Ex{"s.item_category_id": goqu.I("c.id")}),
-		).
-		LeftJoin(
-			goqu.T("locations").As("l"),
-			goqu.On(goqu.Ex{"s.location_id": goqu.I("l.id")}),
-		).
-		Where(goqu.Ex{"s.id": id})
+	query := r.getStockItemQuery().Where(goqu.Ex{"s.id": id})
 
 	_, err := query.Executor().ScanStruct(&flatStock)
 
@@ -177,7 +154,7 @@ func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.Sto
 		Select(
 			goqu.I("nst.item_category_id").As("category_id"),
 			goqu.I("nst.quantity").As("quantity"),
-			goqu.I("nst.origin"),
+			goqu.L("CASE WHEN nst.origin_suffix IS NOT NULL THEN o.slug || '-' || nst.origin_suffix ELSE o.slug END").As("origin"),
 			goqu.I("l.name").As("location_name"),
 			goqu.I("c.id").As("category_id"),
 			goqu.I("c.item_category").As("category_type"),
@@ -189,6 +166,10 @@ func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.Sto
 		InnerJoin(
 			goqu.T("transfers").As("t"),
 			goqu.On(goqu.Ex{"t.id": transferID}),
+		).
+		LeftJoin(
+			goqu.T("origins").As("o"),
+			goqu.On(goqu.Ex{"nst.origin_id": goqu.I("o.id")}),
 		).
 		InnerJoin(
 			goqu.T("item_category").As("c"),
@@ -275,16 +256,17 @@ func (r *StockRepository) DecreaseStockItemsQuantity(tx *goqu.TxDatabase, stocks
 
 func (r *StockRepository) IncreaseStockAtDestination(tx *goqu.TxDatabase, transferID int) error {
 	query := `
-		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin)
-		SELECT 
-			nst.item_category_id, 
-			t.to_location_id, 
-			nst.quantity, 
-			nst.origin
+		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin_id, origin_suffix)
+		SELECT
+			nst.item_category_id,
+			t.to_location_id,
+			nst.quantity,
+			nst.origin_id,
+			nst.origin_suffix
 		FROM non_serialized_transfers nst
 		INNER JOIN transfers t ON nst.transfer_id = t.id
 		WHERE t.id = $1
-		ON CONFLICT (item_category_id, location_id, origin)
+		ON CONFLICT (item_category_id, location_id, origin_id, origin_suffix)
 		DO UPDATE SET quantity = non_serialized_items.quantity + EXCLUDED.quantity;
 	`
 	_, err := tx.Exec(query, transferID)
@@ -314,12 +296,12 @@ func (r *StockRepository) RemoveZeroQuantityStock(tx *goqu.TxDatabase, transferR
 // Used when removing a single item from an in-transit transfer (partial removal).
 func (r *StockRepository) RestoreStockToLocation(tx *goqu.TxDatabase, transferReq models.RemoveStockItemFromTransferRequest) error {
 	query := `
-		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin)
-		SELECT item_category_id, $1, $2, origin
+		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin_id, origin_suffix)
+		SELECT item_category_id, $1, $2, origin_id, origin_suffix
 		FROM non_serialized_transfers
 		WHERE transfer_id = $3 AND item_category_id = $4
 		LIMIT 1
-		ON CONFLICT (item_category_id, location_id, origin)
+		ON CONFLICT (item_category_id, location_id, origin_id, origin_suffix)
 		DO UPDATE SET quantity = non_serialized_items.quantity + EXCLUDED.quantity
 	`
 	_, err := tx.Exec(query, transferReq.ToLocationID, transferReq.Quantity, transferReq.TransferID, transferReq.CategoryID)
@@ -334,12 +316,12 @@ func (r *StockRepository) RestoreStockToLocation(tx *goqu.TxDatabase, transferRe
 // Symmetric to IncreaseStockAtDestination — used on transfer cancellation.
 func (r *StockRepository) RestoreStockFromCancelledTransfer(tx *goqu.TxDatabase, transferID int) error {
 	query := `
-		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin)
-		SELECT nst.item_category_id, t.from_location_id, nst.quantity, nst.origin
+		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin_id, origin_suffix)
+		SELECT nst.item_category_id, t.from_location_id, nst.quantity, nst.origin_id, nst.origin_suffix
 		FROM non_serialized_transfers nst
 		INNER JOIN transfers t ON nst.transfer_id = t.id
 		WHERE nst.transfer_id = $1
-		ON CONFLICT (item_category_id, location_id, origin)
+		ON CONFLICT (item_category_id, location_id, origin_id, origin_suffix)
 		DO UPDATE SET quantity = non_serialized_items.quantity + EXCLUDED.quantity
 	`
 	_, err := tx.Exec(query, transferID)
@@ -366,7 +348,7 @@ func (r *StockRepository) getStockItemQuery() *goqu.SelectDataset {
 		Select(
 			goqu.I("s.id").As("stock_id"),
 			goqu.I("s.quantity").As("quantity"),
-			goqu.I("s.origin").As("origin"),
+			goqu.L("CASE WHEN s.origin_suffix IS NOT NULL THEN o.slug || '-' || s.origin_suffix ELSE o.slug END").As("origin"),
 			goqu.I("c.id").As("category_id"),
 			goqu.I("c.item_category").As("category_type"),
 			goqu.I("c.label").As("category_label"),
@@ -377,6 +359,10 @@ func (r *StockRepository) getStockItemQuery() *goqu.SelectDataset {
 			goqu.I("l.pavilion").As("location_pavilion"),
 		).
 		From(goqu.T("non_serialized_items").As("s")).
+		LeftJoin(
+			goqu.T("origins").As("o"),
+			goqu.On(goqu.Ex{"s.origin_id": goqu.I("o.id")}),
+		).
 		LeftJoin(
 			goqu.T("item_category").As("c"),
 			goqu.On(goqu.Ex{"s.item_category_id": goqu.I("c.id")}),
@@ -411,8 +397,9 @@ func buildUpdateFields(stockRequest *models.PatchStockItemRequest) (goqu.Record,
 	if stockRequest.Quantity != nil {
 		updates["quantity"] = *stockRequest.Quantity
 	}
-	if stockRequest.Origin != nil {
-		updates["origin"] = *stockRequest.Origin
+	if stockRequest.OriginID != nil {
+		updates["origin_id"] = *stockRequest.OriginID
+		updates["origin_suffix"] = stockRequest.OriginSuffix
 	}
 	if stockRequest.LocationID != nil {
 		updates["location_id"] = *stockRequest.LocationID

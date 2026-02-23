@@ -275,7 +275,8 @@ func (r *transferRepository) InsertStockItemsTransferRecord(tx *goqu.TxDatabase,
 		records = append(records, goqu.Record{
 			"transfer_id":      transferID,
 			"item_category_id": goqu.L("(SELECT item_category_id FROM non_serialized_items WHERE id = ?)", stockItem.ID),
-			"origin":           goqu.L("(SELECT origin FROM non_serialized_items WHERE id = ?)", stockItem.ID),
+			"origin_id":        goqu.L("(SELECT origin_id FROM non_serialized_items WHERE id = ?)", stockItem.ID),
+			"origin_suffix":    goqu.L("(SELECT origin_suffix FROM non_serialized_items WHERE id = ?)", stockItem.ID),
 			"quantity":         stockItem.Quantity,
 			"stock_id":         stockItem.ID,
 		})

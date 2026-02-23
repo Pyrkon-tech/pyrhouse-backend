@@ -15,6 +15,7 @@ import (
 	"warehouse/internal/inventory/transfers"
 	"warehouse/internal/locations"
 	"warehouse/internal/oauth"
+	"warehouse/internal/origins"
 	"warehouse/internal/repository"
 	"warehouse/internal/security"
 	"warehouse/internal/service_desk"
@@ -35,8 +36,10 @@ type Container struct {
 	ItemCategoryHandler      *category.ItemCategoryHandler
 	ServiceDeskHandler       *service_desk.Handler
 	DiscordHandler           *security.DiscordHandler
-	EquipmentRequestHandler  *equipment_requests.Handler
+	EquipmentRequestHandler   *equipment_requests.Handler
 	EquipmentRequestScheduler *equipment_requests.Scheduler
+	OriginHandler             *origins.Handler
+	OriginService             *origins.Service
 }
 
 func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
@@ -45,12 +48,15 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	assetRepo := assets.NewRepository(repo)
 	userRepo := users.NewRepository(repo)
 	auditLog := auditlog.NewAuditLog(auditLogRepo)
+	originRepo := origins.NewRepository(repo)
+	originService := origins.NewService(originRepo)
+	originHandler := origins.NewHandler(originService)
 	userHandler := users.NewHandler(userRepo)
 	loginHandler := security.NewLoginHandler(repo)
-	assetHandler := assets.NewAssetHandler(repo, assetRepo, auditLog)
+	assetHandler := assets.NewAssetHandler(repo, assetRepo, auditLog, originService)
 	stockRepo := stocks.NewRepository(repo)
 	stockService := stocks.NewStockService(repo, stockRepo, auditLog)
-	stockHandler := stocks.NewStockHandler(repo, stockRepo, auditLog, stockService)
+	stockHandler := stocks.NewStockHandler(repo, stockRepo, auditLog, stockService, originService)
 	itemCategoryHandler := category.NewItemCategoryHandler(repo, assetRepo, stockRepo, auditLog)
 	locationRepository := locations.NewLocationRepository(repo)
 	locationHandler := locations.NewLocationHandler(locationRepository)
@@ -123,6 +129,8 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		DiscordHandler:            discordHandler,
 		EquipmentRequestHandler:   equipmentRequestHandler,
 		EquipmentRequestScheduler: equipmentRequestScheduler,
+		OriginHandler:             originHandler,
+		OriginService:             originService,
 	}
 }
 

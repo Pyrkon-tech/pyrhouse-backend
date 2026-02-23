@@ -2,7 +2,6 @@ package items
 
 import (
 	"time"
-	"warehouse/internal/metadata"
 )
 
 // Item reprezentuje przedmiot w systemie
@@ -11,7 +10,7 @@ type Item struct {
 	Name        string            `json:"name" db:"name"`
 	Description string            `json:"description" db:"description"`
 	CategoryID  string            `json:"category_id" db:"category_id"`
-	Origin      metadata.Origin   `json:"origin" db:"origin"`
+	Origin      string            `json:"origin" db:"origin"`
 	CreatedAt   time.Time         `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time         `json:"updated_at" db:"updated_at"`
 	Metadata    map[string]string `json:"metadata,omitempty" db:"metadata"`

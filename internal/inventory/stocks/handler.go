@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"warehouse/internal/auditlog"
 	"warehouse/internal/models"
+	"warehouse/internal/origins"
 	"warehouse/internal/repository"
 	"warehouse/internal/security"
 
@@ -16,15 +17,16 @@ type StockHandler struct {
 	StockRepository *StockRepository
 	AuditLog        *auditlog.Auditlog
 	stockService    *StockService
+	originService   *origins.Service
 }
 
-func NewStockHandler(r *repository.Repository, sr *StockRepository, a *auditlog.Auditlog, ss *StockService) *StockHandler {
-
+func NewStockHandler(r *repository.Repository, sr *StockRepository, a *auditlog.Auditlog, ss *StockService, os *origins.Service) *StockHandler {
 	return &StockHandler{
 		Repository:      r,
 		StockRepository: sr,
 		AuditLog:        a,
 		stockService:    ss,
+		originService:   os,
 	}
 }
 
@@ -46,6 +48,16 @@ func (h *StockHandler) CreateStock(c *gin.Context) {
 		stockRequest.LocationID = 1
 	}
 
+	if stockRequest.Origin != "" {
+		resolution, err := h.originService.ResolveOrigin(c.Request.Context(), stockRequest.Origin)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid origin", "details": err.Error()})
+			return
+		}
+		stockRequest.OriginID = &resolution.OriginID
+		stockRequest.OriginSuffix = resolution.OriginSuffix
+	}
+
 	stock, err := h.stockService.CreateStockItem(stockRequest)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create stock item", "details": err.Error()})
@@ -65,6 +77,16 @@ func (h *StockHandler) UpdateStock(c *gin.Context) {
 	if err := c.ShouldBindJSON(&stockRequest); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
+	}
+
+	if stockRequest.Origin != nil && *stockRequest.Origin != "" {
+		resolution, err := h.originService.ResolveOrigin(c.Request.Context(), *stockRequest.Origin)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid origin", "details": err.Error()})
+			return
+		}
+		stockRequest.OriginID = &resolution.OriginID
+		stockRequest.OriginSuffix = resolution.OriginSuffix
 	}
 
 	stock, err := h.stockService.UpdateStockItem(&stockRequest)

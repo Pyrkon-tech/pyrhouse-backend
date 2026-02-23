@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"warehouse/internal/auditlog"
 	apperrors "warehouse/internal/errors"
-	"warehouse/internal/metadata"
 	"warehouse/internal/models"
+	"warehouse/internal/origins"
 	"warehouse/internal/repository"
 	"warehouse/internal/security"
 
@@ -16,18 +16,20 @@ import (
 )
 
 type ItemHandler struct {
-	r            *AssetsRepository
-	repository   *repository.Repository
-	AuditLog     *auditlog.Auditlog
-	assetService *AssetService
+	r             *AssetsRepository
+	repository    *repository.Repository
+	AuditLog      *auditlog.Auditlog
+	assetService  *AssetService
+	originService *origins.Service
 }
 
-func NewAssetHandler(r *repository.Repository, ar *AssetsRepository, a *auditlog.Auditlog) *ItemHandler {
+func NewAssetHandler(r *repository.Repository, ar *AssetsRepository, a *auditlog.Auditlog, os *origins.Service) *ItemHandler {
 	return &ItemHandler{
-		r:            ar,
-		repository:   r,
-		AuditLog:     a,
-		assetService: NewAssetService(ar, r, a),
+		r:             ar,
+		repository:    r,
+		AuditLog:      a,
+		assetService:  NewAssetService(ar, r, a),
+		originService: os,
 	}
 }
 
@@ -79,7 +81,7 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 		return
 	}
 
-	origin, err := metadata.NewOrigin(req.Origin)
+	resolution, err := h.originService.ResolveOrigin(c.Request.Context(), req.Origin)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error":   "Invalid asset origin",
@@ -87,7 +89,8 @@ func (h *ItemHandler) CreateAsset(c *gin.Context) {
 		})
 		return
 	}
-	req.Origin = origin.String()
+	req.OriginID = &resolution.OriginID
+	req.OriginSuffix = resolution.OriginSuffix
 
 	categoryType, err := h.repository.GetCategoryType(req.CategoryId)
 	if err != nil {
@@ -154,7 +157,7 @@ func (h *ItemHandler) CreateBulkAssets(c *gin.Context) {
 		return
 	}
 
-	locationId, status, origin, err := h.getRequestDefaults(req.LocationId, req.Status, req.Origin)
+	locationId, status, resolution, err := h.getRequestDefaults(c, req.LocationId, req.Status, req.Origin)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nie udało się pobrać wartości domyślnych", "details": err.Error()})
 		return
@@ -162,7 +165,8 @@ func (h *ItemHandler) CreateBulkAssets(c *gin.Context) {
 
 	req.LocationId = locationId
 	req.Status = status
-	req.Origin = origin
+	req.OriginID = &resolution.OriginID
+	req.OriginSuffix = resolution.OriginSuffix
 
 	categoryType, err := h.repository.GetCategoryType(req.CategoryId)
 	if err != nil {
@@ -199,7 +203,7 @@ func (h *ItemHandler) CreateAssetWithoutSerial(c *gin.Context) {
 		return
 	}
 
-	locationId, status, origin, err := h.getRequestDefaults(req.LocationId, req.Status, req.Origin)
+	locationId, status, resolution, err := h.getRequestDefaults(c, req.LocationId, req.Status, req.Origin)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Nie udało się pobrać wartości domyślnych", "details": err.Error()})
 		return
@@ -207,7 +211,8 @@ func (h *ItemHandler) CreateAssetWithoutSerial(c *gin.Context) {
 
 	req.LocationId = locationId
 	req.Status = status
-	req.Origin = origin
+	req.OriginID = &resolution.OriginID
+	req.OriginSuffix = resolution.OriginSuffix
 
 	categoryType, err := h.repository.GetCategoryType(req.CategoryId)
 	if err != nil {
@@ -236,8 +241,7 @@ func (h *ItemHandler) CreateAssetWithoutSerial(c *gin.Context) {
 	c.JSON(http.StatusCreated, response)
 }
 
-func (h *ItemHandler) getRequestDefaults(locationId int, status string, origin string) (int, string, string, error) {
-
+func (h *ItemHandler) getRequestDefaults(c *gin.Context, locationId int, status string, origin string) (int, string, *origins.OriginResolution, error) {
 	if locationId == 0 {
 		locationId = 1
 	}
@@ -246,13 +250,12 @@ func (h *ItemHandler) getRequestDefaults(locationId int, status string, origin s
 		status = "available"
 	}
 
-	o, err := metadata.NewOrigin(origin)
+	resolution, err := h.originService.ResolveOrigin(c.Request.Context(), origin)
 	if err != nil {
-		return 0, "", "", err
+		return 0, "", nil, err
 	}
-	origin = o.String()
 
-	return locationId, status, origin, nil
+	return locationId, status, resolution, nil
 }
 
 func (h *ItemHandler) UpdateAssetSerial(c *gin.Context) {
