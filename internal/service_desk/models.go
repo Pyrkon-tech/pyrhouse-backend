@@ -23,6 +23,7 @@ type Request struct {
 	UpdatedAt   time.Time `json:"updated_at,omitempty"`
 	Priority    string    `json:"priority"`
 	Location    *string   `json:"location,omitempty"`
+	LocationID  *int      `json:"location_id,omitempty"`
 	CreatedByID *int      `json:"created_by_id,omitempty"`
 }
 
@@ -63,6 +64,7 @@ type RequestResponse struct {
 	UpdatedAt      time.Time `json:"updated_at,omitempty"`
 	Priority       string    `json:"priority"`
 	Location       *string   `json:"location,omitempty"`
+	LocationID     *int      `json:"location_id,omitempty"`
 	CreatedByUser  *User     `json:"created_by_user,omitempty"`
 	AssignedToUser *User     `json:"assigned_to_user,omitempty"`
 }
@@ -84,6 +86,8 @@ type FlatRequestResponse struct {
 	UpdatedAt          time.Time `json:"updated_at,omitempty" db:"updated_at"`
 	Priority           string    `json:"priority" db:"priority"`
 	Location           *string   `json:"location,omitempty" db:"location"`
+	LocationID         *int      `json:"location_id,omitempty" db:"location_id"`
+	LocationName       *string   `json:"-" db:"location_name"`
 	UserID             *int      `json:"user_id" db:"created_by_id"`
 	UserUsername       *string   `json:"user_username" db:"request_user_username"`
 	UserFullname       *string   `json:"user_fullname" db:"request_user_fullname"`
@@ -103,7 +107,14 @@ func (fr *FlatRequestResponse) TransformToRequestResponse() *RequestResponse {
 		CreatedAt:   fr.CreatedAt,
 		UpdatedAt:   fr.UpdatedAt,
 		Priority:    fr.Priority,
-		Location:    fr.Location,
+		LocationID:  fr.LocationID,
+	}
+
+	// Resolve location display value: prefer linked location name, fallback to free-text
+	if fr.LocationID != nil && fr.LocationName != nil {
+		res.Location = fr.LocationName
+	} else {
+		res.Location = fr.Location
 	}
 
 	if fr.UserID != nil {

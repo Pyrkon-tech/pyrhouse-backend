@@ -109,6 +109,11 @@ func (h *Handler) createRequest(c *gin.Context) {
 		return
 	}
 
+	if req.Location != nil && req.LocationID != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Provide either location or location_id, not both"})
+		return
+	}
+
 	if userID != "" {
 		id, err := strconv.Atoi(userID)
 		if err != nil {

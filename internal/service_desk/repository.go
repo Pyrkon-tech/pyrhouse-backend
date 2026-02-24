@@ -35,7 +35,9 @@ func (r *ServiceDeskRepository) CreateRequest(request *Request) error {
 		row["assigned_to_id"] = request.AssignedTo
 	}
 
-	if request.Location != nil {
+	if request.LocationID != nil {
+		row["location_id"] = request.LocationID
+	} else if request.Location != nil {
 		row["location"] = request.Location
 	}
 
@@ -261,6 +263,8 @@ func (r *ServiceDeskRepository) prepareRequestQuery() *goqu.SelectDataset {
 		goqu.I("sdr.updated_at"),
 		goqu.I("sdr.priority"),
 		goqu.I("sdr.location"),
+		goqu.I("sdr.location_id"),
+		goqu.I("loc.name").As("location_name"),
 		goqu.I("sdr.created_by_id"),
 		goqu.I("cu.username").As("request_user_username"),
 		goqu.I("cu.fullname").As("request_user_fullname"),
@@ -270,7 +274,8 @@ func (r *ServiceDeskRepository) prepareRequestQuery() *goqu.SelectDataset {
 	).
 		From(goqu.T("service_desk_requests").As("sdr")).
 		LeftJoin(goqu.T("users").As("cu"), goqu.On(goqu.Ex{"sdr.created_by_id": goqu.I("cu.id")})).
-		LeftJoin(goqu.T("users").As("au"), goqu.On(goqu.Ex{"sdr.assigned_to_id": goqu.I("au.id")}))
+		LeftJoin(goqu.T("users").As("au"), goqu.On(goqu.Ex{"sdr.assigned_to_id": goqu.I("au.id")})).
+		LeftJoin(goqu.T("locations").As("loc"), goqu.On(goqu.Ex{"sdr.location_id": goqu.I("loc.id")}))
 
 	return query
 }

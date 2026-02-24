@@ -34,6 +34,8 @@ tags:
     description: Origin management — predefined and custom asset/stock sources
   - name: settings
     description: Application settings management (admin only)
+  - name: service-desk
+    description: Service desk request management
 
 paths:
   /health:
@@ -3053,3 +3055,126 @@ components:
           nullable: true
           description: Error message from the last failed sync, if any
           example: "failed to fetch sheet: context deadline exceeded"
+
+    # ── Service Desk ──────────────────────────────────────────────────────
+
+    ServiceDeskRequest:
+      type: object
+      required:
+        - title
+        - description
+        - type
+        - priority
+        - created_by
+      properties:
+        title:
+          type: string
+          example: "Zepsuta drukarka"
+        description:
+          type: string
+          example: "Drukarka w sali A przestała działać"
+        type:
+          type: string
+          enum: [hardware_issue, replacement, technical_problem, other]
+          example: hardware_issue
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+          example: medium
+        created_by:
+          type: string
+          example: "Jan Kowalski"
+        location:
+          type: string
+          nullable: true
+          description: Free-text location. Mutually exclusive with location_id.
+          example: "Pokój obok sali B"
+        location_id:
+          type: integer
+          nullable: true
+          description: ID of a known location (from GET /locations). Mutually exclusive with location.
+          example: 3
+
+    ServiceDeskRequestResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 42
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [hardware_issue, replacement, technical_problem, other]
+        status:
+          type: string
+          enum: [new, in_progress, waiting, resolved, closed]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        created_by:
+          type: string
+        location:
+          type: string
+          nullable: true
+          description: Resolved location display value — location name when location_id is set, free-text otherwise.
+          example: "Sala A"
+        location_id:
+          type: integer
+          nullable: true
+          description: ID of the linked location. Null when free-text was used.
+          example: 3
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by_user:
+          allOf:
+            - $ref: '#/components/schemas/ServiceDeskUser'
+          nullable: true
+        assigned_to_user:
+          allOf:
+            - $ref: '#/components/schemas/ServiceDeskUser'
+          nullable: true
+
+    ServiceDeskUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        fullname:
+          type: string
+          nullable: true
+
+    ServiceDeskComment:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/ServiceDeskUser'
+
+    ServiceDeskRequestType:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [hardware_issue, replacement, technical_problem, other]
+        name:
+          type: string
+        description:
+          type: string
+
