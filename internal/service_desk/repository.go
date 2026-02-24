@@ -134,13 +134,25 @@ func (r *ServiceDeskRepository) RequestsExists(id int) (bool, error) {
 	return rows > 0, nil
 }
 
-func (r *ServiceDeskRepository) GetRequests(status string, limit int, offset int) ([]*RequestResponse, error) {
+type RequestFilters struct {
+	Statuses   []string
+	LocationID *int
+}
+
+func (r *ServiceDeskRepository) GetRequests(filters RequestFilters, limit int, offset int) ([]*RequestResponse, error) {
 
 	query := r.prepareRequestQuery()
 
-	if status != "" {
-		query = query.Where(goqu.Ex{"sdr.status": status})
+	if len(filters.Statuses) == 1 {
+		query = query.Where(goqu.Ex{"sdr.status": filters.Statuses[0]})
+	} else if len(filters.Statuses) > 1 {
+		query = query.Where(goqu.I("sdr.status").In(filters.Statuses))
 	}
+
+	if filters.LocationID != nil {
+		query = query.Where(goqu.Ex{"sdr.location_id": *filters.LocationID})
+	}
+
 	query = query.Limit(uint(limit)).Offset(uint(offset)).Order(goqu.I("sdr.id").Asc())
 
 	var flatRequests []FlatRequestResponse

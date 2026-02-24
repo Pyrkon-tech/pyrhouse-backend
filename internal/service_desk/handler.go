@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 	"warehouse/internal/rate_limiter"
 	"warehouse/internal/repository"
@@ -80,14 +81,28 @@ func (h *Handler) RegisterPublicRoutes(router *gin.Engine) {
 }
 
 func (h *Handler) getRequests(c *gin.Context) {
-	status := c.Query("status")
-	limitInt, offsetInt, err := h.getQueryPaginationParams(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid limit or offset format", "details": err.Error()})
-		return
+	limitInt, offsetInt, _ := h.getQueryPaginationParams(c)
+
+	var filters RequestFilters
+
+	if raw := c.Query("status"); raw != "" {
+		for _, s := range strings.Split(raw, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				filters.Statuses = append(filters.Statuses, s)
+			}
+		}
 	}
 
-	requests, err := h.repository.GetRequests(status, limitInt, offsetInt)
+	if raw := c.Query("location_id"); raw != "" {
+		id, err := strconv.Atoi(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid location_id"})
+			return
+		}
+		filters.LocationID = &id
+	}
+
+	requests, err := h.repository.GetRequests(filters, limitInt, offsetInt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching requests", "details": err.Error()})
 		return
@@ -350,7 +365,7 @@ func (h *Handler) getQueryPaginationParams(c *gin.Context) (int, int, error) {
 		offsetInt = 0
 	}
 
-	if limitInt < 1 || limitInt > 100 {
+	if limitInt < 1 || limitInt > 1000 {
 		limitInt = 20
 	}
 
