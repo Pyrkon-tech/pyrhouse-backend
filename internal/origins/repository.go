@@ -190,3 +190,54 @@ func (r *Repository) Deactivate(_ context.Context, id int) error {
 
 	return nil
 }
+
+func (r *Repository) HasAssignedEquipment(_ context.Context, id int) (bool, error) {
+	var itemCount int
+	found, err := r.repo.GoquDBWrapper.
+		From("items").
+		Select(goqu.COUNT("*").As("count")).
+		Where(goqu.Ex{"origin_id": id}).
+		Executor().ScanVal(&itemCount)
+	if err != nil {
+		return false, fmt.Errorf("failed to count items for origin: %w", err)
+	}
+	if found && itemCount > 0 {
+		return true, nil
+	}
+
+	var stockCount int
+	found, err = r.repo.GoquDBWrapper.
+		From("non_serialized_items").
+		Select(goqu.COUNT("*").As("count")).
+		Where(goqu.Ex{"origin_id": id}).
+		Executor().ScanVal(&stockCount)
+	if err != nil {
+		return false, fmt.Errorf("failed to count non_serialized_items for origin: %w", err)
+	}
+	if found && stockCount > 0 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (r *Repository) HardDelete(_ context.Context, id int) error {
+	query := r.repo.GoquDBWrapper.
+		Delete("origins").
+		Where(goqu.Ex{"id": id})
+
+	result, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to delete origin: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("origin not found")
+	}
+
+	return nil
+}

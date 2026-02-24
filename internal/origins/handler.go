@@ -105,15 +105,30 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
-	err = h.service.repo.Deactivate(c.Request.Context(), id)
+	origin, err := h.service.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Origin not found"})
-			return
-		}
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to deactivate origin", "details": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch origin", "details": err.Error()})
+		return
+	}
+	if origin == nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Origin not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Origin deactivated successfully"})
+	hasEquipment, err := h.service.repo.HasAssignedEquipment(c.Request.Context(), id)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to check assigned equipment", "details": err.Error()})
+		return
+	}
+	if hasEquipment {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Cannot delete origin with assigned equipment"})
+		return
+	}
+
+	if err = h.service.repo.HardDelete(c.Request.Context(), id); err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete origin", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Origin deleted successfully"})
 }
