@@ -1,6 +1,7 @@
 package service_desk
 
 import (
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -40,7 +41,35 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		serviceDesk.PUT("/requests/:id/priority", security.Authorize("user"), h.changePriority)
 		serviceDesk.POST("/requests/:id/comments", security.Authorize("user"), h.addComment)
 		serviceDesk.GET("/request-types", security.Authorize("user"), h.getRequestTypes)
+		serviceDesk.GET("/stream", security.Authorize("user"), h.streamRequests)
 	}
+}
+
+// streamRequests opens an SSE connection that receives events whenever a service
+// desk request is created, updated, or receives a new comment.
+func (h *Handler) streamRequests(c *gin.Context) {
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+
+	c.Writer.WriteHeaderNow()
+	c.Writer.Flush()
+
+	ch := h.service.Subscribe()
+	defer h.service.Unsubscribe(ch)
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case event, ok := <-ch:
+			if !ok {
+				return false
+			}
+			c.SSEvent("service_desk_update", event)
+			return true
+		case <-c.Request.Context().Done():
+			return false
+		}
+	})
 }
 
 func (h *Handler) RegisterPublicRoutes(router *gin.Engine) {

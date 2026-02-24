@@ -2,6 +2,7 @@ package service_desk
 
 import (
 	"errors"
+	"sync"
 	"time"
 )
 
@@ -13,10 +14,48 @@ var (
 
 type Service struct {
 	repository *ServiceDeskRepository
+
+	sseMu      sync.RWMutex
+	sseClients map[chan ServiceDeskEvent]struct{}
 }
 
 func NewService(repository *ServiceDeskRepository) *Service {
-	return &Service{repository: repository}
+	return &Service{
+		repository: repository,
+		sseClients: make(map[chan ServiceDeskEvent]struct{}),
+	}
+}
+
+// Subscribe registers a channel to receive service desk events over SSE.
+// The returned channel is buffered (capacity 10) to avoid blocking the caller.
+func (s *Service) Subscribe() chan ServiceDeskEvent {
+	ch := make(chan ServiceDeskEvent, 10)
+	s.sseMu.Lock()
+	s.sseClients[ch] = struct{}{}
+	s.sseMu.Unlock()
+	return ch
+}
+
+// Unsubscribe removes the channel from the broadcaster and closes it.
+func (s *Service) Unsubscribe(ch chan ServiceDeskEvent) {
+	s.sseMu.Lock()
+	delete(s.sseClients, ch)
+	close(ch)
+	s.sseMu.Unlock()
+}
+
+// broadcastEvent sends an event to all connected SSE clients.
+// Slow clients are skipped (non-blocking send).
+func (s *Service) broadcastEvent(event ServiceDeskEvent) {
+	s.sseMu.RLock()
+	defer s.sseMu.RUnlock()
+
+	for ch := range s.sseClients {
+		select {
+		case ch <- event:
+		default: // skip slow client
+		}
+	}
 }
 
 func (s *Service) CreateRequest(req *Request) error {
@@ -28,6 +67,12 @@ func (s *Service) CreateRequest(req *Request) error {
 	if err != nil {
 		return err
 	}
+
+	go s.broadcastEvent(ServiceDeskEvent{
+		Type:        "request_created",
+		RequestID:   req.ID,
+		RequestType: req.Type,
+	})
 
 	return nil
 }
@@ -49,7 +94,18 @@ func (s *Service) ChangeStatus(requestID int, newStatus string) error {
 		updateRequest.Status = newStatus
 		updateRequest.UpdatedAt = time.Now()
 
-		return s.repository.UpdateRequestStatus(&updateRequest)
+		if err := s.repository.UpdateRequestStatus(&updateRequest); err != nil {
+			return err
+		}
+
+		go s.broadcastEvent(ServiceDeskEvent{
+			Type:      "request_updated",
+			RequestID: requestID,
+			Field:     "status",
+			Value:     newStatus,
+		})
+
+		return nil
 	default:
 		return ErrInvalidStatus
 	}
@@ -68,7 +124,17 @@ func (s *Service) AssignRequest(requestID int, userID int) error {
 
 	UpdatedAt := time.Now()
 
-	return s.repository.UpdateRequestAssignedTo(requestID, userID, UpdatedAt)
+	if err := s.repository.UpdateRequestAssignedTo(requestID, userID, UpdatedAt); err != nil {
+		return err
+	}
+
+	go s.broadcastEvent(ServiceDeskEvent{
+		Type:      "request_updated",
+		RequestID: requestID,
+		Field:     "assigned_to",
+	})
+
+	return nil
 }
 
 func (s *Service) AddComment(requestID int, content string, userID int) (*Comment, error) {
@@ -88,6 +154,11 @@ func (s *Service) AddComment(requestID int, content string, userID int) (*Commen
 	if err != nil {
 		return nil, err
 	}
+
+	go s.broadcastEvent(ServiceDeskEvent{
+		Type:      "comment_added",
+		RequestID: requestID,
+	})
 
 	return comment, nil
 }

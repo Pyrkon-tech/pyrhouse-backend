@@ -2181,6 +2181,44 @@ paths:
         "500":
           $ref: "#/components/responses/DefaultError"
 
+  /service-desk/stream:
+    get:
+      tags:
+        - service-desk
+      summary: Subscribe to real-time service desk updates (SSE)
+      description: |
+        Opens a Server-Sent Events connection. The server pushes a `service_desk_update`
+        event whenever a request is created, updated (status / priority / assignment),
+        or a comment is added.
+
+        **Event format:**
+        ```
+        event: service_desk_update
+        data: {"type":"request_created","request_id":42,"request_type":"hardware_issue"}
+        ```
+
+        **Event types:**
+
+        | type | extra fields |
+        |---|---|
+        | `request_created` | `request_id`, `request_type` |
+        | `request_updated` | `request_id`, `field` (status/assigned_to/priority), `value` |
+        | `comment_added` | `request_id` |
+
+        The connection stays open until the client disconnects.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: SSE stream opened
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Newline-delimited SSE events
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /equipment-requests/stream:
     get:
       tags:

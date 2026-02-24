@@ -136,6 +136,22 @@ func (fr *FlatRequestResponse) TransformToRequestResponse() *RequestResponse {
 	return &res
 }
 
+// ServiceDeskEvent is broadcast over SSE to all connected clients.
+// Discriminate on the Type field:
+//
+//	"request_created" — a new request was submitted (RequestID, RequestType populated)
+//	"request_updated" — status/priority/assignment changed (RequestID, Field, Value populated)
+//	"comment_added"   — a comment was added to a request (RequestID populated)
+type ServiceDeskEvent struct {
+	Type      string `json:"type"`
+	RequestID int    `json:"request_id"`
+	// For "request_updated": which field changed and its new value.
+	Field string `json:"field,omitempty"`
+	Value string `json:"value,omitempty"`
+	// For "request_created": the type of the new request.
+	RequestType string `json:"request_type,omitempty"`
+}
+
 const (
 	RequestTypeHardwareIssue    = "hardware_issue"
 	RequestTypeReplacement      = "replacement"
