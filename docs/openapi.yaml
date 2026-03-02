@@ -36,6 +36,8 @@ tags:
     description: Application settings management (admin only)
   - name: service-desk
     description: Service desk request management
+  - name: dispatch
+    description: Dispatch map — volunteer status and quest assignment
 
 paths:
   /health:
@@ -2181,6 +2183,45 @@ paths:
         "500":
           $ref: "#/components/responses/DefaultError"
 
+  /dispatch/volunteers:
+    get:
+      tags:
+        - dispatch
+      summary: List on-duty volunteers with real-time status
+      description: |
+        Returns all active users enriched with a derived dispatch status.
+
+        **Status values:**
+        - `available` — user is active, not linked to any in-progress quest transfer
+        - `on_mission` — user is a participant in a transfer linked to a quest with `status = in_progress`
+
+        `current_mission` is populated only when `status = on_mission` and shows the quest's
+        destination (e.g. `"Pawilon 5 - Sala A"`).
+
+        Filter by status using comma-separated values: `?status=available,on_mission`
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+          description: Comma-separated status filter, e.g. `available,on_mission`
+          example: available,on_mission
+      responses:
+        "200":
+          description: List of volunteers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Volunteer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
   /service-desk/stream:
     get:
       tags:
@@ -3215,4 +3256,56 @@ components:
           type: string
         description:
           type: string
+
+    # ── Dispatch ──────────────────────────────────────────────────────────
+
+    Volunteer:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Same as User.id — one ID system across the whole application.
+          example: 4
+        username:
+          type: string
+          example: kkowalczyk
+        fullname:
+          type: string
+          nullable: true
+          example: "Katarzyna Kowalczyk"
+        discord_username:
+          type: string
+          nullable: true
+          example: "Kasia#5678"
+        avatar_url:
+          type: string
+          nullable: true
+          example: "https://cdn.discordapp.com/avatars/123/abc.png"
+        status:
+          type: string
+          enum: [available, on_mission]
+          description: |
+            Derived at query time from transfer_users → transfers → equipment_request_quests.
+            `on_mission` when user is a participant in a transfer linked to an in_progress quest.
+          example: on_mission
+        current_mission:
+          type: string
+          nullable: true
+          description: Quest destination shown when status is on_mission.
+          example: "Pawilon 5 - Sala A"
+
+    QuestVolunteer:
+      type: object
+      description: Transfer participant shown on a quest response.
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: mnowak
+        fullname:
+          type: string
+          nullable: true
+          example: "Marek Nowak"
 

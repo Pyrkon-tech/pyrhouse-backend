@@ -2,24 +2,32 @@ package equipment_requests
 
 import "time"
 
+// QuestVolunteer is a transfer participant shown on the quest.
+type QuestVolunteer struct {
+	ID       int     `json:"id"`
+	Username string  `json:"username"`
+	Fullname *string `json:"fullname"`
+}
+
 // Quest represents an aggregated equipment release request
 type Quest struct {
-	ID               string      `json:"id"` // quest-abc123 (used for all operations)
-	QuestKey         string      `json:"-"`  // MD5 hash for deduplication, not exposed in API
-	Destination      Destination `json:"destination"`
-	Recipient        string      `json:"recipient"`
-	DeliveryDate     string      `json:"delivery_date"`
-	PickupTime       string      `json:"pickup_time,omitempty"`
-	BudgetOwner      string      `json:"budget_owner"`
-	Items            []QuestItem `json:"items"`
-	Status           string      `json:"status"`
-	TransferID       *int        `json:"transfer_id,omitempty"`     // Linked transfer ID (set when transfer is created from quest)
-	TransferStatus   *string     `json:"transfer_status,omitempty"` // Status of linked transfer (derived, not stored)
-	LocationID       *int        `json:"location_id,omitempty"`     // Resolved location ID (nullable if unresolved)
-	LocationName     *string     `json:"location_name,omitempty"`   // Resolved location name (derived from JOIN, not stored)
-	LocationResolved bool        `json:"location_resolved"`         // Whether location was resolved
-	SourceRows       []int       `json:"source_rows"`
-	LastSynced       time.Time   `json:"last_synced"`
+	ID                 string           `json:"id"` // quest-abc123 (used for all operations)
+	QuestKey           string           `json:"-"`  // MD5 hash for deduplication, not exposed in API
+	Destination        Destination      `json:"destination"`
+	Recipient          string           `json:"recipient"`
+	DeliveryDate       string           `json:"delivery_date"`
+	PickupTime         string           `json:"pickup_time,omitempty"`
+	BudgetOwner        string           `json:"budget_owner"`
+	Items              []QuestItem      `json:"items"`
+	Status             string           `json:"status"`
+	TransferID         *int             `json:"transfer_id,omitempty"`     // Linked transfer ID (set when transfer is created from quest)
+	TransferStatus     *string          `json:"transfer_status,omitempty"` // Status of linked transfer (derived, not stored)
+	LocationID         *int             `json:"location_id,omitempty"`     // Resolved location ID (nullable if unresolved)
+	LocationName       *string          `json:"location_name,omitempty"`   // Resolved location name (derived from JOIN, not stored)
+	LocationResolved   bool             `json:"location_resolved"`         // Whether location was resolved
+	AssignedVolunteers []QuestVolunteer `json:"assigned_volunteers"`       // Transfer participants (empty when no transfer)
+	SourceRows         []int            `json:"source_rows"`
+	LastSynced         time.Time        `json:"last_synced"`
 }
 
 // LocationMapping represents manual pavilion+location_name → location_id override

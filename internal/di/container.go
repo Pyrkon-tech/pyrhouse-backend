@@ -18,6 +18,7 @@ import (
 	"warehouse/internal/origins"
 	"warehouse/internal/repository"
 	"warehouse/internal/security"
+	"warehouse/internal/dispatch"
 	"warehouse/internal/service_desk"
 	"warehouse/internal/settings"
 	"warehouse/internal/users"
@@ -35,6 +36,7 @@ type Container struct {
 	ItemHandler              *items.ItemHandler
 	GoogleSheetsHandler      *googlesheets.GoogleSheetsHandler
 	ItemCategoryHandler      *category.ItemCategoryHandler
+	DispatchHandler          *dispatch.Handler
 	ServiceDeskHandler       *service_desk.Handler
 	DiscordHandler           *security.DiscordHandler
 	EquipmentRequestHandler   *equipment_requests.Handler
@@ -68,6 +70,8 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	transferRepository := transfers.NewRepository(repo)
 	transferHandler := transfers.NewHandler(repo, transferRepository, assetRepo, userRepo, auditLog)
 	itemsHandler := items.NewItemHandler(repo, stockRepo, assetRepo, auditLog)
+	dispatchRepo := dispatch.NewRepository(repo)
+	dispatchHandler := dispatch.NewHandler(dispatchRepo)
 	serviceDeskHandler := service_desk.NewHandler(repo)
 
 	googleSheetsHandler, err := googlesheets.NewGoogleSheetsHandler()
@@ -131,6 +135,7 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		ItemHandler:               itemsHandler,
 		GoogleSheetsHandler:       googleSheetsHandler,
 		ItemCategoryHandler:       itemCategoryHandler,
+		DispatchHandler:           dispatchHandler,
 		ServiceDeskHandler:        serviceDeskHandler,
 		DiscordHandler:            discordHandler,
 		EquipmentRequestHandler:   equipmentRequestHandler,

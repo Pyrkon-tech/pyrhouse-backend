@@ -34,6 +34,7 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 	container.OriginHandler.RegisterRoutes(protectedRoutes)
 	container.SettingsHandler.RegisterRoutes(protectedRoutes)
 	container.ServiceDeskHandler.RegisterRoutes(protectedRoutes)
+	container.DispatchHandler.RegisterRoutes(protectedRoutes)
 	if container.GoogleSheetsHandler != nil {
 		container.GoogleSheetsHandler.RegisterRoutes(protectedRoutes)
 		log.Println("Google Sheets API routes registered successfully")

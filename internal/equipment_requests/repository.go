@@ -250,7 +250,54 @@ func (r *Repository) GetQuestByID(ctx context.Context, questID string) (*Quest, 
 		return nil, err
 	}
 
-	return r.recordToQuest(&questDB, items), nil
+	quest := r.recordToQuest(&questDB, items)
+
+	// Fetch transfer participants when a transfer is linked
+	if questDB.TransferID != nil {
+		volunteers, err := r.getQuestVolunteers(ctx, *questDB.TransferID)
+		if err != nil {
+			return nil, err
+		}
+		quest.AssignedVolunteers = volunteers
+	}
+
+	return quest, nil
+}
+
+// getQuestVolunteers returns users linked to a transfer via transfer_users.
+func (r *Repository) getQuestVolunteers(_ context.Context, transferID int) ([]QuestVolunteer, error) {
+	query := r.repo.GoquDBWrapper.
+		Select(
+			goqu.I("u.id"),
+			goqu.I("u.username"),
+			goqu.I("u.fullname"),
+		).
+		From(goqu.T("transfer_users").As("tu")).
+		Join(goqu.T("users").As("u"), goqu.On(goqu.Ex{"tu.user_id": goqu.I("u.id")})).
+		Where(goqu.Ex{"tu.transfer_id": transferID}).
+		Order(goqu.I("u.id").Asc())
+
+	rows, err := query.Executor().Query()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch quest volunteers: %w", err)
+	}
+	defer rows.Close()
+
+	var volunteers []QuestVolunteer
+	for rows.Next() {
+		var v QuestVolunteer
+		if err := rows.Scan(&v.ID, &v.Username, &v.Fullname); err != nil {
+			return nil, fmt.Errorf("failed to scan volunteer: %w", err)
+		}
+		volunteers = append(volunteers, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row error: %w", err)
+	}
+	if volunteers == nil {
+		volunteers = []QuestVolunteer{}
+	}
+	return volunteers, nil
 }
 
 // GetQuestByKey retrieves quest by quest_key hash
@@ -858,8 +905,9 @@ func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 		LocationName:     questDB.LocationName,
 		LocationResolved: questDB.LocationResolved,
 		LastSynced:       questDB.LastSyncedAt,
-		Items:            make([]QuestItem, len(itemsDB)),
-		SourceRows:       make([]int, len(itemsDB)),
+		Items:              make([]QuestItem, len(itemsDB)),
+		SourceRows:         make([]int, len(itemsDB)),
+		AssignedVolunteers: []QuestVolunteer{},
 	}
 
 	if questDB.PickupTime != nil {
