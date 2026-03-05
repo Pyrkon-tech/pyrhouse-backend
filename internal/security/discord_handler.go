@@ -38,7 +38,20 @@ func NewDiscordHandler(oauth *oauth.DiscordOAuth, userRepo DiscordUserRepository
 
 func (h *DiscordHandler) DiscordLogin(c *gin.Context) {
 	state := generateState()
-	c.SetCookie("oauth_state", state, 600, "/", "", false, true)
+
+	// Auto-detect HTTPS (works behind DigitalOcean/nginx reverse proxies)
+	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		MaxAge:   600,
+		Path:     "/",
+		Secure:   isSecure,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	c.Redirect(http.StatusTemporaryRedirect, h.oauth.GetAuthURL(state))
 }
 
@@ -168,9 +181,56 @@ func (h *DiscordHandler) findOrCreateUser(discordUser *oauth.DiscordUser) (*mode
 	return createdUser, nil
 }
 
+// DiscordExchange handles frontend-initiated code exchange.
+// Use this when the Discord redirect_uri points to the frontend (not the backend callback).
+// The frontend receives the code from Discord, then calls this endpoint to exchange it for a JWT.
+// Body: {"code": "...", "redirect_uri": "https://yourfrontend.com/auth/discord/callback"}
+func (h *DiscordHandler) DiscordExchange(c *gin.Context) {
+	var req struct {
+		Code        string `json:"code" binding:"required"`
+		RedirectURI string `json:"redirect_uri" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		return
+	}
+
+	token, err := h.oauth.ExchangeCodeWithURI(req.Code, req.RedirectURI)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to exchange Discord code", "details": err.Error()})
+		return
+	}
+
+	discordUser, err := h.oauth.GetUser(token.AccessToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Discord user"})
+		return
+	}
+
+	user, err := h.findOrCreateUser(discordUser)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process user"})
+		return
+	}
+
+	if !user.Active {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Account is inactive. Contact the admin and login again."})
+		return
+	}
+
+	jwtToken, err := GenerateJWT(strconv.Itoa(user.ID), string(user.Role), user.Username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"token": jwtToken})
+}
+
 func (h *DiscordHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/auth/discord", h.DiscordLogin)
 	router.GET("/auth/discord/callback", h.DiscordCallback)
+	router.POST("/auth/discord/exchange", h.DiscordExchange)
 }
 
 func (h *DiscordHandler) RegisterProtectedRoutes(router *gin.RouterGroup) {

@@ -52,12 +52,18 @@ func (d *DiscordOAuth) GetAuthURL(state string) string {
 }
 
 func (d *DiscordOAuth) ExchangeCode(code string) (*TokenResponse, error) {
+	return d.ExchangeCodeWithURI(code, d.config.RedirectURI)
+}
+
+// ExchangeCodeWithURI exchanges a Discord auth code using an explicit redirect_uri.
+// The redirect_uri must match the one used to initiate the auth flow (Discord validates this).
+func (d *DiscordOAuth) ExchangeCodeWithURI(code, redirectURI string) (*TokenResponse, error) {
 	data := url.Values{
 		"client_id":     {d.config.ClientID},
 		"client_secret": {d.config.ClientSecret},
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
-		"redirect_uri":  {d.config.RedirectURI},
+		"redirect_uri":  {redirectURI},
 	}
 
 	resp, err := http.Post(discordTokenURL, "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
