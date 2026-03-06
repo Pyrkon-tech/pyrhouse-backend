@@ -33,7 +33,7 @@ func (r *Repository) SuggestAssets(originID int, locationID *int) ([]SuggestedAs
 		LeftJoin(goqu.T("locations").As("l"), goqu.On(goqu.Ex{"i.location_id": goqu.I("l.id")})).
 		Where(
 			goqu.Ex{"i.origin_id": originID},
-			goqu.I("i.status").In([]string{"available", "located"}),
+			goqu.Ex{"i.status": "available"},
 		).
 		Order(goqu.I("i.id").Asc())
 
@@ -368,7 +368,7 @@ func (r *Repository) ValidateAssetsForRelease(itemIDs []int, excludeReleaseID *i
 		From("items").
 		Where(
 			goqu.I("id").In(itemIDs),
-			goqu.I("status").In([]string{"available", "located"}),
+			goqu.Ex{"status": "available"},
 		).
 		Executor().ScanVals(&validIDs)
 	if err != nil {

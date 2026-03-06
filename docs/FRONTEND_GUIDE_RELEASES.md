@@ -73,8 +73,7 @@ const res = await fetch('/api/releases', {
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    origin_id: 5,                          // optional, tags the release
-    released_to: 'Probis Sp. z o.o.',      // required - recipient
+    origin_id: 5,                          // required - which origin to release
     notes: 'Zwrot po Pyrkon 2026',         // optional
     assets: [101, 102, 103],               // selected asset IDs
     stocks: [
@@ -104,7 +103,6 @@ const release: ReleaseDetail = await res.json()
   "reference": "WYD-2026-001",
   "origin_id": 5,
   "origin_label": "probis",
-  "released_to": "Probis Sp. z o.o.",
   "notes": "Zwrot po Pyrkon 2026",
   "status": "draft",
   "created_by": 1,
@@ -215,7 +213,7 @@ const res = await fetch('/api/releases?status=completed&origin_id=5', { headers 
 Use `GET /releases/:id` on a completed release — the response contains all snapshot data needed:
 
 - `reference` — document number (e.g., "WYD-2026-001")
-- `released_to` — recipient name
+- `origin_label` — origin name (e.g., "probis")
 - `created_by_name` — who created the release
 - `completed_at` — when it was confirmed
 - `assets[]` — each with `pyr_code`, `item_serial`, `category_name`
@@ -250,9 +248,8 @@ Error response format:
 interface Release {
   id: number
   reference: string
-  origin_id: number | null
+  origin_id: number
   origin_label: string | null
-  released_to: string
   notes: string | null
   status: 'draft' | 'completed'
   created_by: number
@@ -310,3 +307,36 @@ interface SuggestedStock {
   location_name: string | null
 }
 ```
+
+---
+
+## Asset Status Guide
+
+Assets have only 3 statuses. The displayed label depends on status + location:
+
+| `status` | `location_id` | Display label | Badge color |
+|----------|---------------|---------------|-------------|
+| `in_transit` | any | "W transporcie" | yellow |
+| `available` | `1` (Magazyn Techniczny) | "Na stanie" | green |
+| `available` | any other | location name (e.g. "Hala B2") | blue |
+| `unavailable` | any | "Niedostępny" | red |
+
+Example helper:
+
+```ts
+function getAssetDisplayStatus(asset: { status: string; location: { id: number; name: string } }) {
+  if (asset.status === 'in_transit') {
+    return { label: 'W transporcie', color: 'yellow' }
+  }
+  if (asset.status === 'unavailable') {
+    return { label: 'Niedostępny', color: 'red' }
+  }
+  // status === 'available'
+  if (asset.location.id === 1) {
+    return { label: 'Na stanie', color: 'green' }
+  }
+  return { label: asset.location.name, color: 'blue' }
+}
+```
+
+There is no separate "deployed" or "in_use" status — location tells you where the asset is.

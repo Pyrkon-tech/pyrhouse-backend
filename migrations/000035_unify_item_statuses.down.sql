@@ -1,0 +1,2 @@
+-- Cannot reliably restore original statuses (data loss is intentional)
+-- This is a no-op down migration

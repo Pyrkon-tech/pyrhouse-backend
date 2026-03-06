@@ -348,7 +348,7 @@ func (s *TransferService) ConfirmTransfer(transferID int, status string) error {
 
 	err = repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		if len(assetIDs) > 0 {
-			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusLocated, tx); err != nil {
+			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusAvailable, tx); err != nil {
 				return fmt.Errorf("unable to update assets err: %w", err)
 			}
 		}
@@ -412,7 +412,7 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 
 			// Przywróć aktywa do oryginalnej lokalizacji i zaktualizuj status
 			for _, assetID := range assetIDs {
-				if err := s.ar.UpdateAssetStatusAndLocation(tx, assetID, transfer.FromLocation.ID, metadata.StatusLocated); err != nil {
+				if err := s.ar.UpdateAssetStatusAndLocation(tx, assetID, transfer.FromLocation.ID, metadata.StatusAvailable); err != nil {
 					return fmt.Errorf("failed to restore asset %d to original location: %w", assetID, err)
 				}
 			}

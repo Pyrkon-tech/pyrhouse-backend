@@ -5,13 +5,9 @@ import "fmt"
 type Status string
 
 const (
-	StatusInStock     Status = "in_stock" // deprecated
-	StatusInTransit   Status = "in_transit"
-	StatusLocated     Status = "located"
-	StatusCompleted   Status = "completed"
-	StatusAvailable   Status = "available"
-	StatusUnavailable Status = "unavailable"
-	StatusCancelled   Status = "cancelled"
+	StatusAvailable   Status = "available"   // Asset is at its location, ready for operations
+	StatusInTransit   Status = "in_transit"  // Asset is being transferred between locations
+	StatusUnavailable Status = "unavailable" // Asset is temporarily unavailable (e.g. damaged)
 )
 
 func NewStatus(value string) (Status, error) {
@@ -24,7 +20,7 @@ func NewStatus(value string) (Status, error) {
 
 func (s Status) isValid() bool {
 	switch s {
-	case StatusInStock, StatusInTransit, StatusLocated, StatusCompleted, StatusAvailable, StatusUnavailable, StatusCancelled:
+	case StatusAvailable, StatusInTransit, StatusUnavailable:
 		return true
 	default:
 		return false
