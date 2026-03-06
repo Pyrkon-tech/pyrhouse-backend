@@ -38,6 +38,8 @@ tags:
     description: Service desk request management
   - name: dispatch
     description: Dispatch map — volunteer status and quest assignment
+  - name: releases
+    description: Permanent inventory releases — remove items from stock with a receipt for PDF generation
 
 paths:
   /health:
@@ -2557,6 +2559,159 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /releases/suggest:
+    get:
+      tags: [releases]
+      summary: Suggest items for release by origin
+      description: Returns assets and stocks matching the given origin (and optional location) that are available for permanent release.
+      parameters:
+        - name: origin_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Origin ID to filter items by
+        - name: location_id
+          in: query
+          schema:
+            type: integer
+          description: Optional location filter
+      responses:
+        "200":
+          description: Suggested items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuggestResponse"
+
+  /releases:
+    post:
+      tags: [releases]
+      summary: Create a draft release
+      description: Creates a new release in draft status with the selected assets and stocks. Snapshots item data at creation time.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReleaseRequest"
+      responses:
+        "201":
+          description: Draft release created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseDetail"
+        "409":
+          description: Validation error (asset in_transit, in another draft, insufficient stock)
+    get:
+      tags: [releases]
+      summary: List releases
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, completed]
+        - name: origin_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of releases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Release"
+
+  /releases/{id}:
+    get:
+      tags: [releases]
+      summary: Get release details (for PDF)
+      description: Returns full release with asset/stock snapshots and summary. Use this for generating PDF receipts.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Release details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseDetail"
+        "404":
+          description: Release not found
+    delete:
+      tags: [releases]
+      summary: Delete a draft release
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Release deleted
+        "409":
+          description: Release not in draft status
+
+  /releases/{id}/items:
+    put:
+      tags: [releases]
+      summary: Update items in a draft release
+      description: Replaces the complete list of assets and stocks in a draft release.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateItemsRequest"
+      responses:
+        "200":
+          description: Updated release
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseDetail"
+        "409":
+          description: Validation error
+
+  /releases/{id}/confirm:
+    post:
+      tags: [releases]
+      summary: Confirm and execute release
+      description: |
+        Permanently removes assets from inventory and decreases stock quantities.
+        Refreshes snapshots with latest data before deletion. Requires admin role.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Release confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseDetail"
+        "409":
+          description: Validation error (items changed since draft creation)
+
 servers:
   - url: https://pyrhouse-backend-f26ml.ondigitalocean.app/api
     description: Production
@@ -3308,4 +3463,207 @@ components:
           type: string
           nullable: true
           example: "Marek Nowak"
+
+    Release:
+      type: object
+      properties:
+        id:
+          type: integer
+        reference:
+          type: string
+          example: "WYD-2026-001"
+        origin_id:
+          type: integer
+          nullable: true
+        origin_label:
+          type: string
+          nullable: true
+          example: "probis"
+        released_to:
+          type: string
+          example: "Probis Sp. z o.o."
+        notes:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, completed]
+        created_by:
+          type: integer
+        created_by_name:
+          type: string
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ReleaseDetail:
+      allOf:
+        - $ref: "#/components/schemas/Release"
+        - type: object
+          properties:
+            assets:
+              type: array
+              items:
+                $ref: "#/components/schemas/ReleaseAsset"
+            stocks:
+              type: array
+              items:
+                $ref: "#/components/schemas/ReleaseStock"
+            summary:
+              type: object
+              properties:
+                total_assets:
+                  type: integer
+                total_stock_quantity:
+                  type: integer
+
+    ReleaseAsset:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_id:
+          type: integer
+        pyr_code:
+          type: string
+          nullable: true
+          example: "PYR-0042"
+        item_serial:
+          type: string
+          nullable: true
+        category_name:
+          type: string
+          nullable: true
+          example: "Mikser audio"
+        origin_label:
+          type: string
+          nullable: true
+          example: "probis"
+        location_name:
+          type: string
+          nullable: true
+          example: "Magazyn główny"
+
+    ReleaseStock:
+      type: object
+      properties:
+        id:
+          type: integer
+        stock_id:
+          type: integer
+        item_category_id:
+          type: integer
+        category_name:
+          type: string
+          nullable: true
+          example: "Kabel XLR 5m"
+        quantity:
+          type: integer
+          example: 20
+        origin_label:
+          type: string
+          nullable: true
+          example: "probis"
+        location_name:
+          type: string
+          nullable: true
+
+    SuggestResponse:
+      type: object
+      properties:
+        assets:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              pyr_code:
+                type: string
+                nullable: true
+              item_serial:
+                type: string
+                nullable: true
+              status:
+                type: string
+              category_name:
+                type: string
+                nullable: true
+              origin_label:
+                type: string
+                nullable: true
+              location_name:
+                type: string
+                nullable: true
+        stocks:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              quantity:
+                type: integer
+              category_name:
+                type: string
+                nullable: true
+              origin_label:
+                type: string
+                nullable: true
+              location_name:
+                type: string
+                nullable: true
+
+    CreateReleaseRequest:
+      type: object
+      required: [released_to]
+      properties:
+        origin_id:
+          type: integer
+          description: Optional origin to tag this release
+        released_to:
+          type: string
+          example: "Probis Sp. z o.o."
+        notes:
+          type: string
+        assets:
+          type: array
+          items:
+            type: integer
+          description: Asset IDs (items table)
+        stocks:
+          type: array
+          items:
+            type: object
+            required: [stock_id, quantity]
+            properties:
+              stock_id:
+                type: integer
+              quantity:
+                type: integer
+                minimum: 1
+
+    UpdateItemsRequest:
+      type: object
+      properties:
+        assets:
+          type: array
+          items:
+            type: integer
+        stocks:
+          type: array
+          items:
+            type: object
+            required: [stock_id, quantity]
+            properties:
+              stock_id:
+                type: integer
+              quantity:
+                type: integer
+                minimum: 1
 
