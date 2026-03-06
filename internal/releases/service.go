@@ -53,7 +53,7 @@ func (s *Service) CreateRelease(req CreateReleaseRequest, userID int) (*ReleaseD
 			return err
 		}
 
-		release, err := s.repo.CreateRelease(tx, ref, req.ReleasedTo, req.OriginID, req.Notes, userID)
+		release, err := s.repo.CreateRelease(tx, ref, req.OriginID, req.Notes, userID)
 		if err != nil {
 			return err
 		}

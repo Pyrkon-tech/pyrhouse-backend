@@ -85,22 +85,19 @@ func (r *Repository) SuggestStocks(originID int, locationID *int) ([]SuggestedSt
 }
 
 // CreateRelease inserts the release header and returns the created release.
-func (r *Repository) CreateRelease(tx *goqu.TxDatabase, ref, releasedTo string, originID *int, notes *string, createdBy int) (*Release, error) {
+func (r *Repository) CreateRelease(tx *goqu.TxDatabase, ref string, originID int, notes *string, createdBy int) (*Release, error) {
 	record := goqu.Record{
-		"reference":   ref,
-		"released_to": releasedTo,
-		"status":      "draft",
-		"created_by":  createdBy,
-	}
-	if originID != nil {
-		record["origin_id"] = *originID
+		"reference":  ref,
+		"origin_id":  originID,
+		"status":     "draft",
+		"created_by": createdBy,
 	}
 	if notes != nil {
 		record["notes"] = *notes
 	}
 
 	var release Release
-	_, err := tx.Insert("releases").Rows(record).Returning("id", "reference", "origin_id", "released_to", "notes", "status", "created_by", "completed_at", "created_at").Executor().ScanStruct(&release)
+	_, err := tx.Insert("releases").Rows(record).Returning("id", "reference", "origin_id", "notes", "status", "created_by", "completed_at", "created_at").Executor().ScanStruct(&release)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create release: %w", err)
 	}
@@ -243,7 +240,6 @@ func (r *Repository) GetRelease(id int) (*Release, error) {
 		goqu.I("r.reference"),
 		goqu.I("r.origin_id"),
 		goqu.I("o.slug").As("origin_label"),
-		goqu.I("r.released_to"),
 		goqu.I("r.notes"),
 		goqu.I("r.status"),
 		goqu.I("r.created_by"),
@@ -252,7 +248,7 @@ func (r *Repository) GetRelease(id int) (*Release, error) {
 		goqu.I("r.created_at"),
 	).
 		From(goqu.T("releases").As("r")).
-		LeftJoin(goqu.T("origins").As("o"), goqu.On(goqu.Ex{"r.origin_id": goqu.I("o.id")})).
+		Join(goqu.T("origins").As("o"), goqu.On(goqu.Ex{"r.origin_id": goqu.I("o.id")})).
 		LeftJoin(goqu.T("users").As("u"), goqu.On(goqu.Ex{"r.created_by": goqu.I("u.id")})).
 		Where(goqu.Ex{"r.id": id}).
 		Executor().ScanStruct(&release)
@@ -306,7 +302,6 @@ func (r *Repository) ListReleases(status *string, originID *int) ([]Release, err
 		goqu.I("r.reference"),
 		goqu.I("r.origin_id"),
 		goqu.I("o.slug").As("origin_label"),
-		goqu.I("r.released_to"),
 		goqu.I("r.notes"),
 		goqu.I("r.status"),
 		goqu.I("r.created_by"),
@@ -315,7 +310,7 @@ func (r *Repository) ListReleases(status *string, originID *int) ([]Release, err
 		goqu.I("r.created_at"),
 	).
 		From(goqu.T("releases").As("r")).
-		LeftJoin(goqu.T("origins").As("o"), goqu.On(goqu.Ex{"r.origin_id": goqu.I("o.id")})).
+		Join(goqu.T("origins").As("o"), goqu.On(goqu.Ex{"r.origin_id": goqu.I("o.id")})).
 		LeftJoin(goqu.T("users").As("u"), goqu.On(goqu.Ex{"r.created_by": goqu.I("u.id")})).
 		Order(goqu.I("r.created_at").Desc())
 

@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE releases ADD COLUMN IF NOT EXISTS released_to VARCHAR(255);
+
+COMMIT;

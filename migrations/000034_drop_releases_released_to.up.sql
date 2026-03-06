@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE releases DROP COLUMN IF EXISTS released_to;
+
+COMMIT;

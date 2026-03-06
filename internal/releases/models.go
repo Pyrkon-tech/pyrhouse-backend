@@ -5,9 +5,8 @@ import "time"
 type Release struct {
 	ID          int        `json:"id" db:"id"`
 	Reference   string     `json:"reference" db:"reference"`
-	OriginID    *int       `json:"origin_id" db:"origin_id"`
+	OriginID    int        `json:"origin_id" db:"origin_id"`
 	OriginLabel *string    `json:"origin_label,omitempty" db:"origin_label"`
-	ReleasedTo  string     `json:"released_to" db:"released_to"`
 	Notes       *string    `json:"notes" db:"notes"`
 	Status      string     `json:"status" db:"status"`
 	CreatedBy   int        `json:"created_by" db:"created_by"`
@@ -53,8 +52,7 @@ type ReleaseStock struct {
 // API request/response types
 
 type CreateReleaseRequest struct {
-	OriginID   *int              `json:"origin_id"`
-	ReleasedTo string            `json:"released_to" binding:"required"`
+	OriginID   int               `json:"origin_id" binding:"required"`
 	Notes      *string           `json:"notes"`
 	Assets     []int             `json:"assets"`
 	Stocks     []StockReleaseReq `json:"stocks"`

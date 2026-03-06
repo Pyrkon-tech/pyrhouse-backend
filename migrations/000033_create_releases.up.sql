@@ -3,8 +3,7 @@ BEGIN;
 CREATE TABLE releases (
     id SERIAL PRIMARY KEY,
     reference VARCHAR(20) NOT NULL UNIQUE,
-    origin_id INT REFERENCES origins(id),
-    released_to VARCHAR(255) NOT NULL,
+    origin_id INT NOT NULL REFERENCES origins(id),
     notes TEXT,
     status VARCHAR(20) NOT NULL DEFAULT 'draft',
     created_by INT NOT NULL REFERENCES users(id),
