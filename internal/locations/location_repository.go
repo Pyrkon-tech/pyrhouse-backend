@@ -123,7 +123,6 @@ func (r *LocationRepository) RemoveLocation(locationID string) error {
 	return nil
 }
 
-// TODO maybe remove?
 func (r *LocationRepository) getLocationAssets(locationID string) ([]models.Asset, error) {
 	query := r.Repository.GoquDBWrapper.
 		From(goqu.T("items").As("i")).
@@ -132,14 +131,22 @@ func (r *LocationRepository) getLocationAssets(locationID string) ([]models.Asse
 			"i.item_serial",
 			"i.status",
 			"i.pyr_code",
-			"i.origin",
+			goqu.L("CASE WHEN i.origin_suffix IS NOT NULL THEN o.slug || '-' || i.origin_suffix ELSE o.slug END").As("origin"),
 			"i.item_category_id",
 			"c.item_category",
 			"c.label",
-		)
-	query = r.prepareQueryConditions(query, locationID)
-	rows, err := query.Executor().Query()
+		).
+		LeftJoin(
+			goqu.T("origins").As("o"),
+			goqu.On(goqu.Ex{"i.origin_id": goqu.I("o.id")}),
+		).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),
+		).
+		Where(goqu.Ex{"i.location_id": locationID})
 
+	rows, err := query.Executor().Query()
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}
@@ -217,10 +224,14 @@ func (r *LocationRepository) SearchLocationItems(locationID string, searchQuery 
 			"i.item_serial",
 			"i.status",
 			"i.pyr_code",
-			"i.origin",
+			goqu.L("CASE WHEN i.origin_suffix IS NOT NULL THEN o.slug || '-' || i.origin_suffix ELSE o.slug END").As("origin"),
 			"i.item_category_id",
 			"c.item_category",
 			"c.label",
+		).
+		LeftJoin(
+			goqu.T("origins").As("o"),
+			goqu.On(goqu.Ex{"i.origin_id": goqu.I("o.id")}),
 		).
 		LeftJoin(
 			goqu.T("item_category").As("c"),
@@ -234,6 +245,7 @@ func (r *LocationRepository) SearchLocationItems(locationID string, searchQuery 
 			goqu.I("c.item_category").ILike("%"+searchQuery+"%"),
 			goqu.I("c.label").ILike("%"+searchQuery+"%"),
 			goqu.I("i.pyr_code").ILike("%"+searchQuery+"%"),
+			goqu.I("o.slug").ILike("%"+searchQuery+"%"),
 		))
 
 	rows, err := query.Executor().Query()
