@@ -23,6 +23,7 @@ func (r *Repository) CreateSchedule(req CreateScheduleRequest) (*Schedule, error
 		"event_end":      req.EventEnd,
 		"festival_start": req.FestivalStart,
 		"festival_end":   req.FestivalEnd,
+		"status":         "active",
 	}).Returning("id", "name", "event_start", "event_end", "festival_start", "festival_end", "status", "created_at")
 
 	if _, err := query.Executor().ScanStruct(&schedule); err != nil {
@@ -31,13 +32,20 @@ func (r *Repository) CreateSchedule(req CreateScheduleRequest) (*Schedule, error
 	return &schedule, nil
 }
 
-func (r *Repository) GetSchedules() ([]Schedule, error) {
-	var schedules []Schedule
-	query := r.repo.GoquDBWrapper.From("schedules").Order(goqu.C("created_at").Desc())
-	if err := query.Executor().ScanStructs(&schedules); err != nil {
-		return nil, fmt.Errorf("failed to list schedules: %w", err)
+func (r *Repository) GetActiveSchedule() (*Schedule, error) {
+	var schedule Schedule
+	query := r.repo.GoquDBWrapper.From("schedules").
+		Where(goqu.Ex{"status": "active"}).
+		Order(goqu.C("created_at").Desc()).
+		Limit(1)
+	found, err := query.Executor().ScanStruct(&schedule)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active schedule: %w", err)
 	}
-	return schedules, nil
+	if !found {
+		return nil, nil
+	}
+	return &schedule, nil
 }
 
 func (r *Repository) GetSchedule(id int) (*Schedule, error) {
@@ -51,6 +59,13 @@ func (r *Repository) GetSchedule(id int) (*Schedule, error) {
 		return nil, nil
 	}
 	return &schedule, nil
+}
+
+func (r *Repository) ArchiveAllSchedules() error {
+	_, err := r.repo.GoquDBWrapper.Update("schedules").
+		Set(goqu.Record{"status": "archived"}).
+		Where(goqu.Ex{"status": "active"}).Executor().Exec()
+	return err
 }
 
 func (r *Repository) InsertVolunteers(scheduleID int, volunteers []Volunteer) error {
@@ -185,6 +200,22 @@ func (r *Repository) GetAssignment(id int) (*Assignment, error) {
 		return nil, nil
 	}
 	return &a, nil
+}
+
+func (r *Repository) UpdateVolunteer(id int, updates map[string]interface{}) (*Volunteer, error) {
+	var v Volunteer
+	query := r.repo.GoquDBWrapper.Update("schedule_volunteers").
+		Set(updates).
+		Where(goqu.Ex{"id": id}).
+		Returning("id", "schedule_id", "user_id", "nickname", "city", "target_hours", "available_from", "available_to", "notes", "assigned_hours")
+	found, err := query.Executor().ScanStruct(&v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update volunteer: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &v, nil
 }
 
 func (r *Repository) UpdateVolunteerHours(volunteerID int, hours float64) error {

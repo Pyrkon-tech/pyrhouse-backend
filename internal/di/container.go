@@ -83,15 +83,16 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	releaseHandler := releases.NewHandler(releaseService)
 	searchRepo := search.NewRepository(repo)
 	searchHandler := search.NewHandler(searchRepo)
-	schedulingRepo := scheduling.NewRepository(repo)
-	schedulingService := scheduling.NewService(schedulingRepo)
-	schedulingHandler := scheduling.NewHandler(schedulingService)
 	serviceDeskHandler := service_desk.NewHandler(repo)
 
 	googleSheetsHandler, err := googlesheets.NewGoogleSheetsHandler()
 	if err != nil {
 		googleSheetsHandler = nil
 	}
+
+	schedulingRepo := scheduling.NewRepository(repo)
+	schedulingService := scheduling.NewService(schedulingRepo, googleSheetsHandler, settingsRepo)
+	schedulingHandler := scheduling.NewHandler(schedulingService)
 
 	var discordHandler *security.DiscordHandler
 	if cfg.Discord.ClientID != "" && cfg.Discord.ClientSecret != "" {

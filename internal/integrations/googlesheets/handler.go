@@ -114,6 +114,29 @@ func filterQuestsByStatus(quests []Quest, status string) []Quest {
 	return filtered
 }
 
+func (h *GoogleSheetsHandler) ClearSheet(spreadsheetID, sheetName string) error {
+	_, err := h.sheetsService.Spreadsheets.Values.Clear(
+		spreadsheetID, sheetName, &sheets.ClearValuesRequest{},
+	).Do()
+	if err != nil {
+		return fmt.Errorf("unable to clear sheet: %v", err)
+	}
+	return nil
+}
+
+func (h *GoogleSheetsHandler) WriteSpreadsheet(spreadsheetID, writeRange string, values [][]interface{}) error {
+	vr := &sheets.ValueRange{
+		Values: values,
+	}
+	_, err := h.sheetsService.Spreadsheets.Values.Update(
+		spreadsheetID, writeRange, vr,
+	).ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("unable to write spreadsheet: %v", err)
+	}
+	return nil
+}
+
 func (h *GoogleSheetsHandler) ReadSpreadsheet(spreadsheetID string, readRange string) ([][]interface{}, error) {
 	resp, err := h.sheetsService.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
 	if err != nil {

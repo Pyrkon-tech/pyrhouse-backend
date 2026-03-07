@@ -69,6 +69,16 @@ type ImportVolunteersRequest struct {
 	Volunteers []VolunteerInput `json:"volunteers" binding:"required,min=1"`
 }
 
+type UpdateVolunteerRequest struct {
+	Nickname      *string `json:"nickname"`
+	City          *string `json:"city"`
+	Hours         *int    `json:"hours"`
+	AvailableFrom *string `json:"available_from"`
+	AvailableTo   *string `json:"available_to"`
+	Notes         *string `json:"notes"`
+	UserID        *int    `json:"user_id"`
+}
+
 type SwapRequest struct {
 	AssignmentA int `json:"assignment_a" binding:"required"`
 	AssignmentB int `json:"assignment_b" binding:"required"`

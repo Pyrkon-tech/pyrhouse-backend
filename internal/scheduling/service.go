@@ -1,34 +1,50 @@
 package scheduling
 
 import (
+	"context"
 	"fmt"
 	"time"
+	"warehouse/internal/integrations/googlesheets"
+	"warehouse/internal/settings"
 )
 
 type Service struct {
-	repo *Repository
+	repo          *Repository
+	sheetsHandler *googlesheets.GoogleSheetsHandler // may be nil
+	settingsRepo  *settings.Repository
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, sheetsHandler *googlesheets.GoogleSheetsHandler, settingsRepo *settings.Repository) *Service {
+	return &Service{repo: repo, sheetsHandler: sheetsHandler, settingsRepo: settingsRepo}
 }
 
-func (s *Service) CreateSchedule(req CreateScheduleRequest) (*Schedule, error) {
-	return s.repo.CreateSchedule(req)
-}
-
-func (s *Service) GetSchedules() ([]Schedule, error) {
-	return s.repo.GetSchedules()
-}
-
-func (s *Service) GetScheduleDetail(id int) (*ScheduleDetail, error) {
-	schedule, err := s.repo.GetSchedule(id)
+// getActive returns the active schedule or an error if none exists.
+func (s *Service) getActive() (*Schedule, error) {
+	schedule, err := s.repo.GetActiveSchedule()
 	if err != nil {
 		return nil, err
 	}
 	if schedule == nil {
-		return nil, nil
+		return nil, fmt.Errorf("no active schedule")
 	}
+	return schedule, nil
+}
+
+func (s *Service) CreateSchedule(req CreateScheduleRequest) (*Schedule, error) {
+	// Archive any existing active schedule
+	if err := s.repo.ArchiveAllSchedules(); err != nil {
+		return nil, fmt.Errorf("failed to archive previous schedule: %w", err)
+	}
+	return s.repo.CreateSchedule(req)
+}
+
+func (s *Service) GetScheduleDetail() (*ScheduleDetail, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return nil, err
+	}
+
+	id := schedule.ID
 
 	slots, err := s.repo.GetSlots(id)
 	if err != nil {
@@ -96,13 +112,10 @@ func (s *Service) GetScheduleDetail(id int) (*ScheduleDetail, error) {
 	}, nil
 }
 
-func (s *Service) ImportVolunteers(scheduleID int, inputs []VolunteerInput) error {
-	schedule, err := s.repo.GetSchedule(scheduleID)
+func (s *Service) ImportVolunteers(inputs []VolunteerInput) error {
+	schedule, err := s.getActive()
 	if err != nil {
 		return err
-	}
-	if schedule == nil {
-		return fmt.Errorf("schedule not found")
 	}
 
 	volunteers := make([]Volunteer, len(inputs))
@@ -117,7 +130,7 @@ func (s *Service) ImportVolunteers(scheduleID int, inputs []VolunteerInput) erro
 		}
 
 		volunteers[i] = Volunteer{
-			ScheduleID:    scheduleID,
+			ScheduleID:    schedule.ID,
 			UserID:        input.UserID,
 			Nickname:      input.Nickname,
 			City:          input.City,
@@ -128,23 +141,22 @@ func (s *Service) ImportVolunteers(scheduleID int, inputs []VolunteerInput) erro
 		}
 	}
 
-	return s.repo.InsertVolunteers(scheduleID, volunteers)
+	return s.repo.InsertVolunteers(schedule.ID, volunteers)
 }
 
-func (s *Service) Generate(scheduleID int) (*ScheduleDetail, error) {
-	schedule, err := s.repo.GetSchedule(scheduleID)
+func (s *Service) Generate() (*ScheduleDetail, error) {
+	schedule, err := s.getActive()
 	if err != nil {
 		return nil, err
 	}
-	if schedule == nil {
-		return nil, fmt.Errorf("schedule not found")
-	}
+
+	id := schedule.ID
 
 	// Clear existing slots and assignments
-	if err := s.repo.DeleteAssignments(scheduleID); err != nil {
+	if err := s.repo.DeleteAssignments(id); err != nil {
 		return nil, fmt.Errorf("failed to clear assignments: %w", err)
 	}
-	if err := s.repo.DeleteSlots(scheduleID); err != nil {
+	if err := s.repo.DeleteSlots(id); err != nil {
 		return nil, fmt.Errorf("failed to clear slots: %w", err)
 	}
 
@@ -155,13 +167,13 @@ func (s *Service) Generate(scheduleID int) (*ScheduleDetail, error) {
 	}
 
 	// Re-read slots (to get IDs)
-	slots, err = s.repo.GetSlots(scheduleID)
+	slots, err = s.repo.GetSlots(id)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get volunteers
-	volunteers, err := s.repo.GetVolunteers(scheduleID)
+	volunteers, err := s.repo.GetVolunteers(id)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +185,7 @@ func (s *Service) Generate(scheduleID int) (*ScheduleDetail, error) {
 	}
 
 	// Update assigned hours cache
-	assignments, _ = s.repo.GetAssignments(scheduleID)
+	assignments, _ = s.repo.GetAssignments(id)
 	slotMap := make(map[int]Slot)
 	for _, sl := range slots {
 		slotMap[sl.ID] = sl
@@ -190,19 +202,26 @@ func (s *Service) Generate(scheduleID int) (*ScheduleDetail, error) {
 		}
 	}
 
-	return s.GetScheduleDetail(scheduleID)
+	return s.GetScheduleDetail()
 }
 
-func (s *Service) ValidateSchedule(scheduleID int) (*ValidationResult, error) {
-	slots, err := s.repo.GetSlots(scheduleID)
+func (s *Service) ValidateSchedule() (*ValidationResult, error) {
+	schedule, err := s.getActive()
 	if err != nil {
 		return nil, err
 	}
-	volunteers, err := s.repo.GetVolunteers(scheduleID)
+
+	id := schedule.ID
+
+	slots, err := s.repo.GetSlots(id)
 	if err != nil {
 		return nil, err
 	}
-	assignments, err := s.repo.GetAssignments(scheduleID)
+	volunteers, err := s.repo.GetVolunteers(id)
+	if err != nil {
+		return nil, err
+	}
+	assignments, err := s.repo.GetAssignments(id)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +229,7 @@ func (s *Service) ValidateSchedule(scheduleID int) (*ValidationResult, error) {
 	return Validate(slots, volunteers, assignments), nil
 }
 
-func (s *Service) DeleteAssignment(scheduleID, assignmentID int) error {
+func (s *Service) DeleteAssignment(assignmentID int) error {
 	assignment, err := s.repo.GetAssignment(assignmentID)
 	if err != nil {
 		return err
@@ -221,7 +240,7 @@ func (s *Service) DeleteAssignment(scheduleID, assignmentID int) error {
 	return s.repo.DeleteAssignment(assignmentID)
 }
 
-func (s *Service) SwapAssignments(scheduleID int, req SwapRequest) error {
+func (s *Service) SwapAssignments(req SwapRequest) error {
 	a, err := s.repo.GetAssignment(req.AssignmentA)
 	if err != nil {
 		return err
@@ -249,25 +268,121 @@ func (s *Service) SwapAssignments(scheduleID int, req SwapRequest) error {
 	return s.repo.InsertAssignments(swapped)
 }
 
-func (s *Service) PublishSchedule(scheduleID int) error {
-	schedule, err := s.repo.GetSchedule(scheduleID)
+func (s *Service) PublishSchedule() error {
+	schedule, err := s.getActive()
 	if err != nil {
 		return err
 	}
-	if schedule == nil {
-		return fmt.Errorf("schedule not found")
+	return s.repo.UpdateScheduleStatus(schedule.ID, "published")
+}
+
+func (s *Service) UpdateVolunteer(volunteerID int, req UpdateVolunteerRequest) (*Volunteer, error) {
+	updates := make(map[string]interface{})
+
+	if req.Nickname != nil {
+		updates["nickname"] = *req.Nickname
 	}
-	return s.repo.UpdateScheduleStatus(scheduleID, "published")
+	if req.City != nil {
+		updates["city"] = *req.City
+	}
+	if req.Hours != nil {
+		updates["target_hours"] = *req.Hours
+	}
+	if req.AvailableFrom != nil {
+		t, err := time.Parse("2006-01-02 15:04", *req.AvailableFrom)
+		if err != nil {
+			return nil, fmt.Errorf("invalid available_from: %w", err)
+		}
+		updates["available_from"] = t
+	}
+	if req.AvailableTo != nil {
+		t, err := time.Parse("2006-01-02 15:04", *req.AvailableTo)
+		if err != nil {
+			return nil, fmt.Errorf("invalid available_to: %w", err)
+		}
+		updates["available_to"] = t
+	}
+	if req.Notes != nil {
+		updates["notes"] = *req.Notes
+	}
+	if req.UserID != nil {
+		updates["user_id"] = *req.UserID
+	}
+
+	if len(updates) == 0 {
+		return nil, fmt.Errorf("no fields to update")
+	}
+
+	return s.repo.UpdateVolunteer(volunteerID, updates)
 }
 
-func (s *Service) GetSlots(scheduleID int) ([]Slot, error) {
-	return s.repo.GetSlots(scheduleID)
+func (s *Service) GetVolunteers() ([]Volunteer, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.GetVolunteers(schedule.ID)
 }
 
-func (s *Service) GetVolunteers(scheduleID int) ([]Volunteer, error) {
-	return s.repo.GetVolunteers(scheduleID)
+func (s *Service) ExportToSheets() (int, error) {
+	if s.sheetsHandler == nil {
+		return 0, fmt.Errorf("Google Sheets integration not available")
+	}
+
+	schedule, err := s.getActive()
+	if err != nil {
+		return 0, err
+	}
+
+	ctx := context.Background()
+	sheetID, err := s.settingsRepo.Get(ctx, "scheduling.sheet_id")
+	if err != nil || sheetID == "" {
+		return 0, fmt.Errorf("scheduling.sheet_id not configured in settings")
+	}
+	sheetName, err := s.settingsRepo.Get(ctx, "scheduling.sheet_name")
+	if err != nil || sheetName == "" {
+		sheetName = "grafik"
+	}
+
+	id := schedule.ID
+
+	slots, err := s.repo.GetSlots(id)
+	if err != nil {
+		return 0, err
+	}
+	volunteers, err := s.repo.GetVolunteers(id)
+	if err != nil {
+		return 0, err
+	}
+	assignments, err := s.repo.GetAssignments(id)
+	if err != nil {
+		return 0, err
+	}
+
+	return ExportToSheet(s.sheetsHandler, sheetID, sheetName, slots, volunteers, assignments)
 }
 
-func (s *Service) GetAssignments(scheduleID int) ([]Assignment, error) {
-	return s.repo.GetAssignments(scheduleID)
+func (s *Service) ExportCSV() (string, *Schedule, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return "", nil, err
+	}
+
+	id := schedule.ID
+
+	slots, err := s.repo.GetSlots(id)
+	if err != nil {
+		return "", nil, err
+	}
+	volunteers, err := s.repo.GetVolunteers(id)
+	if err != nil {
+		return "", nil, err
+	}
+	assignments, err := s.repo.GetAssignments(id)
+	if err != nil {
+		return "", nil, err
+	}
+
+	csv := ExportCSV(schedule, slots, volunteers, assignments)
+	return csv, schedule, nil
 }

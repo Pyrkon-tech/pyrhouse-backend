@@ -7,10 +7,9 @@ import (
 	"time"
 )
 
-// ExportCSV generates a CSV schedule with hourly granularity for festival days
-// and single rows for montage/demontage days.
-// Columns: Godzina, Stanowisko 1, Stanowisko 2, ..., Stanowisko N
-func ExportCSV(schedule *Schedule, slots []Slot, volunteers []Volunteer, assignments []Assignment) string {
+// buildExportRows generates the schedule data as a 2D string grid.
+// Used by both CSV export and Google Sheets export.
+func buildExportRows(slots []Slot, volunteers []Volunteer, assignments []Assignment) [][]string {
 	// Build lookup maps
 	volMap := make(map[int]string)
 	for _, v := range volunteers {
@@ -77,16 +76,12 @@ func ExportCSV(schedule *Schedule, slots []Slot, volunteers []Volunteer, assignm
 		if s.Label != nil {
 			label = *s.Label
 		}
-		// Section header
 		rows = append(rows, sectionRow(fmt.Sprintf("--- %s ---", label), maxCols))
-		// Single row with all assigned volunteers
-		row := makeRow(label, slotVolunteers[s.ID], maxCols)
-		rows = append(rows, row)
+		rows = append(rows, makeRow(label, slotVolunteers[s.ID], maxCols))
 	}
 
 	// Festival: hourly breakdown
 	if len(festivalSlots) > 0 {
-		// Group by date for section headers
 		currentDate := ""
 		festStart := festivalSlots[0].StartTime
 		festEnd := festivalSlots[len(festivalSlots)-1].EndTime
@@ -99,7 +94,6 @@ func ExportCSV(schedule *Schedule, slots []Slot, volunteers []Volunteer, assignm
 				rows = append(rows, sectionRow(fmt.Sprintf("--- %s ---", dayName), maxCols))
 			}
 
-			// Find which volunteers are on duty at this hour
 			var onDuty []string
 			for _, s := range festivalSlots {
 				if !t.Before(s.StartTime) && t.Before(s.EndTime) {
@@ -119,11 +113,16 @@ func ExportCSV(schedule *Schedule, slots []Slot, volunteers []Volunteer, assignm
 			label = *s.Label
 		}
 		rows = append(rows, sectionRow(fmt.Sprintf("--- %s ---", label), maxCols))
-		row := makeRow(label, slotVolunteers[s.ID], maxCols)
-		rows = append(rows, row)
+		rows = append(rows, makeRow(label, slotVolunteers[s.ID], maxCols))
 	}
 
-	// Convert to CSV string
+	return rows
+}
+
+// ExportCSV generates a CSV string from the schedule data.
+func ExportCSV(schedule *Schedule, slots []Slot, volunteers []Volunteer, assignments []Assignment) string {
+	rows := buildExportRows(slots, volunteers, assignments)
+
 	var lines []string
 	for _, row := range rows {
 		lines = append(lines, strings.Join(row, ","))
