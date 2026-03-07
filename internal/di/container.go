@@ -20,6 +20,8 @@ import (
 	"warehouse/internal/security"
 	"warehouse/internal/dispatch"
 	"warehouse/internal/releases"
+	"warehouse/internal/scheduling"
+	"warehouse/internal/search"
 	"warehouse/internal/service_desk"
 	"warehouse/internal/settings"
 	"warehouse/internal/users"
@@ -45,6 +47,8 @@ type Container struct {
 	EquipmentRequestScheduler *equipment_requests.Scheduler
 	OriginHandler             *origins.Handler
 	OriginService             *origins.Service
+	SchedulingHandler         *scheduling.Handler
+	SearchHandler             *search.Handler
 	SettingsHandler           *settings.Handler
 	SettingsRepo              *settings.Repository
 }
@@ -77,6 +81,11 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	releaseRepo := releases.NewRepository(repo)
 	releaseService := releases.NewService(releaseRepo, repo, auditLog)
 	releaseHandler := releases.NewHandler(releaseService)
+	searchRepo := search.NewRepository(repo)
+	searchHandler := search.NewHandler(searchRepo)
+	schedulingRepo := scheduling.NewRepository(repo)
+	schedulingService := scheduling.NewService(schedulingRepo)
+	schedulingHandler := scheduling.NewHandler(schedulingService)
 	serviceDeskHandler := service_desk.NewHandler(repo)
 
 	googleSheetsHandler, err := googlesheets.NewGoogleSheetsHandler()
@@ -148,6 +157,8 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		EquipmentRequestScheduler: equipmentRequestScheduler,
 		OriginHandler:             originHandler,
 		OriginService:             originService,
+		SchedulingHandler:         schedulingHandler,
+		SearchHandler:             searchHandler,
 		SettingsHandler:           settingsHandler,
 		SettingsRepo:              settingsRepo,
 	}

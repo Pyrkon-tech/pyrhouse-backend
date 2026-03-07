@@ -181,10 +181,14 @@ func (r *LocationRepository) getLocationStock(locationID string) ([]models.Stock
 			"i.item_category_id",
 			"c.item_category",
 			"c.label",
-		)
-	query = r.prepareQueryConditions(query, locationID)
-	rows, err := query.Executor().Query()
+		).
+		LeftJoin(
+			goqu.T("item_category").As("c"),
+			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),
+		).
+		Where(goqu.Ex{"i.location_id": locationID})
 
+	rows, err := query.Executor().Query()
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}
@@ -205,15 +209,6 @@ func (r *LocationRepository) getLocationStock(locationID string) ([]models.Stock
 	}
 
 	return stockItems, nil
-}
-
-func (r *LocationRepository) prepareQueryConditions(query *goqu.SelectDataset, locationID string) *goqu.SelectDataset {
-	return query.
-		LeftJoin(
-			goqu.T("item_category").As("c"),
-			goqu.On(goqu.Ex{"i.item_category_id": goqu.I("c.id")}),
-		).
-		Where(goqu.Ex{"i.location_id": locationID})
 }
 
 func (r *LocationRepository) SearchLocationItems(locationID string, searchQuery string) ([]models.Asset, error) {
