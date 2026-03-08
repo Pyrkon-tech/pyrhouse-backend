@@ -7,8 +7,8 @@ import "time"
 type Schedule struct {
 	ID            int       `json:"id" db:"id"`
 	Name          string    `json:"name" db:"name"`
-	EventStart    string    `json:"event_start" db:"event_start"`
-	EventEnd      string    `json:"event_end" db:"event_end"`
+	EventStart    time.Time `json:"event_start" db:"event_start"`
+	EventEnd      time.Time `json:"event_end" db:"event_end"`
 	FestivalStart time.Time `json:"festival_start" db:"festival_start"`
 	FestivalEnd   time.Time `json:"festival_end" db:"festival_end"`
 	Status        string    `json:"status" db:"status"`

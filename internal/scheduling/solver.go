@@ -17,7 +17,7 @@ func GenerateSlots(schedule *Schedule) []Slot {
 	var slots []Slot
 
 	// Montage days: event_start to day before festival (Tue, Wed, Thu)
-	montageStart, _ := time.Parse("2006-01-02", schedule.EventStart)
+	montageStart := schedule.EventStart
 	festivalDay := schedule.FestivalStart
 
 	for d := montageStart; d.Before(festivalDay); d = d.AddDate(0, 0, 1) {
@@ -75,7 +75,7 @@ func GenerateSlots(schedule *Schedule) []Slot {
 	}
 
 	// Demontage: Monday (day after festival_end or event_end)
-	eventEnd, _ := time.Parse("2006-01-02", schedule.EventEnd)
+	eventEnd := schedule.EventEnd
 	demonLabel := fmt.Sprintf("Demontaż - %s", polishWeekday(eventEnd.Weekday()))
 	dayStart := time.Date(eventEnd.Year(), eventEnd.Month(), eventEnd.Day(), 8, 0, 0, 0, eventEnd.Location())
 	dayEnd := time.Date(eventEnd.Year(), eventEnd.Month(), eventEnd.Day(), 20, 0, 0, 0, eventEnd.Location())
