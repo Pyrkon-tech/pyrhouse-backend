@@ -69,6 +69,11 @@ type ImportVolunteersRequest struct {
 	Volunteers []VolunteerInput `json:"volunteers" binding:"required,min=1"`
 }
 
+type ImportFromSheetRequest struct {
+	SheetID   string `json:"sheet_id" binding:"required"`
+	SheetName string `json:"sheet_name" binding:"required"`
+}
+
 type UpdateVolunteerRequest struct {
 	Nickname      *string `json:"nickname"`
 	City          *string `json:"city"`

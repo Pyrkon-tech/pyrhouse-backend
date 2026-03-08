@@ -144,6 +144,82 @@ func (s *Service) ImportVolunteers(inputs []VolunteerInput) error {
 	return s.repo.InsertVolunteers(schedule.ID, volunteers)
 }
 
+// ImportVolunteersFromSheet reads volunteer data from a Google Spreadsheet and imports them.
+// Expected columns: Pseudonim, Miasto, Godziny, Dostępny od, Dostępny do, Uwagi
+func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (int, error) {
+	if s.sheetsHandler == nil {
+		return 0, fmt.Errorf("Google Sheets integration not available")
+	}
+
+	schedule, err := s.getActive()
+	if err != nil {
+		return 0, err
+	}
+
+	readRange := fmt.Sprintf("%s!A1:F999", req.SheetName)
+	rows, err := s.sheetsHandler.ReadSpreadsheet(req.SheetID, readRange)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read sheet: %w", err)
+	}
+
+	if len(rows) < 2 {
+		return 0, fmt.Errorf("sheet has no data rows (only header or empty)")
+	}
+
+	// Skip header row, parse data rows
+	var volunteers []Volunteer
+	for i, row := range rows[1:] {
+		if len(row) < 5 {
+			continue // skip incomplete rows
+		}
+
+		nickname := cellStr(row, 0)
+		if nickname == "" {
+			continue // skip empty rows
+		}
+
+		city := cellStrPtr(row, 1)
+		hours := cellInt(row, 2, 14)
+
+		availFromStr := cellStr(row, 3)
+		availToStr := cellStr(row, 4)
+
+		availFrom, err := time.Parse("2006-01-02 15:04", availFromStr)
+		if err != nil {
+			return 0, fmt.Errorf("row %d (%s): invalid 'Dostępny od': %q", i+2, nickname, availFromStr)
+		}
+		availTo, err := time.Parse("2006-01-02 15:04", availToStr)
+		if err != nil {
+			return 0, fmt.Errorf("row %d (%s): invalid 'Dostępny do': %q", i+2, nickname, availToStr)
+		}
+
+		var notes *string
+		if len(row) >= 6 {
+			notes = cellStrPtr(row, 5)
+		}
+
+		volunteers = append(volunteers, Volunteer{
+			ScheduleID:    schedule.ID,
+			Nickname:      nickname,
+			City:          city,
+			TargetHours:   hours,
+			AvailableFrom: availFrom,
+			AvailableTo:   availTo,
+			Notes:         notes,
+		})
+	}
+
+	if len(volunteers) == 0 {
+		return 0, fmt.Errorf("no valid volunteer rows found in sheet")
+	}
+
+	if err := s.repo.InsertVolunteers(schedule.ID, volunteers); err != nil {
+		return 0, err
+	}
+
+	return len(volunteers), nil
+}
+
 func (s *Service) Generate() (*ScheduleDetail, error) {
 	schedule, err := s.getActive()
 	if err != nil {

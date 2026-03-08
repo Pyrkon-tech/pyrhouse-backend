@@ -20,6 +20,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/schedule", security.Authorize("moderator"), h.createSchedule)
 	router.GET("/schedule", security.Authorize("user"), h.getSchedule)
 	router.POST("/schedule/volunteers", security.Authorize("moderator"), h.importVolunteers)
+	router.POST("/schedule/volunteers/import-sheet", security.Authorize("moderator"), h.importVolunteersFromSheet)
 	router.GET("/schedule/volunteers", security.Authorize("user"), h.getVolunteers)
 	router.PATCH("/schedule/volunteers/:vid", security.Authorize("moderator"), h.updateVolunteer)
 	router.POST("/schedule/generate", security.Authorize("moderator"), h.generate)
@@ -181,6 +182,26 @@ func (h *Handler) export(c *gin.Context) {
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", "attachment; filename=\"grafik-"+schedule.Name+".csv\"")
 	c.String(http.StatusOK, csv)
+}
+
+func (h *Handler) importVolunteersFromSheet(c *gin.Context) {
+	var req ImportFromSheetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		return
+	}
+
+	count, err := h.service.ImportVolunteersFromSheet(req)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err.Error() == "Google Sheets integration not available" {
+			status = http.StatusServiceUnavailable
+		}
+		c.JSON(status, gin.H{"error": "Failed to import volunteers from sheet", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"imported": count})
 }
 
 func (h *Handler) exportToSheets(c *gin.Context) {
