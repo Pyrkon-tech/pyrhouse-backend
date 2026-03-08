@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Column names expected in the spreadsheet header row.
@@ -97,6 +98,57 @@ func shouldSkipByTag(row []interface{}, tagIdx int) bool {
 		}
 	}
 	return false
+}
+
+// polishDayToWeekday maps lowercase Polish day names to time.Weekday.
+var polishDayToWeekday = map[string]time.Weekday{
+	"poniedziałek": time.Monday,
+	"wtorek":       time.Tuesday,
+	"środa":        time.Wednesday,
+	"czwartek":     time.Thursday,
+	"piątek":       time.Friday,
+	"sobota":       time.Saturday,
+	"niedziela":    time.Sunday,
+}
+
+// parsePolishDayTime parses "wtorek, 08:00" into a real date
+// by finding the matching weekday within eventStart..eventEnd range.
+func parsePolishDayTime(raw string, eventStart, eventEnd time.Time) (time.Time, error) {
+	parts := strings.SplitN(raw, ",", 2)
+	if len(parts) != 2 {
+		return time.Time{}, fmt.Errorf("expected format 'dzień, HH:MM', got %q", raw)
+	}
+
+	dayName := strings.TrimSpace(strings.ToLower(parts[0]))
+	timeStr := strings.TrimSpace(parts[1])
+
+	weekday, ok := polishDayToWeekday[dayName]
+	if !ok {
+		return time.Time{}, fmt.Errorf("unknown day name %q", parts[0])
+	}
+
+	timeParts := strings.SplitN(timeStr, ":", 2)
+	if len(timeParts) != 2 {
+		return time.Time{}, fmt.Errorf("invalid time format %q", timeStr)
+	}
+	hour, err := strconv.Atoi(timeParts[0])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid hour in %q", timeStr)
+	}
+	minute, err := strconv.Atoi(timeParts[1])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid minute in %q", timeStr)
+	}
+
+	// Walk from eventStart to eventEnd and find the matching weekday
+	for d := eventStart; !d.After(eventEnd); d = d.AddDate(0, 0, 1) {
+		if d.Weekday() == weekday {
+			return time.Date(d.Year(), d.Month(), d.Day(), hour, minute, 0, 0, d.Location()), nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("day %q not found within event range %s – %s",
+		parts[0], eventStart.Format("2006-01-02"), eventEnd.Format("2006-01-02"))
 }
 
 func cellStr(row []interface{}, idx int) string {

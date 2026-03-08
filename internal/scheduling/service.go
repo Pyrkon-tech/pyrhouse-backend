@@ -171,6 +171,16 @@ func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (int, er
 		return 0, fmt.Errorf("invalid sheet header: %w", err)
 	}
 
+	// Parse event date range for day-name resolution
+	eventStart, err := time.Parse("2006-01-02", schedule.EventStart)
+	if err != nil {
+		return 0, fmt.Errorf("invalid event_start date: %w", err)
+	}
+	eventEnd, err := time.Parse("2006-01-02", schedule.EventEnd)
+	if err != nil {
+		return 0, fmt.Errorf("invalid event_end date: %w", err)
+	}
+
 	var volunteers []Volunteer
 	var skipped int
 	for i, row := range rows[1:] {
@@ -191,13 +201,13 @@ func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (int, er
 		availFromStr := cellStr(row, cols.availableFrom)
 		availToStr := cellStr(row, cols.availableTo)
 
-		availFrom, err := time.Parse("2006-01-02 15:04", availFromStr)
+		availFrom, err := parsePolishDayTime(availFromStr, eventStart, eventEnd)
 		if err != nil {
-			return 0, fmt.Errorf("row %d (%s): invalid '%s': %q", i+2, nickname, colAvailableFrom, availFromStr)
+			return 0, fmt.Errorf("row %d (%s): invalid '%s': %w", i+2, nickname, colAvailableFrom, err)
 		}
-		availTo, err := time.Parse("2006-01-02 15:04", availToStr)
+		availTo, err := parsePolishDayTime(availToStr, eventStart, eventEnd)
 		if err != nil {
-			return 0, fmt.Errorf("row %d (%s): invalid '%s': %q", i+2, nickname, colAvailableTo, availToStr)
+			return 0, fmt.Errorf("row %d (%s): invalid '%s': %w", i+2, nickname, colAvailableTo, err)
 		}
 
 		volunteers = append(volunteers, Volunteer{
