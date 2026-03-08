@@ -18,9 +18,10 @@ func GenerateSlots(schedule *Schedule) []Slot {
 
 	// Montage days: event_start to day before festival (Tue, Wed, Thu)
 	montageStart := schedule.EventStart
-	festivalDay := schedule.FestivalStart
+	// Compare dates only (strip time) to avoid midnight vs 10:00 issues
+	festivalDate := time.Date(schedule.FestivalStart.Year(), schedule.FestivalStart.Month(), schedule.FestivalStart.Day(), 0, 0, 0, 0, schedule.FestivalStart.Location())
 
-	for d := montageStart; d.Before(festivalDay); d = d.AddDate(0, 0, 1) {
+	for d := montageStart; d.Before(festivalDate); d = d.AddDate(0, 0, 1) {
 		dayStart := time.Date(d.Year(), d.Month(), d.Day(), 8, 0, 0, 0, d.Location())
 		dayEnd := time.Date(d.Year(), d.Month(), d.Day(), 20, 0, 0, 0, d.Location())
 		label := fmt.Sprintf("Montaż - %s", polishWeekday(d.Weekday()))
@@ -36,11 +37,21 @@ func GenerateSlots(schedule *Schedule) []Slot {
 	}
 
 	// Festival slots: 4h blocks from festival_start to festival_end
-	current := schedule.FestivalStart
-	for current.Before(schedule.FestivalEnd) {
+	// Default to 10:00 start / 20:00 end if times are midnight (missing hour info)
+	festivalStart := schedule.FestivalStart
+	if festivalStart.Hour() == 0 && festivalStart.Minute() == 0 {
+		festivalStart = time.Date(festivalStart.Year(), festivalStart.Month(), festivalStart.Day(), 10, 0, 0, 0, festivalStart.Location())
+	}
+	festivalEnd := schedule.FestivalEnd
+	if festivalEnd.Hour() == 0 && festivalEnd.Minute() == 0 {
+		festivalEnd = time.Date(festivalEnd.Year(), festivalEnd.Month(), festivalEnd.Day(), 20, 0, 0, 0, festivalEnd.Location())
+	}
+
+	current := festivalStart
+	for current.Before(festivalEnd) {
 		end := current.Add(time.Duration(defaultShiftHours) * time.Hour)
-		if end.After(schedule.FestivalEnd) {
-			end = schedule.FestivalEnd
+		if end.After(festivalEnd) {
+			end = festivalEnd
 		}
 
 		capacity := 2
