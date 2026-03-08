@@ -11,9 +11,9 @@ import (
 const (
 	colNickname      = "Pseudonim"
 	colCity          = "Miasto"
-	colHours         = "Godzin Dyżuru"
-	colAvailableFrom = "Dostępny od"
-	colAvailableTo   = "Dostępny do"
+	colHours         = "Godzin dyżuru"
+	colAvailableFrom = "Dostępność od"
+	colAvailableTo   = "Dostępność do"
 	colNotes         = "Uwagi"
 	colTags          = "Tagi"
 )
