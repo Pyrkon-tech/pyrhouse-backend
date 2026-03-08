@@ -156,7 +156,7 @@ func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (int, er
 		return 0, err
 	}
 
-	readRange := fmt.Sprintf("%s!A1:F999", req.SheetName)
+	readRange := fmt.Sprintf("%s!A1:Z999", req.SheetName)
 	rows, err := s.sheetsHandler.ReadSpreadsheet(req.SheetID, readRange)
 	if err != nil {
 		return 0, fmt.Errorf("failed to read sheet: %w", err)
@@ -166,36 +166,38 @@ func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (int, er
 		return 0, fmt.Errorf("sheet has no data rows (only header or empty)")
 	}
 
-	// Skip header row, parse data rows
+	cols, err := parseHeader(rows[0])
+	if err != nil {
+		return 0, fmt.Errorf("invalid sheet header: %w", err)
+	}
+
 	var volunteers []Volunteer
+	var skipped int
 	for i, row := range rows[1:] {
-		if len(row) < 5 {
-			continue // skip incomplete rows
-		}
-
-		nickname := cellStr(row, 0)
+		nickname := cellStr(row, cols.nickname)
 		if nickname == "" {
-			continue // skip empty rows
+			continue
 		}
 
-		city := cellStrPtr(row, 1)
-		hours := cellInt(row, 2, 14)
+		if shouldSkipByTag(row, cols.tags) {
+			skipped++
+			continue
+		}
 
-		availFromStr := cellStr(row, 3)
-		availToStr := cellStr(row, 4)
+		hours := cellInt(row, cols.hours, 14)
+		city := cellStrPtr(row, cols.city)
+		notes := cellStrPtr(row, cols.notes)
+
+		availFromStr := cellStr(row, cols.availableFrom)
+		availToStr := cellStr(row, cols.availableTo)
 
 		availFrom, err := time.Parse("2006-01-02 15:04", availFromStr)
 		if err != nil {
-			return 0, fmt.Errorf("row %d (%s): invalid 'Dostępny od': %q", i+2, nickname, availFromStr)
+			return 0, fmt.Errorf("row %d (%s): invalid '%s': %q", i+2, nickname, colAvailableFrom, availFromStr)
 		}
 		availTo, err := time.Parse("2006-01-02 15:04", availToStr)
 		if err != nil {
-			return 0, fmt.Errorf("row %d (%s): invalid 'Dostępny do': %q", i+2, nickname, availToStr)
-		}
-
-		var notes *string
-		if len(row) >= 6 {
-			notes = cellStrPtr(row, 5)
+			return 0, fmt.Errorf("row %d (%s): invalid '%s': %q", i+2, nickname, colAvailableTo, availToStr)
 		}
 
 		volunteers = append(volunteers, Volunteer{
@@ -208,6 +210,8 @@ func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (int, er
 			Notes:         notes,
 		})
 	}
+
+	_ = skipped
 
 	if len(volunteers) == 0 {
 		return 0, fmt.Errorf("no valid volunteer rows found in sheet")
