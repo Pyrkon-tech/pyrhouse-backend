@@ -24,6 +24,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/schedule/volunteers", security.Authorize("user"), h.getVolunteers)
 	router.PATCH("/schedule/volunteers/:vid", security.Authorize("moderator"), h.updateVolunteer)
 	router.POST("/schedule/generate", security.Authorize("moderator"), h.generate)
+	router.POST("/schedule/assignments", security.Authorize("moderator"), h.addAssignment)
 	router.DELETE("/schedule/assignments/:aid", security.Authorize("moderator"), h.deleteAssignment)
 	router.POST("/schedule/assignments/swap", security.Authorize("moderator"), h.swapAssignments)
 	router.GET("/schedule/validate", security.Authorize("user"), h.validate)
@@ -121,6 +122,22 @@ func (h *Handler) updateVolunteer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, volunteer)
+}
+
+func (h *Handler) addAssignment(c *gin.Context) {
+	var req AddAssignmentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		return
+	}
+
+	assignment, err := h.service.AddAssignment(req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add assignment", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, assignment)
 }
 
 func (h *Handler) deleteAssignment(c *gin.Context) {

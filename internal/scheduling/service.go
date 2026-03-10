@@ -312,6 +312,14 @@ func (s *Service) ValidateSchedule() (*ValidationResult, error) {
 	return Validate(slots, volunteers, assignments), nil
 }
 
+func (s *Service) AddAssignment(req AddAssignmentRequest) (*Assignment, error) {
+	assignment, err := s.repo.CreateAssignment(req.SlotID, req.VolunteerID)
+	if err != nil {
+		return nil, err
+	}
+	return assignment, nil
+}
+
 func (s *Service) DeleteAssignment(assignmentID int) error {
 	assignment, err := s.repo.GetAssignment(assignmentID)
 	if err != nil {

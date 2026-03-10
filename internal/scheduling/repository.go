@@ -183,6 +183,22 @@ func (r *Repository) GetAssignments(scheduleID int) ([]Assignment, error) {
 	return assignments, nil
 }
 
+func (r *Repository) CreateAssignment(slotID, volunteerID int) (*Assignment, error) {
+	var a Assignment
+	query := r.repo.GoquDBWrapper.Insert("schedule_assignments").Rows(goqu.Record{
+		"slot_id":      slotID,
+		"volunteer_id": volunteerID,
+	}).Returning("id", "slot_id", "volunteer_id")
+	found, err := query.Executor().ScanStruct(&a)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create assignment: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("failed to create assignment: no row returned")
+	}
+	return &a, nil
+}
+
 func (r *Repository) DeleteAssignment(id int) error {
 	_, err := r.repo.GoquDBWrapper.Delete("schedule_assignments").
 		Where(goqu.Ex{"id": id}).Executor().Exec()

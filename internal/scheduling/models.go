@@ -84,6 +84,11 @@ type UpdateVolunteerRequest struct {
 	UserID        *int    `json:"user_id"`
 }
 
+type AddAssignmentRequest struct {
+	VolunteerID int `json:"volunteer_id" binding:"required"`
+	SlotID      int `json:"slot_id" binding:"required"`
+}
+
 type SwapRequest struct {
 	AssignmentA int `json:"assignment_a" binding:"required"`
 	AssignmentB int `json:"assignment_b" binding:"required"`
