@@ -247,3 +247,188 @@ func (r *Repository) UpdateScheduleStatus(id int, status string) error {
 		Where(goqu.Ex{"id": id}).Executor().Exec()
 	return err
 }
+
+// Slot CRUD
+
+var slotReturning = []interface{}{"id", "schedule_id", "slot_type", "start_time", "end_time", "credit_hours", "capacity", "label"}
+
+func (r *Repository) CreateSlot(slot Slot) (*Slot, error) {
+	var s Slot
+	query := r.repo.GoquDBWrapper.Insert("schedule_slots").Rows(goqu.Record{
+		"schedule_id":  slot.ScheduleID,
+		"slot_type":    slot.SlotType,
+		"start_time":   slot.StartTime,
+		"end_time":     slot.EndTime,
+		"credit_hours": slot.CreditHours,
+		"capacity":     slot.Capacity,
+		"label":        slot.Label,
+	}).Returning(slotReturning...)
+	found, err := query.Executor().ScanStruct(&s)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create slot: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("failed to create slot: no row returned")
+	}
+	return &s, nil
+}
+
+func (r *Repository) GetSlot(id int) (*Slot, error) {
+	var s Slot
+	found, err := r.repo.GoquDBWrapper.From("schedule_slots").
+		Where(goqu.Ex{"id": id}).Executor().ScanStruct(&s)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get slot: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &s, nil
+}
+
+func (r *Repository) UpdateSlotByID(id int, updates map[string]interface{}) (*Slot, error) {
+	var s Slot
+	query := r.repo.GoquDBWrapper.Update("schedule_slots").
+		Set(updates).
+		Where(goqu.Ex{"id": id}).
+		Returning(slotReturning...)
+	found, err := query.Executor().ScanStruct(&s)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update slot: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &s, nil
+}
+
+func (r *Repository) DeleteSlotByID(id int) error {
+	_, err := r.repo.GoquDBWrapper.Delete("schedule_slots").
+		Where(goqu.Ex{"id": id}).Executor().Exec()
+	return err
+}
+
+// Transaction-aware methods for bulk draft save
+
+func (r *Repository) UpdateSlotTx(tx *goqu.TxDatabase, id int, record goqu.Record) error {
+	_, err := tx.Update("schedule_slots").
+		Set(record).
+		Where(goqu.Ex{"id": id}).Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update slot %d: %w", id, err)
+	}
+	return nil
+}
+
+func (r *Repository) InsertSlotTx(tx *goqu.TxDatabase, slot Slot) (*Slot, error) {
+	var s Slot
+	query := tx.Insert("schedule_slots").Rows(goqu.Record{
+		"schedule_id":  slot.ScheduleID,
+		"slot_type":    slot.SlotType,
+		"start_time":   slot.StartTime,
+		"end_time":     slot.EndTime,
+		"credit_hours": slot.CreditHours,
+		"capacity":     slot.Capacity,
+		"label":        slot.Label,
+	}).Returning(slotReturning...)
+	found, err := query.Executor().ScanStruct(&s)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert slot: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("failed to insert slot: no row returned")
+	}
+	return &s, nil
+}
+
+func (r *Repository) DeleteSlotsByIDsTx(tx *goqu.TxDatabase, ids []int) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	vals := make([]interface{}, len(ids))
+	for i, id := range ids {
+		vals[i] = id
+	}
+	_, err := tx.Delete("schedule_slots").
+		Where(goqu.C("id").In(vals...)).Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to delete slots: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) DeleteAssignmentsByScheduleTx(tx *goqu.TxDatabase, scheduleID int) error {
+	_, err := tx.Delete("schedule_assignments").
+		Where(
+			goqu.I("slot_id").In(
+				tx.From("schedule_slots").
+					Select("id").
+					Where(goqu.Ex{"schedule_id": scheduleID}),
+			),
+		).Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to delete assignments: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) InsertAssignmentsTx(tx *goqu.TxDatabase, assignments []Assignment) error {
+	if len(assignments) == 0 {
+		return nil
+	}
+	rows := make([]goqu.Record, len(assignments))
+	for i, a := range assignments {
+		rows[i] = goqu.Record{
+			"slot_id":      a.SlotID,
+			"volunteer_id": a.VolunteerID,
+		}
+	}
+	_, err := tx.Insert("schedule_assignments").Rows(rows).Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to insert assignments: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) RecalcVolunteerHoursTx(tx *goqu.TxDatabase, scheduleID int) error {
+	// Update assigned_hours for all volunteers in this schedule
+	// based on SUM of credit_hours from their assignments
+	sql := `
+		UPDATE schedule_volunteers sv
+		SET assigned_hours = COALESCE(sub.total, 0)
+		FROM (
+			SELECT a.volunteer_id, SUM(s.credit_hours) AS total
+			FROM schedule_assignments a
+			JOIN schedule_slots s ON s.id = a.slot_id
+			WHERE s.schedule_id = $1
+			GROUP BY a.volunteer_id
+		) sub
+		WHERE sv.id = sub.volunteer_id AND sv.schedule_id = $1
+	`
+	if _, err := tx.Exec(sql, scheduleID); err != nil {
+		return fmt.Errorf("failed to recalc volunteer hours: %w", err)
+	}
+
+	// Zero out volunteers with no assignments
+	sqlZero := `
+		UPDATE schedule_volunteers
+		SET assigned_hours = 0
+		WHERE schedule_id = $1
+		AND id NOT IN (
+			SELECT DISTINCT a.volunteer_id
+			FROM schedule_assignments a
+			JOIN schedule_slots s ON s.id = a.slot_id
+			WHERE s.schedule_id = $1
+		)
+	`
+	if _, err := tx.Exec(sqlZero, scheduleID); err != nil {
+		return fmt.Errorf("failed to zero volunteer hours: %w", err)
+	}
+
+	return nil
+}
+
+// DB returns the goqu database wrapper for transactions.
+func (r *Repository) DB() *goqu.Database {
+	return r.repo.GoquDBWrapper
+}

@@ -1,6 +1,7 @@
 package scheduling
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"warehouse/internal/security"
@@ -27,7 +28,12 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/schedule/assignments", security.Authorize("moderator"), h.addAssignment)
 	router.DELETE("/schedule/assignments/:aid", security.Authorize("moderator"), h.deleteAssignment)
 	router.POST("/schedule/assignments/swap", security.Authorize("moderator"), h.swapAssignments)
+	router.POST("/schedule/slots", security.Authorize("moderator"), h.createSlot)
+	router.PATCH("/schedule/slots/:sid", security.Authorize("moderator"), h.updateSlot)
+	router.DELETE("/schedule/slots/:sid", security.Authorize("moderator"), h.deleteSlot)
+	router.PUT("/schedule/draft", security.Authorize("moderator"), h.saveDraft)
 	router.GET("/schedule/validate", security.Authorize("user"), h.validate)
+	router.POST("/schedule/validate", security.Authorize("user"), h.validateDraft)
 	router.PATCH("/schedule/publish", security.Authorize("admin"), h.publish)
 	router.GET("/schedule/export", security.Authorize("moderator"), h.export)
 	router.POST("/schedule/export/sheets", security.Authorize("moderator"), h.exportToSheets)
@@ -219,6 +225,107 @@ func (h *Handler) importVolunteersFromSheet(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"imported": count})
+}
+
+func (h *Handler) handleServiceError(c *gin.Context, err error, msg string) {
+	if errors.Is(err, ErrSchedulePublished) {
+		c.JSON(http.StatusConflict, gin.H{"error": "Schedule is published"})
+		return
+	}
+	if err.Error() == "no active schedule" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No active schedule"})
+		return
+	}
+	if err.Error() == "slot not found" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Slot not found"})
+		return
+	}
+	c.JSON(http.StatusInternalServerError, gin.H{"error": msg, "details": err.Error()})
+}
+
+func (h *Handler) createSlot(c *gin.Context) {
+	var req CreateSlotRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		return
+	}
+
+	slot, err := h.service.CreateSlot(req)
+	if err != nil {
+		h.handleServiceError(c, err, "Failed to create slot")
+		return
+	}
+
+	c.JSON(http.StatusCreated, slot)
+}
+
+func (h *Handler) updateSlot(c *gin.Context) {
+	sid, err := strconv.Atoi(c.Param("sid"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid slot ID"})
+		return
+	}
+
+	var req UpdateSlotRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		return
+	}
+
+	slot, err := h.service.UpdateSlot(sid, req)
+	if err != nil {
+		h.handleServiceError(c, err, "Failed to update slot")
+		return
+	}
+
+	c.JSON(http.StatusOK, slot)
+}
+
+func (h *Handler) deleteSlot(c *gin.Context) {
+	sid, err := strconv.Atoi(c.Param("sid"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid slot ID"})
+		return
+	}
+
+	if err := h.service.DeleteSlot(sid); err != nil {
+		h.handleServiceError(c, err, "Failed to delete slot")
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) saveDraft(c *gin.Context) {
+	var req SaveDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		return
+	}
+
+	resp, err := h.service.SaveDraft(req)
+	if err != nil {
+		h.handleServiceError(c, err, "Failed to save draft")
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) validateDraft(c *gin.Context) {
+	var req SaveDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		return
+	}
+
+	result, err := h.service.ValidateDraft(req)
+	if err != nil {
+		h.handleServiceError(c, err, "Failed to validate draft")
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *Handler) exportToSheets(c *gin.Context) {

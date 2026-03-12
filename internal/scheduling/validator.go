@@ -2,6 +2,7 @@ package scheduling
 
 import (
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -21,7 +22,7 @@ func Validate(slots []Slot, volunteers []Volunteer, assignments []Assignment) *V
 	}
 
 	// Group assignments by volunteer and by slot
-	volAssignments := make(map[int][]int) // volunteer ID → slot IDs
+	volAssignments := make(map[int][]int)  // volunteer ID → slot IDs
 	slotAssignments := make(map[int][]int) // slot ID → volunteer IDs
 	for _, a := range assignments {
 		volAssignments[a.VolunteerID] = append(volAssignments[a.VolunteerID], a.SlotID)
@@ -48,43 +49,125 @@ func Validate(slots []Slot, volunteers []Volunteer, assignments []Assignment) *V
 		if totalHours < float64(v.TargetHours) {
 			result.Valid = false
 			result.Issues = append(result.Issues, ValidationIssue{
-				Type:      "under_hours",
-				Volunteer: v.Nickname,
-				Assigned:  int(totalHours),
-				Target:    v.TargetHours,
+				Type:        "under_hours",
+				Severity:    "warning",
+				Volunteer:   v.Nickname,
+				VolunteerID: &v.ID,
+				Assigned:    int(totalHours),
+				Target:      v.TargetHours,
+				Message:     fmt.Sprintf("%s ma za mało godzin (%d/%dh)", v.Nickname, int(totalHours), v.TargetHours),
+			})
+		}
+
+		// Over hours
+		if totalHours > 18 {
+			result.Issues = append(result.Issues, ValidationIssue{
+				Type:        "over_hours",
+				Severity:    "warning",
+				Volunteer:   v.Nickname,
+				VolunteerID: &v.ID,
+				Assigned:    int(totalHours),
+				Target:      v.TargetHours,
+				Message:     fmt.Sprintf("%s ma za dużo godzin (%dh)", v.Nickname, int(totalHours)),
 			})
 		}
 
 		// No festival shifts
 		if !hasFestival && len(slotIDs) > 0 {
 			result.Issues = append(result.Issues, ValidationIssue{
-				Type:      "no_festival_shifts",
-				Volunteer: v.Nickname,
+				Type:        "no_festival_shifts",
+				Severity:    "warning",
+				Volunteer:   v.Nickname,
+				VolunteerID: &v.ID,
+				Message:     fmt.Sprintf("%s nie ma żadnych dyżurów festiwalowych", v.Nickname),
 			})
 		}
 
-		// Check consecutive hours and break constraints
+		// Outside availability
+		for _, s := range assignedSlots {
+			if s.StartTime.Before(v.AvailableFrom) || s.EndTime.After(v.AvailableTo) {
+				label := slotLabel(s)
+				result.Issues = append(result.Issues, ValidationIssue{
+					Type:        "outside_availability",
+					Severity:    "warning",
+					Volunteer:   v.Nickname,
+					VolunteerID: &v.ID,
+					Slot:        label,
+					SlotID:      &s.ID,
+					Message:     fmt.Sprintf("%s przypisany poza dostępnością: %s", v.Nickname, label),
+				})
+			}
+		}
+
+		// Double-booked (overlapping slots for same volunteer)
+		checkDoubleBooked(assignedSlots, v, result)
+
+		// Consecutive hours and break constraints
 		checkContinuousAndBreaks(assignedSlots, v, result)
 	}
 
 	// Check slot staffing
 	for _, s := range slots {
 		assigned := len(slotAssignments[s.ID])
+		label := slotLabel(s)
+
 		if assigned < s.Capacity {
-			label := ""
-			if s.Label != nil {
-				label = *s.Label
-			}
 			result.Issues = append(result.Issues, ValidationIssue{
 				Type:     "slot_understaffed",
+				Severity: "warning",
 				Slot:     label,
+				SlotID:   &s.ID,
 				Assigned: assigned,
 				Capacity: s.Capacity,
+				Message:  fmt.Sprintf("Slot %s: %d/%d osób", label, assigned, s.Capacity),
+			})
+		}
+
+		if assigned > s.Capacity {
+			result.Issues = append(result.Issues, ValidationIssue{
+				Type:     "slot_overstaffed",
+				Severity: "warning",
+				Slot:     label,
+				SlotID:   &s.ID,
+				Assigned: assigned,
+				Capacity: s.Capacity,
+				Message:  fmt.Sprintf("Slot %s przeobsadzony: %d/%d osób", label, assigned, s.Capacity),
 			})
 		}
 	}
 
+	// Set Valid based on error-severity issues
+	for _, issue := range result.Issues {
+		if issue.Severity == "error" {
+			result.Valid = false
+			break
+		}
+	}
+
 	return result
+}
+
+func checkDoubleBooked(slots []Slot, v Volunteer, result *ValidationResult) {
+	for i := 0; i < len(slots); i++ {
+		for j := i + 1; j < len(slots); j++ {
+			a, b := slots[i], slots[j]
+			// Overlap: a starts before b ends AND b starts before a ends (excluding touching)
+			if a.StartTime.Before(b.EndTime) && b.StartTime.Before(a.EndTime) &&
+				!a.EndTime.Equal(b.StartTime) && !b.EndTime.Equal(a.StartTime) {
+				result.Valid = false
+				labelA := slotLabel(a)
+				labelB := slotLabel(b)
+				result.Issues = append(result.Issues, ValidationIssue{
+					Type:        "double_booked",
+					Severity:    "error",
+					Volunteer:   v.Nickname,
+					VolunteerID: &v.ID,
+					Slot:        fmt.Sprintf("%s / %s", labelA, labelB),
+					Message:     fmt.Sprintf("%s przypisany do nakładających się slotów: %s i %s", v.Nickname, labelA, labelB),
+				})
+			}
+		}
+	}
 }
 
 func checkContinuousAndBreaks(slots []Slot, v Volunteer, result *ValidationResult) {
@@ -92,16 +175,11 @@ func checkContinuousAndBreaks(slots []Slot, v Volunteer, result *ValidationResul
 		return
 	}
 
-	// Sort by start time
 	sorted := make([]Slot, len(slots))
 	copy(sorted, slots)
-	for i := 0; i < len(sorted)-1; i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[j].StartTime.Before(sorted[i].StartTime) {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].StartTime.Before(sorted[j].StartTime)
+	})
 
 	// Check consecutive hours (adjacent slots forming chains > 6h)
 	chainStart := 0
@@ -113,15 +191,14 @@ func checkContinuousAndBreaks(slots []Slot, v Volunteer, result *ValidationResul
 				chainHours += sorted[j].CreditHours
 			}
 			if chainHours > maxContinuousHours {
-				result.Valid = false
-				label := ""
-				if sorted[chainStart].Label != nil {
-					label = *sorted[chainStart].Label
-				}
+				label := slotLabel(sorted[chainStart])
 				result.Issues = append(result.Issues, ValidationIssue{
-					Type:      "consecutive_over_6h",
-					Volunteer: v.Nickname,
-					Slot:      fmt.Sprintf("%s+%d slots", label, i-chainStart+1),
+					Type:        "consecutive_over_6h",
+					Severity:    "warning",
+					Volunteer:   v.Nickname,
+					VolunteerID: &v.ID,
+					Slot:        fmt.Sprintf("%s+%d slots", label, i-chainStart+1),
+					Message:     fmt.Sprintf("%s: %.0fh ciągiem od %s", v.Nickname, chainHours, label),
 				})
 				chainStart = i
 			}
@@ -132,12 +209,22 @@ func checkContinuousAndBreaks(slots []Slot, v Volunteer, result *ValidationResul
 			gap := sorted[i].StartTime.Sub(sorted[i-1].EndTime)
 			if gap > 0 && gap < time.Duration(minBreakHours)*time.Hour {
 				result.Issues = append(result.Issues, ValidationIssue{
-					Type:      "insufficient_break",
-					Volunteer: v.Nickname,
-					Slot: fmt.Sprintf("%.0fh break between slots",
-						gap.Hours()),
+					Type:        "insufficient_break",
+					Severity:    "warning",
+					Volunteer:   v.Nickname,
+					VolunteerID: &v.ID,
+					Message:     fmt.Sprintf("%s: tylko %.0fh przerwy", v.Nickname, gap.Hours()),
 				})
 			}
 		}
 	}
+}
+
+func slotLabel(s Slot) string {
+	if s.Label != nil {
+		return *s.Label
+	}
+	return fmt.Sprintf("%s %s-%s", s.SlotType,
+		s.StartTime.Format("15:04"),
+		s.EndTime.Format("15:04"))
 }

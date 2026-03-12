@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"time"
 	"warehouse/internal/integrations/googlesheets"
+	"warehouse/internal/repository"
 	"warehouse/internal/settings"
+
+	"github.com/doug-martin/goqu/v9"
 )
 
 type Service struct {
@@ -16,6 +19,20 @@ type Service struct {
 
 func NewService(repo *Repository, sheetsHandler *googlesheets.GoogleSheetsHandler, settingsRepo *settings.Repository) *Service {
 	return &Service{repo: repo, sheetsHandler: sheetsHandler, settingsRepo: settingsRepo}
+}
+
+func (s *Service) publishedGuard(schedule *Schedule) error {
+	if schedule.Status == "published" {
+		return ErrSchedulePublished
+	}
+	return nil
+}
+
+func calculateCreditHours(slotType string, start, end time.Time) float64 {
+	if slotType == SlotTypeMontage || slotType == SlotTypeDemontage {
+		return 7
+	}
+	return end.Sub(start).Hours()
 }
 
 // getActive returns the active schedule or an error if none exists.
@@ -364,6 +381,27 @@ func (s *Service) PublishSchedule() error {
 	if err != nil {
 		return err
 	}
+
+	// Block publish if there are error-severity validation issues
+	slots, err := s.repo.GetSlots(schedule.ID)
+	if err != nil {
+		return err
+	}
+	volunteers, err := s.repo.GetVolunteers(schedule.ID)
+	if err != nil {
+		return err
+	}
+	assignments, err := s.repo.GetAssignments(schedule.ID)
+	if err != nil {
+		return err
+	}
+	result := Validate(slots, volunteers, assignments)
+	for _, issue := range result.Issues {
+		if issue.Severity == "error" {
+			return fmt.Errorf("cannot publish: schedule has validation errors")
+		}
+	}
+
 	return s.repo.UpdateScheduleStatus(schedule.ID, "published")
 }
 
@@ -476,4 +514,341 @@ func (s *Service) ExportCSV() (string, *Schedule, error) {
 
 	csv := ExportCSV(schedule, slots, volunteers, assignments)
 	return csv, schedule, nil
+}
+
+// Slot CRUD
+
+func (s *Service) CreateSlot(req CreateSlotRequest) (*Slot, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return nil, err
+	}
+	if err := s.publishedGuard(schedule); err != nil {
+		return nil, err
+	}
+
+	start, err := time.Parse(time.RFC3339, req.Start)
+	if err != nil {
+		return nil, fmt.Errorf("invalid start time: %w", err)
+	}
+	end, err := time.Parse(time.RFC3339, req.End)
+	if err != nil {
+		return nil, fmt.Errorf("invalid end time: %w", err)
+	}
+	if !end.After(start) {
+		return nil, fmt.Errorf("end must be after start")
+	}
+
+	creditHours := calculateCreditHours(req.Type, start, end)
+
+	slot := Slot{
+		ScheduleID:  schedule.ID,
+		SlotType:    req.Type,
+		StartTime:   start,
+		EndTime:     end,
+		CreditHours: creditHours,
+		Capacity:    req.Capacity,
+		Label:       req.Label,
+	}
+
+	return s.repo.CreateSlot(slot)
+}
+
+func (s *Service) UpdateSlot(slotID int, req UpdateSlotRequest) (*Slot, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return nil, err
+	}
+	if err := s.publishedGuard(schedule); err != nil {
+		return nil, err
+	}
+
+	existing, err := s.repo.GetSlot(slotID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("slot not found")
+	}
+
+	updates := make(map[string]interface{})
+
+	newStart := existing.StartTime
+	newEnd := existing.EndTime
+	newType := existing.SlotType
+
+	if req.Start != nil {
+		t, err := time.Parse(time.RFC3339, *req.Start)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start time: %w", err)
+		}
+		newStart = t
+		updates["start_time"] = t
+	}
+	if req.End != nil {
+		t, err := time.Parse(time.RFC3339, *req.End)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end time: %w", err)
+		}
+		newEnd = t
+		updates["end_time"] = t
+	}
+	if req.Type != nil {
+		newType = *req.Type
+		updates["slot_type"] = *req.Type
+	}
+	if req.Capacity != nil {
+		updates["capacity"] = *req.Capacity
+	}
+	if req.Label != nil {
+		updates["label"] = *req.Label
+	}
+
+	// Recalc credit_hours if time or type changed
+	if req.Start != nil || req.End != nil || req.Type != nil {
+		updates["credit_hours"] = calculateCreditHours(newType, newStart, newEnd)
+	}
+
+	if len(updates) == 0 {
+		return existing, nil
+	}
+
+	return s.repo.UpdateSlotByID(slotID, updates)
+}
+
+func (s *Service) DeleteSlot(slotID int) error {
+	schedule, err := s.getActive()
+	if err != nil {
+		return err
+	}
+	if err := s.publishedGuard(schedule); err != nil {
+		return err
+	}
+
+	existing, err := s.repo.GetSlot(slotID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return fmt.Errorf("slot not found")
+	}
+
+	return s.repo.DeleteSlotByID(slotID)
+}
+
+// SaveDraft performs a bulk save of the entire schedule state in a single transaction.
+func (s *Service) SaveDraft(req SaveDraftRequest) (*SaveDraftResponse, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return nil, err
+	}
+	if err := s.publishedGuard(schedule); err != nil {
+		return nil, err
+	}
+
+	var createdSlots []TempIDMapping
+
+	err = repository.WithTransaction(s.repo.DB(), func(tx *goqu.TxDatabase) error {
+		existingSlots, err := s.repo.GetSlots(schedule.ID)
+		if err != nil {
+			return err
+		}
+
+		existingIDs := make(map[int]bool)
+		for _, sl := range existingSlots {
+			existingIDs[sl.ID] = true
+		}
+
+		payloadIDs := make(map[int]bool)
+		tempIDMap := make(map[string]int)
+
+		// 1. Process slots: update existing, insert new
+		for _, ds := range req.Slots {
+			start, err := time.Parse(time.RFC3339, ds.Start)
+			if err != nil {
+				return fmt.Errorf("invalid start time: %w", err)
+			}
+			end, err := time.Parse(time.RFC3339, ds.End)
+			if err != nil {
+				return fmt.Errorf("invalid end time: %w", err)
+			}
+			creditHours := calculateCreditHours(ds.Type, start, end)
+
+			if ds.ID != nil {
+				// UPDATE existing slot
+				record := goqu.Record{
+					"slot_type":    ds.Type,
+					"start_time":   start,
+					"end_time":     end,
+					"credit_hours": creditHours,
+					"capacity":     ds.Capacity,
+					"label":        ds.Label,
+				}
+				if err := s.repo.UpdateSlotTx(tx, *ds.ID, record); err != nil {
+					return err
+				}
+				payloadIDs[*ds.ID] = true
+			} else {
+				// INSERT new slot
+				newSlot, err := s.repo.InsertSlotTx(tx, Slot{
+					ScheduleID:  schedule.ID,
+					SlotType:    ds.Type,
+					StartTime:   start,
+					EndTime:     end,
+					CreditHours: creditHours,
+					Capacity:    ds.Capacity,
+					Label:       ds.Label,
+				})
+				if err != nil {
+					return err
+				}
+				if ds.TempID != nil {
+					tempIDMap[*ds.TempID] = newSlot.ID
+					createdSlots = append(createdSlots, TempIDMapping{
+						TempID: *ds.TempID,
+						ID:     newSlot.ID,
+					})
+				}
+			}
+		}
+
+		// 2. Delete slots in DB but NOT in payload (CASCADE deletes assignments)
+		var toDelete []int
+		for id := range existingIDs {
+			if !payloadIDs[id] {
+				toDelete = append(toDelete, id)
+			}
+		}
+		if len(toDelete) > 0 {
+			if err := s.repo.DeleteSlotsByIDsTx(tx, toDelete); err != nil {
+				return err
+			}
+		}
+
+		// 3. Resolve assignments: replace temp_id with real id
+		var resolved []Assignment
+		for _, da := range req.Assignments {
+			var slotID int
+			if da.SlotTempID != nil {
+				realID, ok := tempIDMap[*da.SlotTempID]
+				if !ok {
+					return fmt.Errorf("unknown slot_temp_id: %s", *da.SlotTempID)
+				}
+				slotID = realID
+			} else if da.SlotID != nil {
+				slotID = *da.SlotID
+			} else {
+				return fmt.Errorf("assignment must have slot_id or slot_temp_id")
+			}
+			resolved = append(resolved, Assignment{
+				SlotID:      slotID,
+				VolunteerID: da.VolunteerID,
+			})
+		}
+
+		// 4. Replace all assignments
+		if err := s.repo.DeleteAssignmentsByScheduleTx(tx, schedule.ID); err != nil {
+			return err
+		}
+		if err := s.repo.InsertAssignmentsTx(tx, resolved); err != nil {
+			return err
+		}
+
+		// 5. Recalc volunteer hours
+		if err := s.repo.RecalcVolunteerHoursTx(tx, schedule.ID); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Build response (outside transaction)
+	detail, err := s.GetScheduleDetail()
+	if err != nil {
+		return nil, err
+	}
+
+	return &SaveDraftResponse{
+		Schedule:     *detail,
+		CreatedSlots: createdSlots,
+		Validation:   detail.Validation,
+	}, nil
+}
+
+// ValidateDraft validates a proposed schedule state without saving it.
+func (s *Service) ValidateDraft(req SaveDraftRequest) (*ValidationResult, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return nil, err
+	}
+
+	volunteers, err := s.repo.GetVolunteers(schedule.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build slots from draft data (in-memory, no DB)
+	var slots []Slot
+	tempIDCounter := -1
+	tempIDMap := make(map[string]int)
+
+	for _, ds := range req.Slots {
+		start, err := time.Parse(time.RFC3339, ds.Start)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start time: %w", err)
+		}
+		end, err := time.Parse(time.RFC3339, ds.End)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end time: %w", err)
+		}
+
+		slotID := 0
+		if ds.ID != nil {
+			slotID = *ds.ID
+		} else {
+			slotID = tempIDCounter
+			if ds.TempID != nil {
+				tempIDMap[*ds.TempID] = slotID
+			}
+			tempIDCounter--
+		}
+
+		slots = append(slots, Slot{
+			ID:          slotID,
+			ScheduleID:  schedule.ID,
+			SlotType:    ds.Type,
+			StartTime:   start,
+			EndTime:     end,
+			CreditHours: calculateCreditHours(ds.Type, start, end),
+			Capacity:    ds.Capacity,
+			Label:       ds.Label,
+		})
+	}
+
+	// Build assignments
+	var assignments []Assignment
+	for _, da := range req.Assignments {
+		var slotID int
+		if da.SlotTempID != nil {
+			realID, ok := tempIDMap[*da.SlotTempID]
+			if !ok {
+				return nil, fmt.Errorf("unknown slot_temp_id: %s", *da.SlotTempID)
+			}
+			slotID = realID
+		} else if da.SlotID != nil {
+			slotID = *da.SlotID
+		} else {
+			return nil, fmt.Errorf("assignment must have slot_id or slot_temp_id")
+		}
+		assignments = append(assignments, Assignment{
+			SlotID:      slotID,
+			VolunteerID: da.VolunteerID,
+		})
+	}
+
+	return Validate(slots, volunteers, assignments), nil
 }

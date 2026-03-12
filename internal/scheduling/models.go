@@ -1,6 +1,11 @@
 package scheduling
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrSchedulePublished = errors.New("schedule is published")
 
 // Database models
 
@@ -94,6 +99,54 @@ type SwapRequest struct {
 	AssignmentB int `json:"assignment_b" binding:"required"`
 }
 
+type CreateSlotRequest struct {
+	Type     string  `json:"type" binding:"required"`
+	Start    string  `json:"start" binding:"required"`
+	End      string  `json:"end" binding:"required"`
+	Capacity int     `json:"capacity" binding:"required,min=1"`
+	Label    *string `json:"label"`
+}
+
+type UpdateSlotRequest struct {
+	Type     *string `json:"type"`
+	Start    *string `json:"start"`
+	End      *string `json:"end"`
+	Capacity *int    `json:"capacity"`
+	Label    *string `json:"label"`
+}
+
+type DraftSlot struct {
+	ID       *int    `json:"id,omitempty"`
+	TempID   *string `json:"temp_id,omitempty"`
+	Type     string  `json:"type" binding:"required"`
+	Start    string  `json:"start" binding:"required"`
+	End      string  `json:"end" binding:"required"`
+	Capacity int     `json:"capacity" binding:"required,min=1"`
+	Label    *string `json:"label"`
+}
+
+type DraftAssignment struct {
+	VolunteerID int     `json:"volunteer_id" binding:"required"`
+	SlotID      *int    `json:"slot_id,omitempty"`
+	SlotTempID  *string `json:"slot_temp_id,omitempty"`
+}
+
+type SaveDraftRequest struct {
+	Slots       []DraftSlot       `json:"slots"`
+	Assignments []DraftAssignment `json:"assignments"`
+}
+
+type SaveDraftResponse struct {
+	Schedule     ScheduleDetail  `json:"schedule"`
+	CreatedSlots []TempIDMapping `json:"created_slots"`
+	Validation   *ValidationResult `json:"validation"`
+}
+
+type TempIDMapping struct {
+	TempID string `json:"temp_id"`
+	ID     int    `json:"id"`
+}
+
 // API response types
 
 type SlotWithVolunteers struct {
@@ -119,12 +172,16 @@ type ScheduleDetail struct {
 }
 
 type ValidationIssue struct {
-	Type      string `json:"type"`
-	Volunteer string `json:"volunteer,omitempty"`
-	Slot      string `json:"slot,omitempty"`
-	Assigned  int    `json:"assigned,omitempty"`
-	Target    int    `json:"target,omitempty"`
-	Capacity  int    `json:"capacity,omitempty"`
+	Type        string `json:"type"`
+	Severity    string `json:"severity"`
+	Volunteer   string `json:"volunteer,omitempty"`
+	VolunteerID *int   `json:"volunteer_id,omitempty"`
+	Slot        string `json:"slot,omitempty"`
+	SlotID      *int   `json:"slot_id,omitempty"`
+	Assigned    int    `json:"assigned,omitempty"`
+	Target      int    `json:"target,omitempty"`
+	Capacity    int    `json:"capacity,omitempty"`
+	Message     string `json:"message"`
 }
 
 type ValidationResult struct {
