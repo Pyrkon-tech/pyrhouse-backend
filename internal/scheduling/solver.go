@@ -36,53 +36,80 @@ func GenerateSlots(schedule *Schedule) []Slot {
 		})
 	}
 
-	// Festival slots: 4h blocks from festival_start to festival_end
-	// Default to 10:00 start / 20:00 end if times are midnight (missing hour info)
+	// Festival slots: 4h blocks, day by day within operating hours only
 	festivalStart := schedule.FestivalStart
-	if festivalStart.Hour() == 0 && festivalStart.Minute() == 0 {
-		festivalStart = time.Date(festivalStart.Year(), festivalStart.Month(), festivalStart.Day(), 10, 0, 0, 0, festivalStart.Location())
-	}
 	festivalEnd := schedule.FestivalEnd
-	if festivalEnd.Hour() == 0 && festivalEnd.Minute() == 0 {
-		festivalEnd = time.Date(festivalEnd.Year(), festivalEnd.Month(), festivalEnd.Day(), 20, 0, 0, 0, festivalEnd.Location())
+
+	// Extract daily operating hours from festival start/end times
+	dailyStartHour := festivalStart.Hour()
+	if dailyStartHour == 0 {
+		dailyStartHour = 10 // default 10:00 if midnight
+	}
+	dailyEndHour := festivalEnd.Hour()
+	if dailyEndHour == 0 {
+		dailyEndHour = 20 // default 20:00 if midnight
 	}
 
-	current := festivalStart
-	for current.Before(festivalEnd) {
-		end := current.Add(time.Duration(defaultShiftHours) * time.Hour)
-		if end.After(festivalEnd) {
-			end = festivalEnd
+	// Iterate day by day from festival start date to festival end date
+	startDate := time.Date(festivalStart.Year(), festivalStart.Month(), festivalStart.Day(), 0, 0, 0, 0, festivalStart.Location())
+	endDate := time.Date(festivalEnd.Year(), festivalEnd.Month(), festivalEnd.Day(), 0, 0, 0, 0, festivalEnd.Location())
+
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		dayStart := time.Date(d.Year(), d.Month(), d.Day(), dailyStartHour, 0, 0, 0, d.Location())
+		dayEnd := time.Date(d.Year(), d.Month(), d.Day(), dailyEndHour, 0, 0, 0, d.Location())
+
+		// Clamp to actual festival boundaries
+		if dayStart.Before(festivalStart) {
+			dayStart = festivalStart
+		}
+		if dayEnd.After(festivalEnd) {
+			dayEnd = festivalEnd
+		}
+		if !dayStart.Before(dayEnd) {
+			continue
 		}
 
-		capacity := 2
-		hour := current.Hour()
-		weekday := current.Weekday()
+		current := dayStart
+		for current.Before(dayEnd) {
+			end := current.Add(time.Duration(defaultShiftHours) * time.Hour)
+			if end.After(dayEnd) {
+				end = dayEnd
+			}
+			// Skip tiny leftover slots (< 1h)
+			if end.Sub(current) < time.Hour {
+				break
+			}
 
-		// Higher capacity for opening, peak, and pre-demontage
-		if weekday == time.Friday && hour >= 10 && hour < 14 {
-			capacity = 4
+			capacity := 2
+			hour := current.Hour()
+			weekday := current.Weekday()
+
+			// Higher capacity for opening, peak, and pre-demontage
+			if weekday == time.Friday && hour >= 10 && hour < 14 {
+				capacity = 4
+			}
+			if weekday == time.Saturday && hour >= 12 && hour < 14 {
+				capacity = 3
+			}
+			if weekday == time.Sunday && hour >= 16 {
+				capacity = 4
+			}
+
+			label := formatSlotLabel(current, end)
+			creditHours := end.Sub(current).Hours()
+
+			slots = append(slots, Slot{
+				ScheduleID:  schedule.ID,
+				SlotType:    SlotTypeFestival,
+				StartTime:   current,
+				EndTime:     end,
+				CreditHours: creditHours,
+				Capacity:    capacity,
+				Label:       &label,
+			})
+
+			current = end
 		}
-		if weekday == time.Saturday && hour >= 12 && hour < 14 {
-			capacity = 3
-		}
-		if weekday == time.Sunday && hour >= 16 {
-			capacity = 4
-		}
-
-		label := formatSlotLabel(current, end)
-		creditHours := end.Sub(current).Hours()
-
-		slots = append(slots, Slot{
-			ScheduleID:  schedule.ID,
-			SlotType:    SlotTypeFestival,
-			StartTime:   current,
-			EndTime:     end,
-			CreditHours: creditHours,
-			Capacity:    capacity,
-			Label:       &label,
-		})
-
-		current = end
 	}
 
 	// Demontage: Monday (day after festival_end or event_end)
@@ -177,7 +204,7 @@ func assignToSlot(slot Slot, slotIdx int, volunteers []Volunteer, state map[int]
 			continue
 		}
 
-		if !canAssign(v, slot, vs, allSlots) {
+		if !canAssign(v, slot, slotIdx, vs, allSlots) {
 			continue
 		}
 
@@ -192,15 +219,15 @@ func assignToSlot(slot Slot, slotIdx int, volunteers []Volunteer, state map[int]
 	return assignments
 }
 
-func canAssign(v Volunteer, slot Slot, vs *volState, allSlots []Slot) bool {
+func canAssign(v Volunteer, slot Slot, slotIdx int, vs *volState, allSlots []Slot) bool {
 	// Check availability window
 	if slot.StartTime.Before(v.AvailableFrom) || slot.EndTime.After(v.AvailableTo) {
 		return false
 	}
 
-	// Check not already in this slot
+	// Check not already in this slot (compare by index, not ID, since ID=0 for generated slots)
 	for _, si := range vs.assignedSlots {
-		if allSlots[si].ID == slot.ID {
+		if si == slotIdx {
 			return false
 		}
 	}
