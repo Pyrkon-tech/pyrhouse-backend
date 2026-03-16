@@ -2,6 +2,7 @@ package scheduling
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 )
@@ -13,7 +14,8 @@ const (
 )
 
 // GenerateSlots creates time slots from schedule dates.
-func GenerateSlots(schedule *Schedule) []Slot {
+// volunteerCount is used to calculate dynamic festival capacity.
+func GenerateSlots(schedule *Schedule, volunteerCount int) []Slot {
 	var slots []Slot
 
 	// Montage days: event_start to day before festival (Tue, Wed, Thu)
@@ -36,80 +38,46 @@ func GenerateSlots(schedule *Schedule) []Slot {
 		})
 	}
 
-	// Festival slots: 4h blocks, day by day within operating hours only
+	// Festival slots: continuous 4h blocks from festival_start to festival_end (24/7 operation)
 	festivalStart := schedule.FestivalStart
 	festivalEnd := schedule.FestivalEnd
 
-	// Extract daily operating hours from festival start/end times
-	dailyStartHour := festivalStart.Hour()
-	if dailyStartHour == 0 {
-		dailyStartHour = 10 // default 10:00 if midnight
-	}
-	dailyEndHour := festivalEnd.Hour()
-	if dailyEndHour == 0 {
-		dailyEndHour = 20 // default 20:00 if midnight
-	}
+	// Calculate dynamic capacity based on volunteer count
+	festivalHours := festivalEnd.Sub(festivalStart).Hours()
+	numFestivalSlots := int(math.Ceil(festivalHours / float64(defaultShiftHours)))
+	dayCapacity, nightCapacity := calcFestivalCapacity(volunteerCount, numFestivalSlots)
 
-	// Iterate day by day from festival start date to festival end date
-	startDate := time.Date(festivalStart.Year(), festivalStart.Month(), festivalStart.Day(), 0, 0, 0, 0, festivalStart.Location())
-	endDate := time.Date(festivalEnd.Year(), festivalEnd.Month(), festivalEnd.Day(), 0, 0, 0, 0, festivalEnd.Location())
-
-	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
-		dayStart := time.Date(d.Year(), d.Month(), d.Day(), dailyStartHour, 0, 0, 0, d.Location())
-		dayEnd := time.Date(d.Year(), d.Month(), d.Day(), dailyEndHour, 0, 0, 0, d.Location())
-
-		// Clamp to actual festival boundaries
-		if dayStart.Before(festivalStart) {
-			dayStart = festivalStart
+	current := festivalStart
+	for current.Before(festivalEnd) {
+		end := current.Add(time.Duration(defaultShiftHours) * time.Hour)
+		if end.After(festivalEnd) {
+			end = festivalEnd
 		}
-		if dayEnd.After(festivalEnd) {
-			dayEnd = festivalEnd
-		}
-		if !dayStart.Before(dayEnd) {
-			continue
+		// Skip tiny leftover slots (< 1h)
+		if end.Sub(current) < time.Hour {
+			break
 		}
 
-		current := dayStart
-		for current.Before(dayEnd) {
-			end := current.Add(time.Duration(defaultShiftHours) * time.Hour)
-			if end.After(dayEnd) {
-				end = dayEnd
-			}
-			// Skip tiny leftover slots (< 1h)
-			if end.Sub(current) < time.Hour {
-				break
-			}
-
-			capacity := 2
-			hour := current.Hour()
-			weekday := current.Weekday()
-
-			// Higher capacity for opening, peak, and pre-demontage
-			if weekday == time.Friday && hour >= 10 && hour < 14 {
-				capacity = 4
-			}
-			if weekday == time.Saturday && hour >= 12 && hour < 14 {
-				capacity = 3
-			}
-			if weekday == time.Sunday && hour >= 16 {
-				capacity = 4
-			}
-
-			label := formatSlotLabel(current, end)
-			creditHours := end.Sub(current).Hours()
-
-			slots = append(slots, Slot{
-				ScheduleID:  schedule.ID,
-				SlotType:    SlotTypeFestival,
-				StartTime:   current,
-				EndTime:     end,
-				CreditHours: creditHours,
-				Capacity:    capacity,
-				Label:       &label,
-			})
-
-			current = end
+		hour := current.Hour()
+		capacity := dayCapacity
+		if hour >= 22 || hour < 6 {
+			capacity = nightCapacity
 		}
+
+		label := formatSlotLabel(current, end)
+		creditHours := end.Sub(current).Hours()
+
+		slots = append(slots, Slot{
+			ScheduleID:  schedule.ID,
+			SlotType:    SlotTypeFestival,
+			StartTime:   current,
+			EndTime:     end,
+			CreditHours: creditHours,
+			Capacity:    capacity,
+			Label:       &label,
+		})
+
+		current = end
 	}
 
 	// Demontage: Monday (day after festival_end or event_end)
@@ -128,6 +96,31 @@ func GenerateSlots(schedule *Schedule) []Slot {
 	})
 
 	return slots
+}
+
+// calcFestivalCapacity calculates day and night capacity for festival slots
+// based on volunteer count and number of slots.
+func calcFestivalCapacity(volunteerCount, numSlots int) (dayCapacity, nightCapacity int) {
+	if numSlots == 0 {
+		return 2, 2
+	}
+	// Avg capacity = volunteers * avgTargetHours / totalFestivalSlotHours
+	// Assume ~60% of target hours go to festival (rest to montage/demontage)
+	festivalVolHours := float64(volunteerCount) * 14 * 0.6
+	avgCapacity := festivalVolHours / (float64(numSlots) * float64(defaultShiftHours))
+
+	dayCapacity = int(math.Ceil(avgCapacity))
+	if dayCapacity < 2 {
+		dayCapacity = 2
+	}
+
+	// Night capacity: half of day, minimum 2
+	nightCapacity = int(math.Ceil(float64(dayCapacity) * 0.5))
+	if nightCapacity < 2 {
+		nightCapacity = 2
+	}
+
+	return dayCapacity, nightCapacity
 }
 
 type volState struct {
@@ -221,8 +214,16 @@ func assignToSlot(slot Slot, slotIdx int, volunteers []Volunteer, state map[int]
 
 func canAssign(v Volunteer, slot Slot, slotIdx int, vs *volState, allSlots []Slot) bool {
 	// Check availability window
-	if slot.StartTime.Before(v.AvailableFrom) || slot.EndTime.After(v.AvailableTo) {
-		return false
+	if slot.SlotType == SlotTypeMontage || slot.SlotType == SlotTypeDemontage {
+		// Montage/demontage: "show up when you can" — overlap is enough
+		if v.AvailableFrom.After(slot.EndTime) || v.AvailableTo.Before(slot.StartTime) {
+			return false
+		}
+	} else {
+		// Festival: strict containment — volunteer must cover the entire shift
+		if slot.StartTime.Before(v.AvailableFrom) || slot.EndTime.After(v.AvailableTo) {
+			return false
+		}
 	}
 
 	// Check not already in this slot (compare by index, not ID, since ID=0 for generated slots)
@@ -233,16 +234,18 @@ func canAssign(v Volunteer, slot Slot, slotIdx int, vs *volState, allSlots []Slo
 	}
 
 	// Check max continuous hours (no more than 6h in a row)
-	continuousHours := slot.CreditHours
-	for _, si := range vs.assignedSlots {
-		assigned := allSlots[si]
-		// Check if adjacent (slots touch or overlap)
-		if assigned.EndTime.Equal(slot.StartTime) || slot.EndTime.Equal(assigned.StartTime) {
-			continuousHours += assigned.CreditHours
+	// Skip for montage/demontage — they are all-day shifts with informal breaks
+	if slot.SlotType == SlotTypeFestival {
+		continuousHours := slot.CreditHours
+		for _, si := range vs.assignedSlots {
+			assigned := allSlots[si]
+			if assigned.EndTime.Equal(slot.StartTime) || slot.EndTime.Equal(assigned.StartTime) {
+				continuousHours += assigned.CreditHours
+			}
 		}
-	}
-	if continuousHours > maxContinuousHours {
-		return false
+		if continuousHours > maxContinuousHours {
+			return false
+		}
 	}
 
 	// Check min break (8h between non-adjacent shifts)

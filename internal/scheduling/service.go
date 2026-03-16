@@ -260,20 +260,18 @@ func (s *Service) Generate() (*ScheduleDetail, error) {
 		return nil, fmt.Errorf("failed to clear slots: %w", err)
 	}
 
-	// Generate slots
-	slots := GenerateSlots(schedule)
+	// Generate slots (pass volunteer count for dynamic capacity)
+	volunteers, err := s.repo.GetVolunteers(id)
+	if err != nil {
+		return nil, err
+	}
+	slots := GenerateSlots(schedule, len(volunteers))
 	if err := s.repo.InsertSlots(slots); err != nil {
 		return nil, fmt.Errorf("failed to insert slots: %w", err)
 	}
 
 	// Re-read slots (to get IDs)
 	slots, err = s.repo.GetSlots(id)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get volunteers
-	volunteers, err := s.repo.GetVolunteers(id)
 	if err != nil {
 		return nil, err
 	}
