@@ -6,6 +6,7 @@ import (
 )
 
 var ErrSchedulePublished = errors.New("schedule is published")
+var ErrVersionConflict = errors.New("version conflict")
 
 // Database models
 
@@ -17,6 +18,7 @@ type Schedule struct {
 	FestivalStart time.Time `json:"festival_start" db:"festival_start"`
 	FestivalEnd   time.Time `json:"festival_end" db:"festival_end"`
 	Status        string    `json:"status" db:"status"`
+	Version       int       `json:"version" db:"version"`
 	CreatedAt     time.Time `json:"created_at" db:"created_at"`
 }
 
@@ -94,16 +96,25 @@ type AddAssignmentRequest struct {
 	SlotID      int `json:"slot_id" binding:"required"`
 }
 
+type MoveAssignmentRequest struct {
+	AssignmentID int `json:"assignment_id" binding:"required"`
+	ToSlotID     int `json:"to_slot_id" binding:"required"`
+}
+
 type SwapRequest struct {
 	AssignmentA int `json:"assignment_a" binding:"required"`
 	AssignmentB int `json:"assignment_b" binding:"required"`
+}
+
+type ChangeStatusRequest struct {
+	Status string `json:"status" binding:"required,oneof=draft published"`
 }
 
 type CreateSlotRequest struct {
 	Type     string  `json:"type" binding:"required"`
 	Start    string  `json:"start" binding:"required"`
 	End      string  `json:"end" binding:"required"`
-	Capacity int     `json:"capacity" binding:"required,min=1"`
+	Capacity int     `json:"capacity"`
 	Label    *string `json:"label"`
 }
 
@@ -121,7 +132,7 @@ type DraftSlot struct {
 	Type     string  `json:"type" binding:"required"`
 	Start    string  `json:"start" binding:"required"`
 	End      string  `json:"end" binding:"required"`
-	Capacity int     `json:"capacity" binding:"required,min=1"`
+	Capacity int     `json:"capacity"`
 	Label    *string `json:"label"`
 }
 
@@ -132,6 +143,7 @@ type DraftAssignment struct {
 }
 
 type SaveDraftRequest struct {
+	Version     int               `json:"version"`
 	Slots       []DraftSlot       `json:"slots"`
 	Assignments []DraftAssignment `json:"assignments"`
 }
@@ -149,14 +161,17 @@ type TempIDMapping struct {
 
 // API response types
 
-type SlotWithVolunteers struct {
-	Slot
-	Volunteers []VolunteerBrief `json:"volunteers"`
+// SlotVolunteer represents a volunteer assigned to a slot.
+// ID is the assignment ID (used for DELETE and move/swap operations).
+type SlotVolunteer struct {
+	ID          int    `json:"id"`           // assignment_id
+	VolunteerID int    `json:"volunteer_id"`
+	Nickname    string `json:"nickname"`
 }
 
-type VolunteerBrief struct {
-	ID       int    `json:"id"`
-	Nickname string `json:"nickname"`
+type SlotWithVolunteers struct {
+	Slot
+	Volunteers []SlotVolunteer `json:"volunteers"`
 }
 
 type VolunteerWithSlots struct {
@@ -169,6 +184,36 @@ type ScheduleDetail struct {
 	Slots      []SlotWithVolunteers `json:"slots"`
 	Volunteers []VolunteerWithSlots `json:"volunteers"`
 	Validation *ValidationResult    `json:"validation"`
+}
+
+type AssignmentDetail struct {
+	ID          int    `json:"id"`
+	SlotID      int    `json:"slot_id"`
+	VolunteerID int    `json:"volunteer_id"`
+	Nickname    string `json:"nickname"`
+}
+
+type SwapResponse struct {
+	AssignmentA AssignmentDetail `json:"assignment_a"`
+	AssignmentB AssignmentDetail `json:"assignment_b"`
+}
+
+type MoveResponse struct {
+	DeletedAssignmentID int              `json:"deleted_assignment_id"`
+	CreatedAssignment   AssignmentDetail `json:"created_assignment"`
+}
+
+type ImportResult struct {
+	Imported int `json:"imported"`
+	Updated  int `json:"updated"`
+	Skipped  int `json:"skipped"`
+}
+
+type ImportSheetResult struct {
+	Imported int      `json:"imported"`
+	Updated  int      `json:"updated"`
+	Skipped  int      `json:"skipped"`
+	Errors   []string `json:"errors"`
 }
 
 type ValidationIssue struct {

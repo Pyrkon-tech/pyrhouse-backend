@@ -15,6 +15,11 @@ func NewRepository(repo *repository.Repository) *Repository {
 	return &Repository{repo: repo}
 }
 
+var scheduleReturning = []interface{}{
+	"id", "name", "event_start", "event_end", "festival_start", "festival_end",
+	"status", "version", "created_at",
+}
+
 func (r *Repository) CreateSchedule(req CreateScheduleRequest) (*Schedule, error) {
 	var schedule Schedule
 	query := r.repo.GoquDBWrapper.Insert("schedules").Rows(goqu.Record{
@@ -24,7 +29,8 @@ func (r *Repository) CreateSchedule(req CreateScheduleRequest) (*Schedule, error
 		"festival_start": req.FestivalStart,
 		"festival_end":   req.FestivalEnd,
 		"status":         "active",
-	}).Returning("id", "name", "event_start", "event_end", "festival_start", "festival_end", "status", "created_at")
+		"version":        1,
+	}).Returning(scheduleReturning...)
 
 	if _, err := query.Executor().ScanStruct(&schedule); err != nil {
 		return nil, fmt.Errorf("failed to create schedule: %w", err)
@@ -66,6 +72,59 @@ func (r *Repository) ArchiveAllSchedules() error {
 		Set(goqu.Record{"status": "archived"}).
 		Where(goqu.Ex{"status": "active"}).Executor().Exec()
 	return err
+}
+
+// UpdateScheduleStatus updates status and bumps version atomically.
+// Returns the updated schedule.
+func (r *Repository) UpdateScheduleStatus(id int, status string) (*Schedule, error) {
+	var s Schedule
+	query := r.repo.GoquDBWrapper.Update("schedules").
+		Set(goqu.Record{
+			"status":  status,
+			"version": goqu.L("version + 1"),
+		}).
+		Where(goqu.Ex{"id": id}).
+		Returning(scheduleReturning...)
+	found, err := query.Executor().ScanStruct(&s)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update schedule status: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("schedule not found")
+	}
+	return &s, nil
+}
+
+// IncrementVersion bumps version inside an existing transaction and returns new version.
+func (r *Repository) IncrementVersionTx(tx *goqu.TxDatabase, scheduleID int) (int, error) {
+	var s Schedule
+	query := tx.Update("schedules").
+		Set(goqu.Record{"version": goqu.L("version + 1")}).
+		Where(goqu.Ex{"id": scheduleID}).
+		Returning("version")
+	found, err := query.Executor().ScanStruct(&s)
+	if err != nil {
+		return 0, fmt.Errorf("failed to increment version: %w", err)
+	}
+	if !found {
+		return 0, fmt.Errorf("schedule not found")
+	}
+	return s.Version, nil
+}
+
+// BumpVersionIfMatchTx atomically increments version only if current version matches expected.
+// Returns (true, newVersion) on success, (false, 0) on version conflict.
+func (r *Repository) BumpVersionIfMatchTx(tx *goqu.TxDatabase, scheduleID, expectedVersion int) (bool, int, error) {
+	var s Schedule
+	query := tx.Update("schedules").
+		Set(goqu.Record{"version": goqu.L("version + 1")}).
+		Where(goqu.Ex{"id": scheduleID, "version": expectedVersion}).
+		Returning("version")
+	found, err := query.Executor().ScanStruct(&s)
+	if err != nil {
+		return false, 0, fmt.Errorf("failed to bump version: %w", err)
+	}
+	return found, s.Version, nil
 }
 
 func (r *Repository) InsertVolunteers(scheduleID int, volunteers []Volunteer) error {
@@ -118,6 +177,30 @@ func (r *Repository) InsertSlots(slots []Slot) error {
 		return fmt.Errorf("failed to insert slots: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) InsertSlotsReturning(slots []Slot) ([]Slot, error) {
+	if len(slots) == 0 {
+		return nil, nil
+	}
+	rows := make([]goqu.Record, len(slots))
+	for i, s := range slots {
+		rows[i] = goqu.Record{
+			"schedule_id":  s.ScheduleID,
+			"slot_type":    s.SlotType,
+			"start_time":   s.StartTime,
+			"end_time":     s.EndTime,
+			"credit_hours": s.CreditHours,
+			"capacity":     s.Capacity,
+			"label":        s.Label,
+		}
+	}
+	var result []Slot
+	query := r.repo.GoquDBWrapper.Insert("schedule_slots").Rows(rows).Returning(slotReturning...)
+	if err := query.Executor().ScanStructs(&result); err != nil {
+		return nil, fmt.Errorf("failed to insert slots: %w", err)
+	}
+	return result, nil
 }
 
 func (r *Repository) GetSlots(scheduleID int) ([]Slot, error) {
@@ -183,6 +266,39 @@ func (r *Repository) GetAssignments(scheduleID int) ([]Assignment, error) {
 	return assignments, nil
 }
 
+// GetAssignmentsWithNicknames returns assignments enriched with volunteer nicknames.
+type AssignmentRow struct {
+	ID          int    `db:"id"`
+	SlotID      int    `db:"slot_id"`
+	VolunteerID int    `db:"volunteer_id"`
+	Nickname    string `db:"nickname"`
+}
+
+func (r *Repository) GetAssignmentsWithNicknames(scheduleID int) ([]AssignmentRow, error) {
+	var rows []AssignmentRow
+	query := r.repo.GoquDBWrapper.
+		Select(
+			goqu.I("a.id"),
+			goqu.I("a.slot_id"),
+			goqu.I("a.volunteer_id"),
+			goqu.I("v.nickname"),
+		).
+		From(goqu.T("schedule_assignments").As("a")).
+		InnerJoin(
+			goqu.T("schedule_slots").As("s"),
+			goqu.On(goqu.Ex{"a.slot_id": goqu.I("s.id")}),
+		).
+		InnerJoin(
+			goqu.T("schedule_volunteers").As("v"),
+			goqu.On(goqu.Ex{"a.volunteer_id": goqu.I("v.id")}),
+		).
+		Where(goqu.Ex{"s.schedule_id": scheduleID})
+	if err := query.Executor().ScanStructs(&rows); err != nil {
+		return nil, fmt.Errorf("failed to get assignments with nicknames: %w", err)
+	}
+	return rows, nil
+}
+
 func (r *Repository) CreateAssignment(slotID, volunteerID int) (*Assignment, error) {
 	var a Assignment
 	query := r.repo.GoquDBWrapper.Insert("schedule_assignments").Rows(goqu.Record{
@@ -191,7 +307,23 @@ func (r *Repository) CreateAssignment(slotID, volunteerID int) (*Assignment, err
 	}).Returning("id", "slot_id", "volunteer_id")
 	found, err := query.Executor().ScanStruct(&a)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create assignment: %w", err)
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("failed to create assignment: no row returned")
+	}
+	return &a, nil
+}
+
+func (r *Repository) CreateAssignmentTx(tx *goqu.TxDatabase, slotID, volunteerID int) (*Assignment, error) {
+	var a Assignment
+	query := tx.Insert("schedule_assignments").Rows(goqu.Record{
+		"slot_id":      slotID,
+		"volunteer_id": volunteerID,
+	}).Returning("id", "slot_id", "volunteer_id")
+	found, err := query.Executor().ScanStruct(&a)
+	if err != nil {
+		return nil, err
 	}
 	if !found {
 		return nil, fmt.Errorf("failed to create assignment: no row returned")
@@ -205,6 +337,21 @@ func (r *Repository) DeleteAssignment(id int) error {
 	return err
 }
 
+func (r *Repository) DeleteAssignmentTx(tx *goqu.TxDatabase, id int) error {
+	_, err := tx.Delete("schedule_assignments").
+		Where(goqu.Ex{"id": id}).Executor().Exec()
+	return err
+}
+
+func (r *Repository) AssignmentExists(id int) (bool, error) {
+	count, err := r.repo.GoquDBWrapper.From("schedule_assignments").
+		Where(goqu.Ex{"id": id}).Count()
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *Repository) GetAssignment(id int) (*Assignment, error) {
 	var a Assignment
 	query := r.repo.GoquDBWrapper.From("schedule_assignments").Where(goqu.Ex{"id": id})
@@ -216,6 +363,31 @@ func (r *Repository) GetAssignment(id int) (*Assignment, error) {
 		return nil, nil
 	}
 	return &a, nil
+}
+
+func (r *Repository) GetAssignmentWithNickname(id int) (*AssignmentRow, error) {
+	var row AssignmentRow
+	query := r.repo.GoquDBWrapper.
+		Select(
+			goqu.I("a.id"),
+			goqu.I("a.slot_id"),
+			goqu.I("a.volunteer_id"),
+			goqu.I("v.nickname"),
+		).
+		From(goqu.T("schedule_assignments").As("a")).
+		InnerJoin(
+			goqu.T("schedule_volunteers").As("v"),
+			goqu.On(goqu.Ex{"a.volunteer_id": goqu.I("v.id")}),
+		).
+		Where(goqu.Ex{"a.id": id})
+	found, err := query.Executor().ScanStruct(&row)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get assignment: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &row, nil
 }
 
 func (r *Repository) UpdateVolunteer(id int, updates map[string]interface{}) (*Volunteer, error) {
@@ -238,13 +410,6 @@ func (r *Repository) UpdateVolunteerHours(volunteerID int, hours float64) error 
 	_, err := r.repo.GoquDBWrapper.Update("schedule_volunteers").
 		Set(goqu.Record{"assigned_hours": hours}).
 		Where(goqu.Ex{"id": volunteerID}).Executor().Exec()
-	return err
-}
-
-func (r *Repository) UpdateScheduleStatus(id int, status string) error {
-	_, err := r.repo.GoquDBWrapper.Update("schedules").
-		Set(goqu.Record{"status": status}).
-		Where(goqu.Ex{"id": id}).Executor().Exec()
 	return err
 }
 
@@ -391,8 +556,6 @@ func (r *Repository) InsertAssignmentsTx(tx *goqu.TxDatabase, assignments []Assi
 }
 
 func (r *Repository) RecalcVolunteerHoursTx(tx *goqu.TxDatabase, scheduleID int) error {
-	// Update assigned_hours for all volunteers in this schedule
-	// based on SUM of credit_hours from their assignments
 	sql := `
 		UPDATE schedule_volunteers sv
 		SET assigned_hours = COALESCE(sub.total, 0)
@@ -409,7 +572,6 @@ func (r *Repository) RecalcVolunteerHoursTx(tx *goqu.TxDatabase, scheduleID int)
 		return fmt.Errorf("failed to recalc volunteer hours: %w", err)
 	}
 
-	// Zero out volunteers with no assignments
 	sqlZero := `
 		UPDATE schedule_volunteers
 		SET assigned_hours = 0

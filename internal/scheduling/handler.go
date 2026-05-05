@@ -20,13 +20,15 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/schedule", security.Authorize("moderator"), h.createSchedule)
 	router.GET("/schedule", security.Authorize("user"), h.getSchedule)
+	router.PATCH("/schedule/status", security.Authorize("admin"), h.changeStatus)
 	router.POST("/schedule/volunteers", security.Authorize("moderator"), h.importVolunteers)
 	router.POST("/schedule/volunteers/import-sheet", security.Authorize("moderator"), h.importVolunteersFromSheet)
 	router.GET("/schedule/volunteers", security.Authorize("user"), h.getVolunteers)
 	router.PATCH("/schedule/volunteers/:vid", security.Authorize("moderator"), h.updateVolunteer)
-	router.POST("/schedule/generate", security.Authorize("moderator"), h.generate)
+	router.POST("/schedule/generate", security.Authorize("admin"), h.generate)
 	router.POST("/schedule/assignments", security.Authorize("moderator"), h.addAssignment)
 	router.DELETE("/schedule/assignments/:aid", security.Authorize("moderator"), h.deleteAssignment)
+	router.POST("/schedule/assignments/move", security.Authorize("moderator"), h.moveAssignment)
 	router.POST("/schedule/assignments/swap", security.Authorize("moderator"), h.swapAssignments)
 	router.POST("/schedule/slots", security.Authorize("moderator"), h.createSlot)
 	router.PATCH("/schedule/slots/:sid", security.Authorize("moderator"), h.updateSlot)
@@ -34,35 +36,34 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.PUT("/schedule/draft", security.Authorize("moderator"), h.saveDraft)
 	router.GET("/schedule/validate", security.Authorize("user"), h.validate)
 	router.POST("/schedule/validate", security.Authorize("user"), h.validateDraft)
-	router.PATCH("/schedule/publish", security.Authorize("admin"), h.publish)
-	router.GET("/schedule/export", security.Authorize("moderator"), h.export)
+	router.GET("/schedule/export/csv", security.Authorize("moderator"), h.export)
 	router.POST("/schedule/export/sheets", security.Authorize("moderator"), h.exportToSheets)
 }
 
 func (h *Handler) createSchedule(c *gin.Context) {
 	var req CreateScheduleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
-	schedule, err := h.service.CreateSchedule(req)
+	detail, err := h.service.CreateSchedule(req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create schedule", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResp("create_failed", "Nie udało się utworzyć harmonogramu", err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusCreated, schedule)
+	c.JSON(http.StatusCreated, detail)
 }
 
 func (h *Handler) getSchedule(c *gin.Context) {
 	detail, err := h.service.GetScheduleDetail()
 	if err != nil {
 		if err.Error() == "no active schedule" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "No active schedule"})
+			c.JSON(http.StatusNotFound, errorResp("not_found", "Brak aktywnego harmonogramu", nil))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get schedule", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResp("fetch_failed", "Nie udało się pobrać harmonogramu", err.Error()))
 		return
 	}
 
@@ -72,22 +73,23 @@ func (h *Handler) getSchedule(c *gin.Context) {
 func (h *Handler) importVolunteers(c *gin.Context) {
 	var req ImportVolunteersRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
-	if err := h.service.ImportVolunteers(req.Volunteers); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to import volunteers", "details": err.Error()})
+	result, err := h.service.ImportVolunteers(req.Volunteers)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResp("import_failed", "Nie udało się zaimportować wolontariuszy", err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"imported": len(req.Volunteers)})
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *Handler) getVolunteers(c *gin.Context) {
 	volunteers, err := h.service.GetVolunteers()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get volunteers", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResp("fetch_failed", "Nie udało się pobrać wolontariuszy", err.Error()))
 		return
 	}
 
@@ -97,7 +99,7 @@ func (h *Handler) getVolunteers(c *gin.Context) {
 func (h *Handler) generate(c *gin.Context) {
 	detail, err := h.service.Generate()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate schedule", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResp("generate_failed", "Nie udało się wygenerować harmonogramu", err.Error()))
 		return
 	}
 
@@ -107,23 +109,23 @@ func (h *Handler) generate(c *gin.Context) {
 func (h *Handler) updateVolunteer(c *gin.Context) {
 	vid, err := strconv.Atoi(c.Param("vid"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid volunteer ID"})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_id", "Nieprawidłowe ID wolontariusza", nil))
 		return
 	}
 
 	var req UpdateVolunteerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
 	volunteer, err := h.service.UpdateVolunteer(vid, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update volunteer", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResp("update_failed", "Nie udało się zaktualizować wolontariusza", err.Error()))
 		return
 	}
 	if volunteer == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Volunteer not found"})
+		c.JSON(http.StatusNotFound, errorResp("not_found", "Wolontariusz nie znaleziony", nil))
 		return
 	}
 
@@ -133,72 +135,121 @@ func (h *Handler) updateVolunteer(c *gin.Context) {
 func (h *Handler) addAssignment(c *gin.Context) {
 	var req AddAssignmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
-	assignment, err := h.service.AddAssignment(req)
+	detail, err := h.service.AddAssignment(req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add assignment", "details": err.Error()})
+		var dupErr *DuplicateAssignmentError
+		if errors.As(err, &dupErr) {
+			c.JSON(http.StatusConflict, errorRespDetails("already_assigned", "Wolontariusz jest już przypisany do tego slotu", nil))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, errorResp("add_failed", "Nie udało się dodać przypisania", err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusCreated, assignment)
+	c.JSON(http.StatusCreated, detail)
 }
 
 func (h *Handler) deleteAssignment(c *gin.Context) {
 	aid, err := strconv.Atoi(c.Param("aid"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid assignment ID"})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_id", "Nieprawidłowe ID przypisania", nil))
 		return
 	}
 
 	if err := h.service.DeleteAssignment(aid); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete assignment", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResp("delete_failed", "Nie udało się usunąć przypisania", err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"deleted": aid})
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) moveAssignment(c *gin.Context) {
+	var req MoveAssignmentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
+		return
+	}
+
+	resp, err := h.service.MoveAssignment(req)
+	if err != nil {
+		var dupErr *DuplicateAssignmentError
+		if errors.As(err, &dupErr) {
+			c.JSON(http.StatusConflict, errorResp("already_assigned", "Wolontariusz jest już przypisany do docelowego slotu", nil))
+			return
+		}
+		if err.Error() == "assignment not found" {
+			c.JSON(http.StatusNotFound, errorResp("not_found", "Przypisanie nie znalezione", nil))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, errorResp("move_failed", "Nie udało się przenieść przypisania", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *Handler) swapAssignments(c *gin.Context) {
 	var req SwapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
-	if err := h.service.SwapAssignments(req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to swap assignments", "details": err.Error()})
+	resp, err := h.service.SwapAssignments(req)
+	if err != nil {
+		if err.Error() == "one or both assignments not found" {
+			c.JSON(http.StatusNotFound, errorResp("not_found", "Jedno lub oba przypisania nie znalezione", nil))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, errorResp("swap_failed", "Nie udało się zamienić przypisań", err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"swapped": true})
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *Handler) validate(c *gin.Context) {
 	result, err := h.service.ValidateSchedule()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResp("validate_failed", "Nie udało się zwalidować harmonogramu", err.Error()))
 		return
 	}
 
 	c.JSON(http.StatusOK, result)
 }
 
-func (h *Handler) publish(c *gin.Context) {
-	if err := h.service.PublishSchedule(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to publish schedule", "details": err.Error()})
+func (h *Handler) changeStatus(c *gin.Context) {
+	var req ChangeStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "published"})
+	detail, err := h.service.ChangeStatus(req.Status)
+	if err != nil {
+		var valErr *ValidationBlockedError
+		if errors.As(err, &valErr) {
+			c.JSON(http.StatusConflict, errorRespDetails("validation_failed",
+				"Harmonogram ma błędy blokujące publikację.",
+				gin.H{"error_count": valErr.ErrorCount}))
+			return
+		}
+		h.handleServiceError(c, err, "Nie udało się zmienić statusu")
+		return
+	}
+
+	c.JSON(http.StatusOK, detail)
 }
 
 func (h *Handler) export(c *gin.Context) {
 	csv, schedule, err := h.service.ExportCSV()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to export", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResp("export_failed", "Nie udało się wyeksportować harmonogramu", err.Error()))
 		return
 	}
 
@@ -210,49 +261,33 @@ func (h *Handler) export(c *gin.Context) {
 func (h *Handler) importVolunteersFromSheet(c *gin.Context) {
 	var req ImportFromSheetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
-	count, err := h.service.ImportVolunteersFromSheet(req)
+	result, err := h.service.ImportVolunteersFromSheet(req)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if err.Error() == "Google Sheets integration not available" {
 			status = http.StatusServiceUnavailable
 		}
-		c.JSON(status, gin.H{"error": "Failed to import volunteers from sheet", "details": err.Error()})
+		c.JSON(status, errorResp("import_failed", "Nie udało się zaimportować wolontariuszy z arkusza", err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"imported": count})
-}
-
-func (h *Handler) handleServiceError(c *gin.Context, err error, msg string) {
-	if errors.Is(err, ErrSchedulePublished) {
-		c.JSON(http.StatusConflict, gin.H{"error": "Schedule is published"})
-		return
-	}
-	if err.Error() == "no active schedule" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "No active schedule"})
-		return
-	}
-	if err.Error() == "slot not found" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Slot not found"})
-		return
-	}
-	c.JSON(http.StatusInternalServerError, gin.H{"error": msg, "details": err.Error()})
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *Handler) createSlot(c *gin.Context) {
 	var req CreateSlotRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
 	slot, err := h.service.CreateSlot(req)
 	if err != nil {
-		h.handleServiceError(c, err, "Failed to create slot")
+		h.handleServiceError(c, err, "Nie udało się utworzyć slotu")
 		return
 	}
 
@@ -262,19 +297,19 @@ func (h *Handler) createSlot(c *gin.Context) {
 func (h *Handler) updateSlot(c *gin.Context) {
 	sid, err := strconv.Atoi(c.Param("sid"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid slot ID"})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_id", "Nieprawidłowe ID slotu", nil))
 		return
 	}
 
 	var req UpdateSlotRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
 	slot, err := h.service.UpdateSlot(sid, req)
 	if err != nil {
-		h.handleServiceError(c, err, "Failed to update slot")
+		h.handleServiceError(c, err, "Nie udało się zaktualizować slotu")
 		return
 	}
 
@@ -284,12 +319,12 @@ func (h *Handler) updateSlot(c *gin.Context) {
 func (h *Handler) deleteSlot(c *gin.Context) {
 	sid, err := strconv.Atoi(c.Param("sid"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid slot ID"})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_id", "Nieprawidłowe ID slotu", nil))
 		return
 	}
 
 	if err := h.service.DeleteSlot(sid); err != nil {
-		h.handleServiceError(c, err, "Failed to delete slot")
+		h.handleServiceError(c, err, "Nie udało się usunąć slotu")
 		return
 	}
 
@@ -299,13 +334,20 @@ func (h *Handler) deleteSlot(c *gin.Context) {
 func (h *Handler) saveDraft(c *gin.Context) {
 	var req SaveDraftRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
 	resp, err := h.service.SaveDraft(req)
 	if err != nil {
-		h.handleServiceError(c, err, "Failed to save draft")
+		var vcErr *VersionConflictError
+		if errors.As(err, &vcErr) {
+			c.JSON(http.StatusConflict, errorRespDetails("version_conflict",
+				"Harmonogram został zmieniony przez innego użytkownika.",
+				gin.H{"server_version": vcErr.ServerVersion, "your_version": vcErr.YourVersion}))
+			return
+		}
+		h.handleServiceError(c, err, "Nie udało się zapisać wersji roboczej")
 		return
 	}
 
@@ -315,13 +357,13 @@ func (h *Handler) saveDraft(c *gin.Context) {
 func (h *Handler) validateDraft(c *gin.Context) {
 	var req SaveDraftRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
 		return
 	}
 
 	result, err := h.service.ValidateDraft(req)
 	if err != nil {
-		h.handleServiceError(c, err, "Failed to validate draft")
+		h.handleServiceError(c, err, "Nie udało się zwalidować wersji roboczej")
 		return
 	}
 
@@ -335,9 +377,49 @@ func (h *Handler) exportToSheets(c *gin.Context) {
 		if err.Error() == "Google Sheets integration not available" {
 			status = http.StatusServiceUnavailable
 		}
-		c.JSON(status, gin.H{"error": "Failed to export to Google Sheets", "details": err.Error()})
+		c.JSON(status, errorResp("export_failed", "Nie udało się wyeksportować do Google Sheets", err.Error()))
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"rows_written": rowsWritten})
+}
+
+// handleServiceError maps common service errors to HTTP responses.
+func (h *Handler) handleServiceError(c *gin.Context, err error, msg string) {
+	if errors.Is(err, ErrSchedulePublished) {
+		c.JSON(http.StatusConflict, errorResp("schedule_published", "Harmonogram jest opublikowany i nie może być edytowany.", nil))
+		return
+	}
+	switch err.Error() {
+	case "no active schedule":
+		c.JSON(http.StatusNotFound, errorResp("not_found", "Brak aktywnego harmonogramu.", nil))
+	case "slot not found":
+		c.JSON(http.StatusNotFound, errorResp("not_found", "Slot nie znaleziony.", nil))
+	case "festival slot":
+		c.JSON(http.StatusForbidden, errorResp("forbidden", "Nie można usunąć slotu festiwalowego.", nil))
+	case "cannot change type of festival slot":
+		c.JSON(http.StatusUnprocessableEntity, errorResp("invalid_operation", "Nie można zmienić typu slotu festiwalowego.", nil))
+	default:
+		c.JSON(http.StatusInternalServerError, errorResp("internal_error", msg, err.Error()))
+	}
+}
+
+// errorResp builds a consistent error response body.
+func errorResp(slug, message string, details interface{}) gin.H {
+	h := gin.H{
+		"error":   slug,
+		"message": message,
+	}
+	if details != nil {
+		h["details"] = details
+	}
+	return h
+}
+
+func errorRespDetails(slug, message string, details gin.H) gin.H {
+	return gin.H{
+		"error":   slug,
+		"message": message,
+		"details": details,
+	}
 }
