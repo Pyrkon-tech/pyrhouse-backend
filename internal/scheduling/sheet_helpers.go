@@ -111,9 +111,19 @@ var polishDayToWeekday = map[string]time.Weekday{
 	"niedziela":    time.Sunday,
 }
 
-// parsePolishDayTime parses "wtorek, 08:00" into a real date
-// by finding the matching weekday within eventStart..eventEnd range.
+// parseAvailabilityTime parses a date/time string from the spreadsheet.
+// Supported formats:
+//   - "2026-06-18 14:00:00" or "2026-06-18 14:00" (ISO datetime, direct)
+//   - "wtorek, 08:00" (Polish weekday + time, resolved within event range)
 func parsePolishDayTime(raw string, eventStart, eventEnd time.Time) (time.Time, error) {
+	// Try ISO datetime formats first
+	for _, layout := range []string{"2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t, nil
+		}
+	}
+
+	// Fall back to "dzień, HH:MM"
 	parts := strings.SplitN(raw, ",", 2)
 	if len(parts) != 2 {
 		return time.Time{}, fmt.Errorf("expected format 'dzień, HH:MM', got %q", raw)
@@ -140,7 +150,6 @@ func parsePolishDayTime(raw string, eventStart, eventEnd time.Time) (time.Time, 
 		return time.Time{}, fmt.Errorf("invalid minute in %q", timeStr)
 	}
 
-	// Walk from eventStart to eventEnd and find the matching weekday
 	for d := eventStart; !d.After(eventEnd); d = d.AddDate(0, 0, 1) {
 		if d.Weekday() == weekday {
 			return time.Date(d.Year(), d.Month(), d.Day(), hour, minute, 0, 0, d.Location()), nil
