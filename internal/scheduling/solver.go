@@ -208,37 +208,60 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 		}
 	}
 
-	// Montage / demontage: greedy, existing logic
+	// Montage / demontage: max 1 per volunteer, strict availability, sorted min-hours-first.
+	// Count how many montage/demontage slots each volunteer already has.
+	otherCount := make(map[int]int, len(volunteers))
+
+	// Sort other slots by start time so earlier slots are filled first.
+	sort.Slice(otherSlots, func(i, j int) bool {
+		return otherSlots[i].StartTime.Before(otherSlots[j].StartTime)
+	})
+
 	for _, slot := range otherSlots {
+		// Build candidate list sorted by assigned hours (min first) for fairness.
+		type candidate struct {
+			v  *Volunteer
+			vs *volState
+		}
+		var cands []candidate
 		for i := range volunteers {
-			v := volunteers[i]
+			v := &volunteers[i]
+			vs := state[v.ID]
 			if slotFill[slot.ID] >= slot.Capacity {
 				break
 			}
-			vs := state[v.ID]
-			if vs.assignedHours >= float64(v.TargetHours)+2 {
+			// Max 1 montage/demontage assignment per volunteer.
+			if otherCount[v.ID] >= 1 {
 				continue
 			}
-			if v.AvailableFrom.After(slot.EndTime) || v.AvailableTo.Before(slot.StartTime) {
+			// Adding this slot must not exceed target+2h.
+			if vs.assignedHours+slot.CreditHours > float64(v.TargetHours)+2 {
 				continue
 			}
-			alreadyIn := false
-			for _, sid := range vs.assignedIDs {
-				if sid == slot.ID {
-					alreadyIn = true
-					break
-				}
-			}
-			if alreadyIn {
+			// Strict availability: slot must start after volunteer arrives and end before they leave.
+			if slot.StartTime.Before(v.AvailableFrom) || slot.EndTime.After(v.AvailableTo) {
 				continue
+			}
+			if isAlreadyIn(vs, slot.ID) {
+				continue
+			}
+			cands = append(cands, candidate{v, vs})
+		}
+		sort.Slice(cands, func(i, j int) bool {
+			return cands[i].vs.assignedHours < cands[j].vs.assignedHours
+		})
+		for _, c := range cands {
+			if slotFill[slot.ID] >= slot.Capacity {
+				break
 			}
 			assignments = append(assignments, Assignment{
 				SlotID:      slot.ID,
-				VolunteerID: v.ID,
+				VolunteerID: c.v.ID,
 			})
-			vs.assignedHours += slot.CreditHours
-			vs.assignedIDs = append(vs.assignedIDs, slot.ID)
+			c.vs.assignedHours += slot.CreditHours
+			c.vs.assignedIDs = append(c.vs.assignedIDs, slot.ID)
 			slotFill[slot.ID]++
+			otherCount[c.v.ID]++
 		}
 	}
 
