@@ -192,11 +192,11 @@ func (s *Service) ImportVolunteers(inputs []VolunteerInput) (*ImportResult, erro
 	var toInsert []Volunteer
 	updated := 0
 	for _, input := range inputs {
-		availFrom, err := time.Parse("2006-01-02 15:04", input.AvailableFrom)
+		availFrom, err := time.ParseInLocation("2006-01-02 15:04", input.AvailableFrom, warsawLocation)
 		if err != nil {
 			return nil, fmt.Errorf("invalid available_from for %s: %w", input.Nickname, err)
 		}
-		availTo, err := time.Parse("2006-01-02 15:04", input.AvailableTo)
+		availTo, err := time.ParseInLocation("2006-01-02 15:04", input.AvailableTo, warsawLocation)
 		if err != nil {
 			return nil, fmt.Errorf("invalid available_to for %s: %w", input.Nickname, err)
 		}
@@ -612,14 +612,14 @@ func (s *Service) UpdateVolunteer(volunteerID int, req UpdateVolunteerRequest) (
 		updates["target_hours"] = *req.Hours
 	}
 	if req.AvailableFrom != nil {
-		t, err := time.Parse("2006-01-02 15:04", *req.AvailableFrom)
+		t, err := time.ParseInLocation("2006-01-02 15:04", *req.AvailableFrom, warsawLocation)
 		if err != nil {
 			return nil, fmt.Errorf("invalid available_from: %w", err)
 		}
 		updates["available_from"] = t
 	}
 	if req.AvailableTo != nil {
-		t, err := time.Parse("2006-01-02 15:04", *req.AvailableTo)
+		t, err := time.ParseInLocation("2006-01-02 15:04", *req.AvailableTo, warsawLocation)
 		if err != nil {
 			return nil, fmt.Errorf("invalid available_to: %w", err)
 		}

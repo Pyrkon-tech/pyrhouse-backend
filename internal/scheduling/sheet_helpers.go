@@ -111,14 +111,23 @@ var polishDayToWeekday = map[string]time.Weekday{
 	"niedziela":    time.Sunday,
 }
 
+// warsawLocation is loaded once at startup; falls back to UTC on error.
+var warsawLocation = func() *time.Location {
+	loc, err := time.LoadLocation("Europe/Warsaw")
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}()
+
 // parseAvailabilityTime parses a date/time string from the spreadsheet.
 // Supported formats:
-//   - "2026-06-18 14:00:00" or "2026-06-18 14:00" (ISO datetime, direct)
+//   - "2026-06-18 14:00:00" or "2026-06-18 14:00" (treated as Europe/Warsaw local time)
 //   - "wtorek, 08:00" (Polish weekday + time, resolved within event range)
 func parsePolishDayTime(raw string, eventStart, eventEnd time.Time) (time.Time, error) {
-	// Try ISO datetime formats first
+	// Try ISO datetime formats first — parse as Warsaw local time
 	for _, layout := range []string{"2006-01-02 15:04:05", "2006-01-02 15:04"} {
-		if t, err := time.Parse(layout, raw); err == nil {
+		if t, err := time.ParseInLocation(layout, raw, warsawLocation); err == nil {
 			return t, nil
 		}
 	}
