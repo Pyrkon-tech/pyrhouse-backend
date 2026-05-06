@@ -58,42 +58,81 @@ func (s *Service) CreateSchedule(req CreateScheduleRequest) (*ScheduleDetail, er
 		return nil, err
 	}
 
-	// Auto-generate festival slots (hourly blocks between festival_start and festival_end)
-	festivalSlots := generateFestivalSlots(schedule)
-	if len(festivalSlots) > 0 {
-		if _, err := s.repo.InsertSlotsReturning(festivalSlots); err != nil {
-			return nil, fmt.Errorf("failed to insert festival slots: %w", err)
+	allSlots := generateScheduleSlots(schedule)
+	if len(allSlots) > 0 {
+		if _, err := s.repo.InsertSlotsReturning(allSlots); err != nil {
+			return nil, fmt.Errorf("failed to insert slots: %w", err)
 		}
 	}
 
 	return s.GetScheduleDetail()
 }
 
-// generateFestivalSlots creates 1-hour blocks covering festival_start → festival_end.
-func generateFestivalSlots(schedule *Schedule) []Slot {
+// generateScheduleSlots creates montage (8-20h), festival (1h blocks, end truncated to full hour),
+// and demontage (8-20h) slots. All times in Europe/Warsaw.
+func generateScheduleSlots(schedule *Schedule) []Slot {
 	var slots []Slot
-	loc := schedule.FestivalStart.Location()
-	cur := schedule.FestivalStart.Truncate(time.Hour)
-	end := schedule.FestivalEnd
 
-	for cur.Before(end) {
+	// Montage: event_start (inclusive) up to the day before festival_start
+	festivalDay := time.Date(
+		schedule.FestivalStart.In(warsawLocation).Year(),
+		schedule.FestivalStart.In(warsawLocation).Month(),
+		schedule.FestivalStart.In(warsawLocation).Day(),
+		0, 0, 0, 0, warsawLocation,
+	)
+	for d := time.Date(
+		schedule.EventStart.In(warsawLocation).Year(),
+		schedule.EventStart.In(warsawLocation).Month(),
+		schedule.EventStart.In(warsawLocation).Day(),
+		0, 0, 0, 0, warsawLocation,
+	); d.Before(festivalDay); d = d.AddDate(0, 0, 1) {
+		label := fmt.Sprintf("Montaż - %s", polishWeekday(d.Weekday()))
+		labelStr := label
+		slots = append(slots, Slot{
+			ScheduleID:  schedule.ID,
+			SlotType:    SlotTypeMontage,
+			StartTime:   time.Date(d.Year(), d.Month(), d.Day(), 8, 0, 0, 0, warsawLocation),
+			EndTime:     time.Date(d.Year(), d.Month(), d.Day(), 20, 0, 0, 0, warsawLocation),
+			CreditHours: 7,
+			Capacity:    8,
+			Label:       &labelStr,
+		})
+	}
+
+	// Festival: 1-hour blocks from festival_start to festival_end truncated to full hour.
+	// e.g. festival_end 21:37 → last slot is 20:00-21:00.
+	festEnd := schedule.FestivalEnd.Truncate(time.Hour)
+	cur := schedule.FestivalStart.Truncate(time.Hour).In(warsawLocation)
+	for cur.Before(festEnd) {
 		slotEnd := cur.Add(time.Hour)
-		if slotEnd.After(end) {
-			slotEnd = end
-		}
-		label := fmt.Sprintf("Festiwal %s", cur.Format("02.01 15:04"))
+		label := fmt.Sprintf("Festiwal %s", cur.In(warsawLocation).Format("02.01 15:04"))
 		labelStr := label
 		slots = append(slots, Slot{
 			ScheduleID:  schedule.ID,
 			SlotType:    SlotTypeFestival,
-			StartTime:   cur.In(loc),
-			EndTime:     slotEnd.In(loc),
-			CreditHours: slotEnd.Sub(cur).Hours(),
+			StartTime:   cur,
+			EndTime:     slotEnd,
+			CreditHours: 1,
 			Capacity:    2,
 			Label:       &labelStr,
 		})
 		cur = slotEnd
 	}
+
+	// Demontage: event_end day, 8:00-20:00
+	ed := schedule.EventEnd.In(warsawLocation)
+	dLabel := fmt.Sprintf("Demontaż - %s", polishWeekday(time.Date(ed.Year(), ed.Month(), ed.Day(), 0, 0, 0, 0, warsawLocation).Weekday()))
+	dLabelStr := dLabel
+	slots = append(slots, Slot{
+		ScheduleID:  schedule.ID,
+		SlotType:    SlotTypeDemontage,
+		StartTime:   time.Date(ed.Year(), ed.Month(), ed.Day(), 8, 0, 0, 0, warsawLocation),
+		EndTime:     time.Date(ed.Year(), ed.Month(), ed.Day(), 20, 0, 0, 0, warsawLocation),
+		CreditHours: 7,
+		Capacity:    3,
+		Label:       &dLabelStr,
+	})
+
 	return slots
 }
 
