@@ -161,11 +161,15 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 	// preferred block sizes in descending order
 	blockSizes := []int{4, 2, 1}
 
-	// Iterate until no slot can be filled further
+	// Iterate until no slot can be filled further.
+	// We use a classic index loop (not range) so we can skip ahead after
+	// assigning a block — this avoids staggered-overlap where two consecutive
+	// block-starts (A:0-3, B:1-4) fill the middle slots to capacity while
+	// leaving slot 0 with fill=1 but unable to host a full block.
 	progress := true
 	for progress {
 		progress = false
-		for i := range festSlots {
+		for i := 0; i < len(festSlots); i++ {
 			slot := festSlots[i]
 			if slotFill[slot.ID] >= slot.Capacity {
 				continue
@@ -197,6 +201,9 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 				state[v.ID].assignedIDs = append(state[v.ID].assignedIDs, s.ID)
 				slotFill[s.ID]++
 			}
+			// Skip slots already covered by this block so the next iteration
+			// starts a fresh non-overlapping block.
+			i += blockLen - 1
 			progress = true
 		}
 	}
