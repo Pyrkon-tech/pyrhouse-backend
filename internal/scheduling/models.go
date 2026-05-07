@@ -234,6 +234,28 @@ type ValidationResult struct {
 	Issues []ValidationIssue `json:"issues"`
 }
 
+// OnDutyEntry represents a volunteer currently on duty (assigned to an active slot).
+type OnDutyEntry struct {
+	VolunteerID    int       `json:"volunteer_id"`
+	Nickname       string    `json:"nickname"`
+	SlotID         int       `json:"slot_id"`
+	SlotLabel      *string   `json:"slot_label"`
+	SlotEnd        time.Time `json:"slot_end"`
+	Status         string    `json:"status"`
+	CurrentMission *string   `json:"current_mission"`
+	UserID         *int      `json:"user_id"`
+	User           *UserInfo `json:"user"`
+}
+
+// UserInfo is the user detail embedded in OnDutyEntry.
+type UserInfo struct {
+	ID              int     `json:"id"`
+	Username        string  `json:"username"`
+	Fullname        *string `json:"fullname"`
+	AvatarURL       *string `json:"avatar_url"`
+	DiscordUsername *string `json:"discord_username"`
+}
+
 // Slot types
 const (
 	SlotTypeMontage   = "montage"

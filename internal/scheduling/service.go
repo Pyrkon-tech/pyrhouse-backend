@@ -1117,3 +1117,12 @@ func (s *Service) ValidateDraft(req SaveDraftRequest) (*ValidationResult, error)
 
 	return Validate(slots, volunteers, assignments), nil
 }
+
+// GetOnDuty returns volunteers on duty at the given time (defaults to now).
+func (s *Service) GetOnDuty(at *time.Time) ([]OnDutyEntry, error) {
+	t := time.Now()
+	if at != nil {
+		t = *at
+	}
+	return s.repo.GetOnDutyVolunteers(t)
+}

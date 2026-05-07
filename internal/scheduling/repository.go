@@ -2,6 +2,7 @@ package scheduling
 
 import (
 	"fmt"
+	"time"
 	"warehouse/internal/repository"
 
 	"github.com/doug-martin/goqu/v9"
@@ -593,4 +594,98 @@ func (r *Repository) RecalcVolunteerHoursTx(tx *goqu.TxDatabase, scheduleID int)
 // DB returns the goqu database wrapper for transactions.
 func (r *Repository) DB() *goqu.Database {
 	return r.repo.GoquDBWrapper
+}
+
+// GetOnDutyVolunteers returns volunteers assigned to slots active at time at,
+// enriched with real-time dispatch status derived from in-progress quests.
+func (r *Repository) GetOnDutyVolunteers(at time.Time) ([]OnDutyEntry, error) {
+	const query = `
+		SELECT
+			v.id          AS volunteer_id,
+			v.nickname,
+			s.id          AS slot_id,
+			s.label       AS slot_label,
+			s.end_time    AS slot_end,
+			CASE WHEN aq.user_id IS NOT NULL THEN 'on_mission' ELSE 'available' END AS status,
+			CASE
+				WHEN aq.user_id IS NOT NULL
+				THEN aq.destination_pavilion
+				     || COALESCE(' - ' || NULLIF(TRIM(aq.destination_location), ''), '')
+				ELSE NULL
+			END AS current_mission,
+			v.user_id,
+			u.username,
+			u.fullname,
+			u.avatar_url,
+			u.discord_username
+		FROM schedules sc
+		JOIN schedule_slots s        ON s.schedule_id = sc.id
+		JOIN schedule_assignments a  ON a.slot_id = s.id
+		JOIN schedule_volunteers v   ON v.id = a.volunteer_id
+		LEFT JOIN users u            ON u.id = v.user_id
+		LEFT JOIN (
+			SELECT DISTINCT ON (tu.user_id)
+				tu.user_id,
+				q.destination_pavilion,
+				q.destination_location
+			FROM transfer_users tu
+			JOIN transfers t                ON tu.transfer_id = t.id
+			JOIN equipment_request_quests q ON q.transfer_id = t.id
+			WHERE q.status = 'in_progress'
+			ORDER BY tu.user_id, t.id DESC
+		) aq ON u.id = aq.user_id
+		WHERE sc.status = 'active'
+		  AND s.start_time <= $1
+		  AND s.end_time   >  $1
+		ORDER BY v.nickname ASC
+	`
+	rows, err := r.repo.DB.Query(query, at)
+	if err != nil {
+		return nil, fmt.Errorf("on-duty query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []OnDutyEntry
+	for rows.Next() {
+		var e OnDutyEntry
+		var (
+			username        *string
+			fullname        *string
+			avatarURL       *string
+			discordUsername *string
+		)
+		if err := rows.Scan(
+			&e.VolunteerID,
+			&e.Nickname,
+			&e.SlotID,
+			&e.SlotLabel,
+			&e.SlotEnd,
+			&e.Status,
+			&e.CurrentMission,
+			&e.UserID,
+			&username,
+			&fullname,
+			&avatarURL,
+			&discordUsername,
+		); err != nil {
+			return nil, fmt.Errorf("on-duty scan failed: %w", err)
+		}
+		if e.UserID != nil {
+			e.User = &UserInfo{
+				ID:              *e.UserID,
+				Username:        *username,
+				Fullname:        fullname,
+				AvatarURL:       avatarURL,
+				DiscordUsername: discordUsername,
+			}
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("on-duty rows error: %w", err)
+	}
+	if entries == nil {
+		entries = []OnDutyEntry{}
+	}
+	return entries, nil
 }

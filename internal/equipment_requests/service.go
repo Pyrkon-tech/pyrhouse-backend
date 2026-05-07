@@ -34,6 +34,18 @@ type Service struct {
 	// SSE broadcaster
 	sseMu      sync.RWMutex
 	sseClients map[chan QuestEvent]struct{}
+
+	// Dispatch SSE hooks — set via SetDispatchHooks in DI.
+	// onTransferDispatched is called when a transfer is created from a quest (on_mission).
+	// onTransferEnded is called when a transfer is completed or cancelled (available).
+	onTransferDispatched func(transferID int)
+	onTransferEnded      func(transferID int)
+}
+
+// SetDispatchHooks wires dispatch SSE broadcast callbacks (avoids circular DI).
+func (s *Service) SetDispatchHooks(dispatched, ended func(transferID int)) {
+	s.onTransferDispatched = dispatched
+	s.onTransferEnded = ended
 }
 
 func NewService(
@@ -795,6 +807,9 @@ func (s *Service) CreateTransferFromQuest(ctx context.Context, questID string, r
 	}
 
 	log.Printf("[equipment-requests] Created transfer %d from quest %s", transferID, questID)
+	if s.onTransferDispatched != nil {
+		go s.onTransferDispatched(transferID)
+	}
 	return transferID, nil
 }
 
@@ -817,12 +832,18 @@ func (s *Service) OnTransferStatusChanged(transferID int, newStatus string) erro
 			return fmt.Errorf("failed to complete quest %s: %w", quest.ID, err)
 		}
 		log.Printf("[equipment-requests] Quest %s completed via transfer %d", quest.ID, transferID)
+		if s.onTransferEnded != nil {
+			go s.onTransferEnded(transferID)
+		}
 
 	case "cancelled":
 		if err := s.questRepo.UnlinkQuestFromTransfer(ctx, quest.ID); err != nil {
 			return fmt.Errorf("failed to unlink quest %s from cancelled transfer %d: %w", quest.ID, transferID, err)
 		}
 		log.Printf("[equipment-requests] Quest %s unlinked from cancelled transfer %d, status reset to pending", quest.ID, transferID)
+		if s.onTransferEnded != nil {
+			go s.onTransferEnded(transferID)
+		}
 	}
 
 	return nil

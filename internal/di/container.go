@@ -40,6 +40,8 @@ type Container struct {
 	GoogleSheetsHandler      *googlesheets.GoogleSheetsHandler
 	ItemCategoryHandler      *category.ItemCategoryHandler
 	DispatchHandler          *dispatch.Handler
+	DispatchBroadcaster      *dispatch.Broadcaster
+	DispatchSlotWatcher      *dispatch.SlotWatcher
 	ReleaseHandler           *releases.Handler
 	ServiceDeskHandler       *service_desk.Handler
 	DiscordHandler           *security.DiscordHandler
@@ -77,7 +79,10 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	transferHandler := transfers.NewHandler(repo, transferRepository, assetRepo, userRepo, auditLog)
 	itemsHandler := items.NewItemHandler(repo, stockRepo, assetRepo, auditLog)
 	dispatchRepo := dispatch.NewRepository(repo)
-	dispatchHandler := dispatch.NewHandler(dispatchRepo)
+	dispatchBroadcaster := dispatch.NewBroadcaster(db)
+	dispatchSlotWatcher := dispatch.NewSlotWatcher(db, dispatchBroadcaster)
+	dispatchSlotWatcher.Start()
+	dispatchHandler := dispatch.NewHandler(dispatchRepo, dispatchBroadcaster)
 	releaseRepo := releases.NewRepository(repo)
 	releaseService := releases.NewService(releaseRepo, repo, auditLog)
 	releaseHandler := releases.NewHandler(releaseService)
@@ -122,6 +127,12 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		// Wire stock changes → SSE broadcast
 		stockService.OnStockChanged = equipmentRequestService.BroadcastStocksChanged
 
+		// Wire dispatch SSE hooks
+		equipmentRequestService.SetDispatchHooks(
+			dispatchBroadcaster.BroadcastTransferDispatched,
+			dispatchBroadcaster.BroadcastTransferEnded,
+		)
+
 		equipmentRequestHandler = equipment_requests.NewHandler(equipmentRequestService)
 
 		// Phase 3: Auto-sync scheduler
@@ -151,6 +162,8 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		GoogleSheetsHandler:       googleSheetsHandler,
 		ItemCategoryHandler:       itemCategoryHandler,
 		DispatchHandler:           dispatchHandler,
+		DispatchBroadcaster:       dispatchBroadcaster,
+		DispatchSlotWatcher:       dispatchSlotWatcher,
 		ReleaseHandler:            releaseHandler,
 		ServiceDeskHandler:        serviceDeskHandler,
 		DiscordHandler:            discordHandler,
@@ -167,8 +180,10 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 
 // Close performs cleanup operations on the container
 func (c *Container) Close() {
-	// Stop the equipment request scheduler if running
 	if c.EquipmentRequestScheduler != nil {
 		c.EquipmentRequestScheduler.Stop()
+	}
+	if c.DispatchSlotWatcher != nil {
+		c.DispatchSlotWatcher.Stop()
 	}
 }

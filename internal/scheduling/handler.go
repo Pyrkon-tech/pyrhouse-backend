@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 	"warehouse/internal/security"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/schedule/validate", security.Authorize("user"), h.validateDraft)
 	router.GET("/schedule/export/csv", security.Authorize("moderator"), h.export)
 	router.POST("/schedule/export/sheets", security.Authorize("moderator"), h.exportToSheets)
+	router.GET("/schedule/on-duty", security.Authorize("user"), h.getOnDuty)
 }
 
 func (h *Handler) createSchedule(c *gin.Context) {
@@ -422,4 +424,24 @@ func errorRespDetails(slug, message string, details gin.H) gin.H {
 		"message": message,
 		"details": details,
 	}
+}
+
+func (h *Handler) getOnDuty(c *gin.Context) {
+	var at *time.Time
+	if raw := c.Query("at"); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, errorResp("invalid_param", "Nieprawidłowy format parametru 'at' (oczekiwano RFC3339)", nil))
+			return
+		}
+		at = &t
+	}
+
+	entries, err := h.service.GetOnDuty(at)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResp("fetch_failed", "Nie udało się pobrać dyżurujących wolontariuszy", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, entries)
 }
