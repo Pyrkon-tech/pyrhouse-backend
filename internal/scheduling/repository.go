@@ -407,6 +407,20 @@ func (r *Repository) UpdateVolunteer(id int, updates map[string]interface{}) (*V
 	return &v, nil
 }
 
+func (r *Repository) DeleteVolunteer(id int) (bool, error) {
+	res, err := r.repo.GoquDBWrapper.Delete("schedule_volunteers").
+		Where(goqu.Ex{"id": id}).
+		Executor().Exec()
+	if err != nil {
+		return false, fmt.Errorf("failed to delete volunteer: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
 func (r *Repository) UpdateVolunteerHours(volunteerID int, hours float64) error {
 	_, err := r.repo.GoquDBWrapper.Update("schedule_volunteers").
 		Set(goqu.Record{"assigned_hours": hours}).

@@ -26,6 +26,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/schedule/volunteers/import-sheet", security.Authorize("moderator"), h.importVolunteersFromSheet)
 	router.GET("/schedule/volunteers", security.Authorize("user"), h.getVolunteers)
 	router.PATCH("/schedule/volunteers/:vid", security.Authorize("moderator"), h.updateVolunteer)
+	router.DELETE("/schedule/volunteers/:vid", security.Authorize("admin"), h.deleteVolunteer)
 	router.POST("/schedule/generate", security.Authorize("admin"), h.generate)
 	router.POST("/schedule/assignments", security.Authorize("moderator"), h.addAssignment)
 	router.DELETE("/schedule/assignments/:aid", security.Authorize("moderator"), h.deleteAssignment)
@@ -132,6 +133,26 @@ func (h *Handler) updateVolunteer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, volunteer)
+}
+
+func (h *Handler) deleteVolunteer(c *gin.Context) {
+	vid, err := strconv.Atoi(c.Param("vid"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errorResp("invalid_id", "Nieprawidłowe ID wolontariusza", nil))
+		return
+	}
+
+	found, err := h.service.DeleteVolunteer(vid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResp("delete_failed", "Nie udało się usunąć wolontariusza", err.Error()))
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, errorResp("not_found", "Wolontariusz nie znaleziony", nil))
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) addAssignment(c *gin.Context) {

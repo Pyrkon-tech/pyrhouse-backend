@@ -678,6 +678,10 @@ func (s *Service) UpdateVolunteer(volunteerID int, req UpdateVolunteerRequest) (
 	return s.repo.UpdateVolunteer(volunteerID, updates)
 }
 
+func (s *Service) DeleteVolunteer(volunteerID int) (bool, error) {
+	return s.repo.DeleteVolunteer(volunteerID)
+}
+
 func (s *Service) GetVolunteers() ([]Volunteer, error) {
 	schedule, err := s.getActive()
 	if err != nil {
