@@ -22,13 +22,6 @@ func NewService(repo *Repository, sheetsHandler *googlesheets.GoogleSheetsHandle
 	return &Service{repo: repo, sheetsHandler: sheetsHandler, settingsRepo: settingsRepo}
 }
 
-func (s *Service) publishedGuard(schedule *Schedule) error {
-	if schedule.Status == "published" {
-		return ErrSchedulePublished
-	}
-	return nil
-}
-
 func calculateCreditHours(slotType string, start, end time.Time) float64 {
 	if slotType == SlotTypeMontage || slotType == SlotTypeDemontage {
 		return 7
@@ -381,15 +374,26 @@ func (s *Service) Generate() (*ScheduleDetail, error) {
 
 	id := schedule.ID
 
+	volunteers, err := s.repo.GetVolunteers(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var blocked []string
+	for _, v := range volunteers {
+		if v.AssignedHours >= 10 {
+			blocked = append(blocked, v.Nickname)
+		}
+	}
+	if len(blocked) > 0 {
+		return nil, &GenerateBlockedError{Volunteers: blocked}
+	}
+
 	// Clear only assignments, keep slots
 	if err := s.repo.DeleteAssignments(id); err != nil {
 		return nil, fmt.Errorf("failed to clear assignments: %w", err)
 	}
 
-	volunteers, err := s.repo.GetVolunteers(id)
-	if err != nil {
-		return nil, err
-	}
 	slots, err := s.repo.GetSlots(id)
 	if err != nil {
 		return nil, err
@@ -580,64 +584,6 @@ func (s *Service) SwapAssignments(req SwapRequest) (*SwapResponse, error) {
 	}, nil
 }
 
-func (s *Service) ChangeStatus(newStatus string) (*ScheduleDetail, error) {
-	schedule, err := s.getActive()
-	if err != nil {
-		return nil, err
-	}
-
-	if newStatus == "published" {
-		slots, err := s.repo.GetSlots(schedule.ID)
-		if err != nil {
-			return nil, err
-		}
-		volunteers, err := s.repo.GetVolunteers(schedule.ID)
-		if err != nil {
-			return nil, err
-		}
-		assignments, err := s.repo.GetAssignments(schedule.ID)
-		if err != nil {
-			return nil, err
-		}
-		result := Validate(slots, volunteers, assignments)
-		for _, issue := range result.Issues {
-			if issue.Severity == "error" {
-				return nil, &ValidationBlockedError{ErrorCount: countErrors(result.Issues)}
-			}
-		}
-	}
-
-	dbStatus := newStatus
-	if newStatus == "draft" {
-		dbStatus = "active"
-	}
-
-	updated, err := s.repo.UpdateScheduleStatus(schedule.ID, dbStatus)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.buildDetail(updated)
-}
-
-type ValidationBlockedError struct {
-	ErrorCount int
-}
-
-func (e *ValidationBlockedError) Error() string {
-	return "validation_failed"
-}
-
-func countErrors(issues []ValidationIssue) int {
-	n := 0
-	for _, i := range issues {
-		if i.Severity == "error" {
-			n++
-		}
-	}
-	return n
-}
-
 func (s *Service) UpdateVolunteer(volunteerID int, req UpdateVolunteerRequest) (*Volunteer, error) {
 	updates := make(map[string]interface{})
 
@@ -676,6 +622,20 @@ func (s *Service) UpdateVolunteer(volunteerID int, req UpdateVolunteerRequest) (
 	}
 
 	return s.repo.UpdateVolunteer(volunteerID, updates)
+}
+
+func (s *Service) DeleteSchedule(id int) (bool, error) {
+	schedule, err := s.repo.GetSchedule(id)
+	if err != nil {
+		return false, err
+	}
+	if schedule == nil {
+		return false, nil
+	}
+	if time.Now().Before(schedule.EventEnd) {
+		return false, fmt.Errorf("event_not_ended")
+	}
+	return s.repo.DeleteSchedule(id)
 }
 
 func (s *Service) DeleteVolunteer(volunteerID int) (bool, error) {
@@ -760,10 +720,6 @@ func (s *Service) CreateSlot(req CreateSlotRequest) (*Slot, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publishedGuard(schedule); err != nil {
-		return nil, err
-	}
-
 	start, err := time.Parse(time.RFC3339, req.Start)
 	if err != nil {
 		return nil, fmt.Errorf("invalid start time: %w", err)
@@ -792,14 +748,9 @@ func (s *Service) CreateSlot(req CreateSlotRequest) (*Slot, error) {
 }
 
 func (s *Service) UpdateSlot(slotID int, req UpdateSlotRequest) (*Slot, error) {
-	schedule, err := s.getActive()
-	if err != nil {
+	if _, err := s.getActive(); err != nil {
 		return nil, err
 	}
-	if err := s.publishedGuard(schedule); err != nil {
-		return nil, err
-	}
-
 	existing, err := s.repo.GetSlot(slotID)
 	if err != nil {
 		return nil, err
@@ -857,14 +808,9 @@ func (s *Service) UpdateSlot(slotID int, req UpdateSlotRequest) (*Slot, error) {
 }
 
 func (s *Service) DeleteSlot(slotID int) error {
-	schedule, err := s.getActive()
-	if err != nil {
+	if _, err := s.getActive(); err != nil {
 		return err
 	}
-	if err := s.publishedGuard(schedule); err != nil {
-		return err
-	}
-
 	existing, err := s.repo.GetSlot(slotID)
 	if err != nil {
 		return err
@@ -885,10 +831,6 @@ func (s *Service) SaveDraft(req SaveDraftRequest) (*SaveDraftResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publishedGuard(schedule); err != nil {
-		return nil, err
-	}
-
 	var createdSlots []TempIDMapping
 
 	err = repository.WithTransaction(s.repo.DB(), func(tx *goqu.TxDatabase) error {

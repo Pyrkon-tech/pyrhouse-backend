@@ -5,8 +5,15 @@ import (
 	"time"
 )
 
-var ErrSchedulePublished = errors.New("schedule is published")
 var ErrVersionConflict = errors.New("version conflict")
+
+type GenerateBlockedError struct {
+	Volunteers []string
+}
+
+func (e *GenerateBlockedError) Error() string {
+	return "generate_blocked"
+}
 
 // Database models
 
@@ -104,10 +111,6 @@ type MoveAssignmentRequest struct {
 type SwapRequest struct {
 	AssignmentA int `json:"assignment_a" binding:"required"`
 	AssignmentB int `json:"assignment_b" binding:"required"`
-}
-
-type ChangeStatusRequest struct {
-	Status string `json:"status" binding:"required,oneof=draft published"`
 }
 
 type CreateSlotRequest struct {

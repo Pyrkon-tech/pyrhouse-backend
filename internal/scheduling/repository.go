@@ -68,6 +68,20 @@ func (r *Repository) GetSchedule(id int) (*Schedule, error) {
 	return &schedule, nil
 }
 
+func (r *Repository) DeleteSchedule(id int) (bool, error) {
+	res, err := r.repo.GoquDBWrapper.Delete("schedules").
+		Where(goqu.Ex{"id": id}).
+		Executor().Exec()
+	if err != nil {
+		return false, fmt.Errorf("failed to delete schedule: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
 func (r *Repository) ArchiveAllSchedules() error {
 	_, err := r.repo.GoquDBWrapper.Update("schedules").
 		Set(goqu.Record{"status": "archived"}).

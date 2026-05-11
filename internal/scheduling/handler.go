@@ -21,7 +21,7 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/schedule", security.Authorize("moderator"), h.createSchedule)
 	router.GET("/schedule", security.Authorize("user"), h.getSchedule)
-	router.PATCH("/schedule/status", security.Authorize("admin"), h.changeStatus)
+	router.DELETE("/schedule/:id", security.Authorize("admin"), h.deleteSchedule)
 	router.POST("/schedule/volunteers", security.Authorize("moderator"), h.importVolunteers)
 	router.POST("/schedule/volunteers/import-sheet", security.Authorize("moderator"), h.importVolunteersFromSheet)
 	router.GET("/schedule/volunteers", security.Authorize("user"), h.getVolunteers)
@@ -102,6 +102,13 @@ func (h *Handler) getVolunteers(c *gin.Context) {
 func (h *Handler) generate(c *gin.Context) {
 	detail, err := h.service.Generate()
 	if err != nil {
+		var genErr *GenerateBlockedError
+		if errors.As(err, &genErr) {
+			c.JSON(http.StatusConflict, errorRespDetails("generate_blocked",
+				"Nie można wygenerować harmonogramu — wolontariusze mają już przypisane ≥10 godzin.",
+				gin.H{"volunteers": genErr.Volunteers}))
+			return
+		}
 		c.JSON(http.StatusInternalServerError, errorResp("generate_failed", "Nie udało się wygenerować harmonogramu", err.Error()))
 		return
 	}
@@ -133,6 +140,30 @@ func (h *Handler) updateVolunteer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, volunteer)
+}
+
+func (h *Handler) deleteSchedule(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errorResp("invalid_id", "Nieprawidłowe ID harmonogramu", nil))
+		return
+	}
+
+	found, err := h.service.DeleteSchedule(id)
+	if err != nil {
+		if err.Error() == "event_not_ended" {
+			c.JSON(http.StatusConflict, errorResp("event_not_ended", "Nie można usunąć harmonogramu przed zakończeniem eventu", nil))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, errorResp("delete_failed", "Nie udało się usunąć harmonogramu", err.Error()))
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, errorResp("not_found", "Harmonogram nie znaleziony", nil))
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) deleteVolunteer(c *gin.Context) {
@@ -246,28 +277,6 @@ func (h *Handler) validate(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-func (h *Handler) changeStatus(c *gin.Context) {
-	var req ChangeStatusRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
-		return
-	}
-
-	detail, err := h.service.ChangeStatus(req.Status)
-	if err != nil {
-		var valErr *ValidationBlockedError
-		if errors.As(err, &valErr) {
-			c.JSON(http.StatusConflict, errorRespDetails("validation_failed",
-				"Harmonogram ma błędy blokujące publikację.",
-				gin.H{"error_count": valErr.ErrorCount}))
-			return
-		}
-		h.handleServiceError(c, err, "Nie udało się zmienić statusu")
-		return
-	}
-
-	c.JSON(http.StatusOK, detail)
-}
 
 func (h *Handler) export(c *gin.Context) {
 	csv, schedule, err := h.service.ExportCSV()
@@ -409,10 +418,6 @@ func (h *Handler) exportToSheets(c *gin.Context) {
 
 // handleServiceError maps common service errors to HTTP responses.
 func (h *Handler) handleServiceError(c *gin.Context, err error, msg string) {
-	if errors.Is(err, ErrSchedulePublished) {
-		c.JSON(http.StatusConflict, errorResp("schedule_published", "Harmonogram jest opublikowany i nie może być edytowany.", nil))
-		return
-	}
 	switch err.Error() {
 	case "no active schedule":
 		c.JSON(http.StatusNotFound, errorResp("not_found", "Brak aktywnego harmonogramu.", nil))
