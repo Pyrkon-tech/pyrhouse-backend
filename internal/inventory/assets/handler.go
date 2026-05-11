@@ -39,7 +39,7 @@ func (h *ItemHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/assets/bulk", security.Authorize("user"), h.CreateBulkAssets)
 	router.POST("/assets/without-serial", security.Authorize("user"), h.CreateAssetWithoutSerial)
 	router.DELETE("/assets/:id", security.Authorize("moderator"), h.RemoveAsset)
-	router.PATCH("/assets/:id/serial", security.Authorize("moderator"), h.UpdateAssetSerial)
+	router.PATCH("/assets/:id/serial", security.Authorize("dispatcher"), h.UpdateAssetSerial)
 	router.PATCH("/assets/:id/logs/location", security.Authorize("user"), h.UpdateAssetLocation)
 	router.GET("/assets/report", security.Authorize("moderator"), h.GetAssetsReport)
 	router.GET("/stocks/report", security.Authorize("moderator"), h.GetStockReport)

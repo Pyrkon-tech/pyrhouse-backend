@@ -324,7 +324,7 @@ func (h *UsersHandler) validateActiveChange(ctx *UpdateUserContext) error {
 		active := *ctx.req.Active
 		ctx.changes.Active = &active
 		return nil
-	case ctx.isModerator && ctx.user.Role != "user":
+	case ctx.isModerator && roles.Role(ctx.user.Role).HasPermission(roles.Moderator):
 		ctx.c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden", "details": "Cannot change active status of user with role other than user"})
 		return fmt.Errorf("unauthorized active change")
 	case !ctx.isAdmin && !ctx.isModerator:

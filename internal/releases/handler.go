@@ -19,12 +19,12 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	releases := router.Group("/releases")
 	{
-		releases.GET("/suggest", security.Authorize("moderator"), h.suggest)
-		releases.POST("", security.Authorize("moderator"), h.create)
+		releases.GET("/suggest", security.Authorize("dispatcher"), h.suggest)
+		releases.POST("", security.Authorize("dispatcher"), h.create)
 		releases.GET("", security.Authorize("user"), h.list)
 		releases.GET("/:id", security.Authorize("user"), h.get)
-		releases.PUT("/:id/items", security.Authorize("moderator"), h.updateItems)
-		releases.POST("/:id/confirm", security.Authorize("admin"), h.confirm)
+		releases.PUT("/:id/items", security.Authorize("dispatcher"), h.updateItems)
+		releases.POST("/:id/confirm", security.Authorize("moderator"), h.confirm)
 		releases.DELETE("/:id", security.Authorize("moderator"), h.delete)
 	}
 }
