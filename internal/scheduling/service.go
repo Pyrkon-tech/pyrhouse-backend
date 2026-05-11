@@ -643,15 +643,19 @@ type VolunteerSchedule struct {
 	Slots     []VolunteerSlot      `json:"slots"`
 }
 
-func (s *Service) GetVolunteerSchedule(volunteerID int) (*VolunteerSchedule, error) {
-	volunteer, err := s.repo.GetVolunteerByID(volunteerID)
+func (s *Service) GetMySchedule(userID int) (*VolunteerSchedule, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return nil, err
+	}
+	volunteer, err := s.repo.GetVolunteerByUserID(schedule.ID, userID)
 	if err != nil {
 		return nil, err
 	}
 	if volunteer == nil {
 		return nil, nil
 	}
-	slots, err := s.repo.GetSlotsByVolunteer(volunteerID)
+	slots, err := s.repo.GetSlotsByVolunteer(volunteer.ID)
 	if err != nil {
 		return nil, err
 	}

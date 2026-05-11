@@ -435,6 +435,20 @@ func (r *Repository) GetVolunteerByID(id int) (*Volunteer, error) {
 	return &v, nil
 }
 
+func (r *Repository) GetVolunteerByUserID(scheduleID, userID int) (*Volunteer, error) {
+	var v Volunteer
+	found, err := r.repo.GoquDBWrapper.From("schedule_volunteers").
+		Where(goqu.Ex{"schedule_id": scheduleID, "user_id": userID}).
+		Executor().ScanStruct(&v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get volunteer by user: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &v, nil
+}
+
 type VolunteerSlot struct {
 	AssignmentID int       `json:"assignment_id" db:"assignment_id"`
 	SlotID       int       `json:"slot_id" db:"slot_id"`
