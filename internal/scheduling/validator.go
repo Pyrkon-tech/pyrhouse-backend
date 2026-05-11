@@ -123,17 +123,7 @@ func Validate(slots []Slot, volunteers []Volunteer, assignments []Assignment) *V
 			})
 		}
 
-		if assigned > s.Capacity {
-			result.Issues = append(result.Issues, ValidationIssue{
-				Type:     "slot_overstaffed",
-				Severity: "warning",
-				Slot:     label,
-				SlotID:   &s.ID,
-				Assigned: assigned,
-				Capacity: s.Capacity,
-				Message:  fmt.Sprintf("Slot %s przeobsadzony: %d/%d osób", label, assigned, s.Capacity),
-			})
-		}
+
 	}
 
 	// Set Valid based on error-severity issues
