@@ -32,7 +32,7 @@ func GenerateSlots(schedule *Schedule, volunteerCount int) []Slot {
 			StartTime:   dayStart,
 			EndTime:     dayEnd,
 			CreditHours: 7,
-			Capacity:    8,
+			Capacity:    6,
 			Label:       &label,
 		})
 	}
