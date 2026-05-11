@@ -25,6 +25,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/schedule/volunteers", security.Authorize("moderator"), h.importVolunteers)
 	router.POST("/schedule/volunteers/import-sheet", security.Authorize("moderator"), h.importVolunteersFromSheet)
 	router.GET("/schedule/volunteers", security.Authorize("user"), h.getVolunteers)
+	router.GET("/schedule/volunteers/:vid", security.Authorize("user"), h.getVolunteerSchedule)
 	router.PATCH("/schedule/volunteers/:vid", security.Authorize("moderator"), h.updateVolunteer)
 	router.DELETE("/schedule/volunteers/:vid", security.Authorize("admin"), h.deleteVolunteer)
 	router.POST("/schedule/generate", security.Authorize("admin"), h.generate)
@@ -164,6 +165,37 @@ func (h *Handler) deleteSchedule(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) getVolunteerSchedule(c *gin.Context) {
+	vid, err := strconv.Atoi(c.Param("vid"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errorResp("invalid_id", "Nieprawidłowe ID wolontariusza", nil))
+		return
+	}
+
+	vs, err := h.service.GetVolunteerSchedule(vid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResp("fetch_failed", "Nie udało się pobrać grafiku wolontariusza", err.Error()))
+		return
+	}
+	if vs == nil {
+		c.JSON(http.StatusNotFound, errorResp("not_found", "Wolontariusz nie znaleziony", nil))
+		return
+	}
+
+	isModerator := security.IsAllowed(c, "moderator")
+	if !isModerator {
+		authUserID, _ := c.Get("userID")
+		authIDStr, _ := authUserID.(string)
+		authID, _ := strconv.Atoi(authIDStr)
+		if vs.Volunteer.UserID == nil || *vs.Volunteer.UserID != authID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, vs)
 }
 
 func (h *Handler) deleteVolunteer(c *gin.Context) {

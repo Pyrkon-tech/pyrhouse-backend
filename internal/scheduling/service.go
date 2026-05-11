@@ -638,6 +638,29 @@ func (s *Service) DeleteSchedule(id int) (bool, error) {
 	return s.repo.DeleteSchedule(id)
 }
 
+type VolunteerSchedule struct {
+	Volunteer *Volunteer           `json:"volunteer"`
+	Slots     []VolunteerSlot      `json:"slots"`
+}
+
+func (s *Service) GetVolunteerSchedule(volunteerID int) (*VolunteerSchedule, error) {
+	volunteer, err := s.repo.GetVolunteerByID(volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	if volunteer == nil {
+		return nil, nil
+	}
+	slots, err := s.repo.GetSlotsByVolunteer(volunteerID)
+	if err != nil {
+		return nil, err
+	}
+	if slots == nil {
+		slots = []VolunteerSlot{}
+	}
+	return &VolunteerSchedule{Volunteer: volunteer, Slots: slots}, nil
+}
+
 func (s *Service) DeleteVolunteer(volunteerID int) (bool, error) {
 	return s.repo.DeleteVolunteer(volunteerID)
 }

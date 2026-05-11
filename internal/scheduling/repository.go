@@ -421,6 +421,55 @@ func (r *Repository) UpdateVolunteer(id int, updates map[string]interface{}) (*V
 	return &v, nil
 }
 
+func (r *Repository) GetVolunteerByID(id int) (*Volunteer, error) {
+	var v Volunteer
+	found, err := r.repo.GoquDBWrapper.From("schedule_volunteers").
+		Where(goqu.Ex{"id": id}).
+		Executor().ScanStruct(&v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get volunteer: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &v, nil
+}
+
+type VolunteerSlot struct {
+	AssignmentID int       `json:"assignment_id" db:"assignment_id"`
+	SlotID       int       `json:"slot_id" db:"slot_id"`
+	SlotType     string    `json:"slot_type" db:"slot_type"`
+	StartTime    time.Time `json:"start_time" db:"start_time"`
+	EndTime      time.Time `json:"end_time" db:"end_time"`
+	CreditHours  float64   `json:"credit_hours" db:"credit_hours"`
+	Label        *string   `json:"label" db:"label"`
+}
+
+func (r *Repository) GetSlotsByVolunteer(volunteerID int) ([]VolunteerSlot, error) {
+	var slots []VolunteerSlot
+	query := r.repo.GoquDBWrapper.
+		Select(
+			goqu.I("a.id").As("assignment_id"),
+			goqu.I("s.id").As("slot_id"),
+			goqu.I("s.slot_type"),
+			goqu.I("s.start_time"),
+			goqu.I("s.end_time"),
+			goqu.I("s.credit_hours"),
+			goqu.I("s.label"),
+		).
+		From(goqu.T("schedule_assignments").As("a")).
+		InnerJoin(
+			goqu.T("schedule_slots").As("s"),
+			goqu.On(goqu.Ex{"a.slot_id": goqu.I("s.id")}),
+		).
+		Where(goqu.Ex{"a.volunteer_id": volunteerID}).
+		Order(goqu.I("s.start_time").Asc())
+	if err := query.Executor().ScanStructs(&slots); err != nil {
+		return nil, fmt.Errorf("failed to get volunteer slots: %w", err)
+	}
+	return slots, nil
+}
+
 func (r *Repository) DeleteVolunteer(id int) (bool, error) {
 	res, err := r.repo.GoquDBWrapper.Delete("schedule_volunteers").
 		Where(goqu.Ex{"id": id}).
