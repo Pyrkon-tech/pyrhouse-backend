@@ -349,6 +349,25 @@ func (r *AssetsRepository) GetTransferAssets(transferID int) (*[]models.Asset, e
 	return &assets, nil
 }
 
+// GetTransferAssetsTx returns asset IDs for a transfer using the provided transaction.
+// Use this inside a transaction to avoid TOCTOU races with concurrent cancellations.
+func (r *AssetsRepository) GetTransferAssetsTx(tx *goqu.TxDatabase, transferID int) ([]int, error) {
+	var ids []int
+	rows, err := tx.Query(`SELECT item_id FROM serialized_transfers WHERE transfer_id = $1`, transferID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transfer asset IDs: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan asset ID: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (r *AssetsRepository) UpdatePyrCode(assetID int, pyrCode string) error {
 	record := goqu.Record{"pyr_code": pyrCode}
 	condition := goqu.Ex{"id": assetID}

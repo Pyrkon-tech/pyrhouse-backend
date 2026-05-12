@@ -91,28 +91,28 @@ func (s *TransferService) InitTransfer(req models.TransferRequest, transitStatus
 		return 0, err
 	}
 
-	// Asynchroniczne dodawanie użytkowników
+	// Asynchroniczne dodawanie użytkowników + audit log (po zapisie userów, żeby log ich widział)
 	if len(req.Users) > 0 {
 		go func(users []models.TransferUser) {
 			err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 				if err := s.tr.InsertTransferUsers(tx, transferID, users); err != nil {
 					return err
 				}
-
-				// Logowanie dla każdego użytkownika
 				for _, user := range users {
-					user := user // Kopiujemy zmienną do lokalnego zakresu
+					user := user
 					s.il.CreateTransferUserLogEntry("assigned_to_transfer", transferID, &user)
 				}
 				return nil
 			})
 			if err != nil {
 				log.Printf("Błąd podczas asynchronicznego dodawania użytkowników do transferu %d: %v", transferID, err)
+				return
 			}
+			s.createInventoryLog("in_transfer", transferID)
 		}(req.Users)
+	} else {
+		go s.createInventoryLog("in_transfer", transferID)
 	}
-
-	go s.createInventoryLog("in_transfer", transferID)
 
 	return transferID, nil
 }
@@ -218,30 +218,20 @@ func (s *TransferService) GetTransfers(req models.RetrieveTransferListQuery) (*[
 }
 
 func (s *TransferService) RemoveStockItemFromTransfer(transferReq models.RemoveStockItemFromTransferRequest) error {
-	tx, err := s.r.GoquDBWrapper.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
+	err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		if err := decreaseStockInTransfer(tx, transferReq); err != nil {
+			return fmt.Errorf("failed to decrease stock in transfer: %w", err)
 		}
-	}()
-
-	// Usuń element z transferu
-	if err := decreaseStockInTransfer(tx, transferReq); err != nil {
-		return fmt.Errorf("failed to decrease stock in transfer: %w", err)
+		if err := s.stockRepo.RestoreStockToLocation(tx, transferReq); err != nil {
+			return fmt.Errorf("failed to restore stock to location: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
-	// Przywróć element do lokalizacji
-	if err := s.stockRepo.RestoreStockToLocation(tx, transferReq); err != nil {
-		return fmt.Errorf("failed to restore stock to location: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
+	go s.createInventoryLog("stock_item_removed", transferReq.TransferID)
 	return nil
 }
 
@@ -335,30 +325,23 @@ func (s *TransferService) startStockItemsTransfer(tx *goqu.TxDatabase, transferI
 }
 
 func (s *TransferService) ConfirmTransfer(transferID int, status string) error {
-	var err error
-	// TODO get only ids?
-	assets, err := s.ar.GetTransferAssets(transferID)
-	assetIDs := func(assets []models.Asset) []int {
-		var ids []int
-		for _, asset := range assets {
-			ids = append(ids, asset.ID)
+	err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		assetIDs, err := s.ar.GetTransferAssetsTx(tx, transferID)
+		if err != nil {
+			return fmt.Errorf("failed to get transfer assets: %w", err)
 		}
-		return ids
-	}(*assets)
 
-	err = repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
 		if len(assetIDs) > 0 {
 			if err := s.ar.UpdateItemStatus(assetIDs, metadata.StatusAvailable, tx); err != nil {
-				return fmt.Errorf("unable to update assets err: %w", err)
+				return fmt.Errorf("unable to update assets: %w", err)
 			}
 		}
 
 		if err := s.completeStockItemsTransfer(tx, transferID); err != nil {
-			return fmt.Errorf("unable to update stock items err: %w", err)
+			return fmt.Errorf("unable to update stock items: %w", err)
 		}
 
-		err = s.tr.UpdateTransferStatus(transferID, status)
-		if err != nil {
+		if err := s.tr.UpdateTransferStatusTx(tx, transferID, status); err != nil {
 			return err
 		}
 
@@ -376,13 +359,11 @@ func (s *TransferService) ConfirmTransfer(transferID int, status string) error {
 }
 
 func (s *TransferService) createInventoryLog(action string, transferID int) {
-
 	transfer, err := s.GetTransfer(transferID)
-
 	if err != nil {
 		log.Printf("Unable to get transfer id: %d for auditlog error: %v", transferID, err)
+		return
 	}
-
 	s.il.CreateTransferAuditLogEntry(action, transfer)
 }
 
@@ -441,7 +422,7 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 			}
 		}
 
-		if err := s.tr.UpdateTransferStatus(transfer.ID, "cancelled"); err != nil {
+		if err := s.tr.UpdateTransferStatusTx(tx, transfer.ID, "cancelled"); err != nil {
 			return fmt.Errorf("failed to update transfer status: %w", err)
 		}
 
@@ -453,7 +434,7 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 	}
 
 	go s.createInventoryLog("cancelled", transfer.ID)
-	go s.notifyStatusCallbacks(transfer.ID, "cancelled")
+	s.notifyStatusCallbacks(transfer.ID, "cancelled")
 
 	return nil
 }
@@ -482,8 +463,8 @@ func (s *TransferService) createDeliveryLocationAssetLog(transferID int, latitud
 	assets, err := s.ar.GetTransferAssets(transferID)
 	if err != nil {
 		log.Printf("failed to get transfer assets: %v", err)
+		return
 	}
-
 	for _, asset := range *assets {
 		s.il.CreateDeliveryLocationAssetLog("last_known_location", &asset, latitude, longitude, timestamp)
 	}
@@ -521,6 +502,8 @@ func (s *TransferService) UpdateTransferUsers(transferID int, userIDs []int) err
 	if err != nil {
 		return fmt.Errorf("failed to update transfer users: %w", err)
 	}
+
+	go s.createInventoryLog("users_updated", transferID)
 
 	return nil
 }

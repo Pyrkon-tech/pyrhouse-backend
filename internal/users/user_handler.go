@@ -390,13 +390,13 @@ func (h *UsersHandler) GetUser(c *gin.Context) {
 	}
 
 	user, err := h.Repository.GetUser(userID)
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Unable to find user", "details": err.Error(), "code": "USER_NOT_FOUND"})
-		return
-	}
-
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user", "details": err.Error()})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Unable to find user", "code": "USER_NOT_FOUND"})
+		return
 	}
 
 	c.JSON(http.StatusOK, user)

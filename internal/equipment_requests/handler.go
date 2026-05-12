@@ -3,6 +3,7 @@ package equipment_requests
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -128,10 +129,11 @@ func (h *Handler) GetQuest(c *gin.Context) {
 
 	quest, err := h.service.questRepo.GetQuestByID(c.Request.Context(), questID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":   "Quest not found",
-			"details": err.Error(),
-		})
+		if strings.Contains(err.Error(), "quest not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Quest not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch quest", "details": err.Error()})
+		}
 		return
 	}
 
@@ -567,7 +569,7 @@ func (h *Handler) UpdateQuestLocation(c *gin.Context) {
 			LocationID:   req.LocationID,
 		}
 		if err := h.service.questRepo.CreateLocationMapping(c.Request.Context(), mapping); err != nil {
-			// Log but don't fail - location was already assigned
+			log.Printf("[equipment-requests] failed to save location mapping for quest %s: %v", questID, err)
 		}
 	}
 

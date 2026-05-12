@@ -803,6 +803,7 @@ func (s *Service) CreateTransferFromQuest(ctx context.Context, questID string, r
 
 	// 5. Link quest to transfer
 	if err := s.questRepo.LinkQuestToTransfer(ctx, questID, transferID); err != nil {
+		log.Printf("[equipment-requests] ORPHANED TRANSFER %d: created but failed to link to quest %s — manual cleanup required: %v", transferID, questID, err)
 		return transferID, fmt.Errorf("transfer created (ID: %d) but failed to link to quest: %w", transferID, err)
 	}
 

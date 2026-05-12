@@ -117,7 +117,19 @@ func (h *DiscordHandler) DiscordCallback(c *gin.Context) {
 		return
 	}
 
-	// 8. Redirect to frontend with token
+	// 8. Clear state cookie — no longer needed after successful auth
+	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    "",
+		MaxAge:   -1,
+		Path:     "/",
+		Secure:   isSecure,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	// 9. Redirect to frontend with token
 	if frontendURL != "" {
 		redirectURL := frontendURL + "?token=" + jwtToken
 		c.Redirect(http.StatusTemporaryRedirect, redirectURL)
@@ -252,8 +264,7 @@ func (h *DiscordHandler) LinkDiscord(c *gin.Context) {
 	}
 
 	var req struct {
-		Code  string `json:"code" binding:"required"`
-		State string `json:"state" binding:"required"`
+		Code string `json:"code" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data", "details": err.Error()})

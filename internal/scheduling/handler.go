@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 	"warehouse/internal/security"
 
@@ -132,7 +133,11 @@ func (h *Handler) updateVolunteer(c *gin.Context) {
 
 	volunteer, err := h.service.UpdateVolunteer(vid, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, errorResp("update_failed", "Nie udało się zaktualizować wolontariusza", err.Error()))
+		if strings.Contains(err.Error(), "violates foreign key constraint") {
+			c.JSON(http.StatusUnprocessableEntity, errorResp("invalid_user_id", "Podany user_id nie istnieje", nil))
+		} else {
+			c.JSON(http.StatusInternalServerError, errorResp("update_failed", "Nie udało się zaktualizować wolontariusza", err.Error()))
+		}
 		return
 	}
 	if volunteer == nil {

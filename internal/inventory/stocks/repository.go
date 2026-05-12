@@ -236,8 +236,7 @@ func (r *StockRepository) DecreaseStockItemsQuantity(tx *goqu.TxDatabase, stocks
 		}
 
 		if fromLocationID == 1 {
-			// Skip deletion from main warehouse
-			return nil
+			continue
 		}
 		deleteQuery := tx.Delete("non_serialized_items").
 			Where(goqu.Ex{
@@ -292,19 +291,20 @@ func (r *StockRepository) RemoveZeroQuantityStock(tx *goqu.TxDatabase, transferR
 	return nil
 }
 
-// RestoreStockToLocation adds quantity back for a specific category/origin at the given location.
+// RestoreStockToLocation returns quantity for a specific category back to the transfer's source location.
 // Used when removing a single item from an in-transit transfer (partial removal).
 func (r *StockRepository) RestoreStockToLocation(tx *goqu.TxDatabase, transferReq models.RemoveStockItemFromTransferRequest) error {
 	query := `
 		INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin_id, origin_suffix)
-		SELECT item_category_id, $1, $2, origin_id, origin_suffix
-		FROM non_serialized_transfers
-		WHERE transfer_id = $3 AND item_category_id = $4
+		SELECT nst.item_category_id, t.from_location_id, $1, nst.origin_id, nst.origin_suffix
+		FROM non_serialized_transfers nst
+		INNER JOIN transfers t ON t.id = nst.transfer_id
+		WHERE nst.transfer_id = $2 AND nst.item_category_id = $3
 		LIMIT 1
 		ON CONFLICT (item_category_id, location_id, origin_id, origin_suffix)
 		DO UPDATE SET quantity = non_serialized_items.quantity + EXCLUDED.quantity
 	`
-	_, err := tx.Exec(query, transferReq.ToLocationID, transferReq.Quantity, transferReq.TransferID, transferReq.CategoryID)
+	_, err := tx.Exec(query, transferReq.Quantity, transferReq.TransferID, transferReq.CategoryID)
 	if err != nil {
 		return fmt.Errorf("failed to restore stock to location: %w", err)
 	}

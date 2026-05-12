@@ -382,7 +382,7 @@ func (r *Repository) UpdateQuestStatus(ctx context.Context, questID string, stat
 		updates["completed_at"] = now
 	}
 
-	_, err := r.repo.GoquDBWrapper.
+	result, err := r.repo.GoquDBWrapper.
 		Update("equipment_request_quests").
 		Set(updates).
 		Where(goqu.Ex{"quest_id": questID}).
@@ -391,13 +391,16 @@ func (r *Repository) UpdateQuestStatus(ctx context.Context, questID string, stat
 	if err != nil {
 		return fmt.Errorf("failed to update quest status: %w", err)
 	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return fmt.Errorf("quest not found: %s", questID)
+	}
 
 	return nil
 }
 
 // LinkQuestToTransfer links quest to a created transfer
 func (r *Repository) LinkQuestToTransfer(ctx context.Context, questID string, transferID int) error {
-	_, err := r.repo.GoquDBWrapper.
+	result, err := r.repo.GoquDBWrapper.
 		Update("equipment_request_quests").
 		Set(goqu.Record{
 			"transfer_id": transferID,
@@ -408,6 +411,9 @@ func (r *Repository) LinkQuestToTransfer(ctx context.Context, questID string, tr
 
 	if err != nil {
 		return fmt.Errorf("failed to link quest to transfer: %w", err)
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return fmt.Errorf("quest not found: %s", questID)
 	}
 
 	return nil
@@ -724,6 +730,7 @@ func (r *Repository) ResolveLocationByPavilionAndName(pavilion, name string) (*i
 			goqu.I("pavilion").ILike(pavilion),
 			goqu.I("name").ILike(name),
 		).
+		Order(goqu.I("id").Asc()).
 		Limit(1)
 
 	found, err := query.Executor().ScanVal(&locationID)

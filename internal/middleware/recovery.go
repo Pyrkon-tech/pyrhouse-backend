@@ -31,36 +31,16 @@ func RecoveryMiddleware() gin.HandlerFunc {
 	}
 }
 
-// TimeoutMiddleware dodaje timeout do żądań
+// TimeoutMiddleware propagates a deadline on the request context so that downstream
+// DB queries and HTTP calls respect the timeout via ctx.Done(). Gin does not support
+// aborting a running handler from another goroutine without a data race, so the timeout
+// is enforced cooperatively: handlers that pass the context to their DB/HTTP calls will
+// receive a context.DeadlineExceeded error and return naturally.
 func TimeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Tworzymy nowy kontekst z timeoutem
 		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
 		defer cancel()
-
-		// Przekazujemy kontekst do żądania
 		c.Request = c.Request.WithContext(ctx)
-
-		// Kanał do sygnalizowania zakończenia żądania
-		done := make(chan struct{})
-
-		go func() {
-			c.Next()
-			close(done)
-		}()
-
-		// Oczekiwanie na zakończenie żądania lub timeout
-		select {
-		case <-done:
-			// Żądanie zakończone normalnie
-			return
-		case <-ctx.Done():
-			// Timeout - przerwanie żądania
-			c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
-				"error":   "Request Timeout",
-				"message": "Żądanie przekroczyło dozwolony czas oczekiwania.",
-			})
-			return
-		}
+		c.Next()
 	}
 }

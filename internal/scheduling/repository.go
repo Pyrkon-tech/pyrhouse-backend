@@ -761,7 +761,7 @@ func (r *Repository) GetOnDutyVolunteers(at time.Time) ([]OnDutyEntry, error) {
 		); err != nil {
 			return nil, fmt.Errorf("on-duty scan failed: %w", err)
 		}
-		if e.UserID != nil {
+		if e.UserID != nil && username != nil {
 			e.User = &UserInfo{
 				ID:              *e.UserID,
 				Username:        *username,

@@ -14,6 +14,7 @@ import (
 type TransferRepository interface {
 	CanTransferNonSerializedItems(assets []models.StockItemRequest, locationID int) (map[int]bool, error)
 	UpdateTransferStatus(transferID int, status string) error
+	UpdateTransferStatusTx(tx *goqu.TxDatabase, transferID int, status string) error
 	GetTransferRow(transferID int) (*FlatTransfer, error)
 	GetTransferRows(conditions repository.QueryBuilder) (*[]FlatTransfer, error)
 	GetTransfersByUserAndStatus(userID int, status string) ([]FlatTransfer, error)
@@ -179,20 +180,27 @@ func (r *transferRepository) GetTransferRows(conditions repository.QueryBuilder)
 }
 
 func (r *transferRepository) UpdateTransferStatus(transferID int, status string) error {
-	// TODO Transaction + remove transit status (do we really need this status?)
 	query := r.Repo.GoquDBWrapper.
 		Update("transfers").
-		Set(goqu.Record{
-			"status": status,
-			// TODO "confirmed_at": goqu.L("NOW()"),
-		}).
+		Set(goqu.Record{"status": status}).
 		Where(goqu.Ex{"id": transferID})
 
 	_, err := query.Executor().Exec()
 	if err != nil {
-		return fmt.Errorf("failed to confirm transfer %d: %w", transferID, err)
+		return fmt.Errorf("failed to update transfer %d status: %w", transferID, err)
 	}
+	return nil
+}
 
+func (r *transferRepository) UpdateTransferStatusTx(tx *goqu.TxDatabase, transferID int, status string) error {
+	query := tx.Update("transfers").
+		Set(goqu.Record{"status": status}).
+		Where(goqu.Ex{"id": transferID})
+
+	_, err := query.Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update transfer %d status: %w", transferID, err)
+	}
 	return nil
 }
 
@@ -320,20 +328,19 @@ func (r *transferRepository) GetTransferLocationById(tx *goqu.TxDatabase, transf
 }
 
 func decreaseStockInTransfer(tx *goqu.TxDatabase, transferReq models.RemoveStockItemFromTransferRequest) error {
-	query := tx.Update("non_serialized_transfers").
-		Set(goqu.Record{
-			"quantity": goqu.L("quantity - ?", transferReq.Quantity),
-		}).
-		Where(goqu.Ex{
-			"transfer_id":      transferReq.TransferID,
-			"item_category_id": transferReq.CategoryID,
-		})
-
-	_, err := query.Executor().Exec()
+	_, err := tx.Exec(`
+		UPDATE non_serialized_transfers
+		SET quantity = quantity - $1
+		WHERE id = (
+			SELECT id FROM non_serialized_transfers
+			WHERE transfer_id = $2 AND item_category_id = $3
+			LIMIT 1
+		)`,
+		transferReq.Quantity, transferReq.TransferID, transferReq.CategoryID,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to decrease stock in transfer: %w", err)
 	}
-
 	return nil
 }
 
