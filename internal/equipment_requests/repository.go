@@ -590,9 +590,11 @@ func (r *Repository) questToRecord(quest *Quest) goqu.Record {
 		"destination_pavilion": quest.Destination.Pavilion,
 		"destination_location": quest.Destination.Location,
 		"recipient":            quest.Recipient,
-		"delivery_date":        quest.DeliveryDate,
 		"status":               quest.Status,
 		"location_resolved":    quest.LocationResolved,
+	}
+	if quest.DeliveryDate != "" {
+		record["delivery_date"] = quest.DeliveryDate
 	}
 
 	if quest.PickupTime != "" {

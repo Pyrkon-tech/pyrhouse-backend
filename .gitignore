@@ -8,3 +8,4 @@ __debug_bin*
 .vscode/*
 # Google credentials
 configs/google-credentials.json
+pyrhouse-*.sql

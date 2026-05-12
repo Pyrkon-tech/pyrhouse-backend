@@ -1,6 +1,8 @@
 package locations
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	apperrors "warehouse/internal/errors"
 	"warehouse/internal/models"
@@ -40,6 +42,10 @@ func (h *LocationHandler) GetLocations(c *gin.Context) {
 func (h *LocationHandler) GetLocationDetails(c *gin.Context) {
 	locationID := c.Param("id")
 	location, err := h.Repository.GetLocationDetails(locationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Location not found"})
+		return
+	}
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not get location details", "details": err.Error()})
 		return

@@ -171,7 +171,16 @@ func (s *Service) SyncQuests(ctx context.Context) ([]Quest, error) {
 	}
 
 	sheetRows := []SheetRow{}
+	consecutiveEmpty := 0
 	for i := 1; i < len(rows); i++ {
+		if isEmptyRow(rows[i]) {
+			consecutiveEmpty++
+			if consecutiveEmpty >= 3 {
+				break
+			}
+			continue
+		}
+		consecutiveEmpty = 0
 		sr, err := mapper.ParseRow(rows[i], i+1)
 		if err != nil {
 			log.Printf("[equipment-requests] Skipping row %d: %v", i+1, err)
@@ -346,7 +355,16 @@ func (s *Service) SyncQuestsToDatabase(ctx context.Context) (*SyncResult, error)
 	}
 
 	sheetRows := []SheetRow{}
+	consecutiveEmpty2 := 0
 	for i := 1; i < len(rows); i++ {
+		if isEmptyRow(rows[i]) {
+			consecutiveEmpty2++
+			if consecutiveEmpty2 >= 3 {
+				break
+			}
+			continue
+		}
+		consecutiveEmpty2 = 0
 		sr, err := mapper.ParseRow(rows[i], i+1)
 		if err != nil {
 			log.Printf("[equipment-requests] Skipping row %d: %v", i+1, err)
@@ -848,4 +866,14 @@ func (s *Service) OnTransferStatusChanged(transferID int, newStatus string) erro
 	}
 
 	return nil
+}
+
+// isEmptyRow returns true when every cell in the row is blank — signals end of sheet data.
+func isEmptyRow(row []string) bool {
+	for _, cell := range row {
+		if strings.TrimSpace(cell) != "" {
+			return false
+		}
+	}
+	return true
 }
