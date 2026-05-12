@@ -87,6 +87,10 @@ func (h *Handler) Update(c *gin.Context) {
 
 	updated, err := h.service.repo.Update(c.Request.Context(), id, req)
 	if err != nil {
+		if strings.Contains(err.Error(), "no fields") {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
+			return
+		}
 		if strings.Contains(err.Error(), "not found") {
 			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Origin not found"})
 			return
