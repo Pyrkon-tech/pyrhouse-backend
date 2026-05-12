@@ -1,6 +1,7 @@
 package locations
 
 import (
+	"database/sql"
 	"fmt"
 	apperrors "warehouse/internal/errors"
 	"warehouse/internal/models"
@@ -102,6 +103,21 @@ func (r *LocationRepository) UpdateLocation(locationID string, req UpdateLocatio
 }
 
 func (r *LocationRepository) RemoveLocation(locationID string) error {
+	var transferCount int
+	if _, err := r.Repository.GoquDBWrapper.
+		Select(goqu.COUNT("*")).
+		From("transfers").
+		Where(goqu.Or(
+			goqu.Ex{"from_location_id": locationID},
+			goqu.Ex{"to_location_id": locationID},
+		)).
+		Executor().ScanVal(&transferCount); err != nil {
+		return fmt.Errorf("failed to check transfers: %w", err)
+	}
+	if transferCount > 0 {
+		return apperrors.WrapDBError("Cannot delete location, it has associated transfers", "23503")
+	}
+
 	result, err := r.Repository.GoquDBWrapper.Delete("locations").Where(goqu.Ex{"id": locationID}).Executor().Exec()
 
 	if err != nil {
@@ -276,9 +292,12 @@ func (r *LocationRepository) GetLocationDetails(locationID string) (*models.Loca
 		From("locations").
 		Where(goqu.Ex{"id": locationID})
 
-	_, err := query.Executor().ScanStruct(&location)
+	found, err := query.Executor().ScanStruct(&location)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get location details: %w", err)
+	}
+	if !found {
+		return nil, sql.ErrNoRows
 	}
 
 	return &location, nil
