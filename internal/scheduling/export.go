@@ -82,27 +82,27 @@ func buildExportRows(slots []Slot, volunteers []Volunteer, assignments []Assignm
 
 	// Festival: hourly breakdown
 	if len(festivalSlots) > 0 {
+		// Index volunteers per hour: hour truncated to hour → nicknames
+		type hourKey = time.Time
+		hourVolunteers := make(map[hourKey][]string)
+		for _, s := range festivalSlots {
+			for h := s.StartTime.Truncate(time.Hour); h.Before(s.EndTime); h = h.Add(time.Hour) {
+				hourVolunteers[h] = append(hourVolunteers[h], slotVolunteers[s.ID]...)
+			}
+		}
+
 		currentDate := ""
-		festStart := festivalSlots[0].StartTime
+		festStart := festivalSlots[0].StartTime.Truncate(time.Hour)
 		festEnd := festivalSlots[len(festivalSlots)-1].EndTime
 
 		for t := festStart; t.Before(festEnd); t = t.Add(time.Hour) {
 			dateStr := t.Format("2006-01-02")
 			if dateStr != currentDate {
 				currentDate = dateStr
-				dayName := polishWeekday(t.Weekday())
-				rows = append(rows, sectionRow(fmt.Sprintf("--- %s ---", dayName), maxCols))
+				rows = append(rows, sectionRow(fmt.Sprintf("--- %s ---", polishWeekday(t.Weekday())), maxCols))
 			}
-
-			var onDuty []string
-			for _, s := range festivalSlots {
-				if !t.Before(s.StartTime) && t.Before(s.EndTime) {
-					onDuty = append(onDuty, slotVolunteers[s.ID]...)
-				}
-			}
-
 			hourLabel := fmt.Sprintf("%02d:00-%02d:00", t.Hour(), t.Add(time.Hour).Hour())
-			rows = append(rows, makeRow(hourLabel, onDuty, maxCols))
+			rows = append(rows, makeRow(hourLabel, hourVolunteers[t], maxCols))
 		}
 	}
 

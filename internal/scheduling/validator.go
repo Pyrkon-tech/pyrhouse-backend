@@ -190,7 +190,7 @@ func checkContinuousAndBreaks(slots []Slot, v Volunteer, result *ValidationResul
 					Slot:        fmt.Sprintf("%s+%d slots", label, i-chainStart+1),
 					Message:     fmt.Sprintf("%s: %.0fh ciągiem od %s", v.Nickname, chainHours, label),
 				})
-				chainStart = i
+				chainStart = i + 1
 			}
 		} else {
 			chainStart = i

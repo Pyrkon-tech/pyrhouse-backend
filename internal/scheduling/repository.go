@@ -218,31 +218,6 @@ func (r *Repository) GetVolunteers(scheduleID int) ([]Volunteer, error) {
 	return volunteers, nil
 }
 
-
-func (r *Repository) InsertSlotsReturning(slots []Slot) ([]Slot, error) {
-	if len(slots) == 0 {
-		return nil, nil
-	}
-	rows := make([]goqu.Record, len(slots))
-	for i, s := range slots {
-		rows[i] = goqu.Record{
-			"schedule_id":  s.ScheduleID,
-			"slot_type":    s.SlotType,
-			"start_time":   s.StartTime,
-			"end_time":     s.EndTime,
-			"credit_hours": s.CreditHours,
-			"capacity":     s.Capacity,
-			"label":        s.Label,
-		}
-	}
-	var result []Slot
-	query := r.repo.GoquDBWrapper.Insert("schedule_slots").Rows(rows).Returning(slotReturning...)
-	if err := query.Executor().ScanStructs(&result); err != nil {
-		return nil, fmt.Errorf("failed to insert slots: %w", err)
-	}
-	return result, nil
-}
-
 func (r *Repository) GetSlots(scheduleID int) ([]Slot, error) {
 	var slots []Slot
 	query := r.repo.GoquDBWrapper.From("schedule_slots").
