@@ -766,7 +766,7 @@ func (s *Service) CreateTransferFromQuest(ctx context.Context, questID string, r
 	} else {
 		// Auto-resolve from quest items
 		resolved, unresolved := s.ResolveQuestStockItems(quest, req.FromLocationID)
-		if len(resolved) == 0 {
+		if len(resolved) == 0 && len(req.Assets) == 0 {
 			reasons := make([]string, len(unresolved))
 			for i, u := range unresolved {
 				reasons[i] = fmt.Sprintf("%s: %s", u.ItemName, u.Reason)
