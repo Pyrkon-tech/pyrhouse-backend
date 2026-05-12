@@ -19,11 +19,10 @@ ALTER TABLE transfers
 
 ALTER TABLE transfers VALIDATE CONSTRAINT fk_transfers_to_location;
 
+-- NOT VALID intentionally — production has orphaned stock_id=23, validate separately after cleanup
 ALTER TABLE non_serialized_transfers
     ADD CONSTRAINT fk_non_serialized_transfers_stock
     FOREIGN KEY (stock_id) REFERENCES non_serialized_items(id) NOT VALID;
-
-ALTER TABLE non_serialized_transfers VALIDATE CONSTRAINT fk_non_serialized_transfers_stock;
 
 ALTER TABLE service_desk_requests
     ADD CONSTRAINT fk_service_desk_requests_created_by
