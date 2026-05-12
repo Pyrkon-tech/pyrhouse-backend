@@ -1,4 +1,4 @@
-DROP INDEX CONCURRENTLY IF EXISTS idx_equipment_request_quests_transfer_id;
+DROP INDEX IF EXISTS idx_equipment_request_quests_transfer_id;
 
 ALTER TABLE service_desk_request_comments DROP CONSTRAINT IF EXISTS fk_service_desk_comments_user;
 ALTER TABLE service_desk_requests DROP CONSTRAINT IF EXISTS fk_service_desk_requests_assigned_to;
