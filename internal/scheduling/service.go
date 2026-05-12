@@ -36,28 +36,28 @@ func (s *Service) getActive() (*Schedule, error) {
 		return nil, err
 	}
 	if schedule == nil {
-		return nil, fmt.Errorf("no active schedule")
+		return nil, ErrNoActiveSchedule
 	}
 	return schedule, nil
 }
 
 func (s *Service) CreateSchedule(req CreateScheduleRequest) (*ScheduleDetail, error) {
-	if err := s.repo.ArchiveAllSchedules(); err != nil {
-		return nil, fmt.Errorf("failed to archive previous schedule: %w", err)
-	}
-
-	schedule, err := s.repo.CreateSchedule(req)
+	var schedule *Schedule
+	err := repository.WithTransaction(s.repo.DB(), func(tx *goqu.TxDatabase) error {
+		if err := s.repo.ArchiveAllSchedulesTx(tx); err != nil {
+			return fmt.Errorf("failed to archive previous schedule: %w", err)
+		}
+		var err error
+		schedule, err = s.repo.CreateScheduleTx(tx, req)
+		if err != nil {
+			return err
+		}
+		slots := generateScheduleSlots(schedule)
+		return s.repo.InsertSlotsReturningTx(tx, slots)
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	allSlots := generateScheduleSlots(schedule)
-	if len(allSlots) > 0 {
-		if _, err := s.repo.InsertSlotsReturning(allSlots); err != nil {
-			return nil, fmt.Errorf("failed to insert slots: %w", err)
-		}
-	}
-
 	return s.GetScheduleDetail()
 }
 
@@ -267,7 +267,7 @@ func (s *Service) ImportVolunteers(inputs []VolunteerInput) (*ImportResult, erro
 // Expected columns: Pseudonim, Miasto, Godziny, Dostępny od, Dostępny do, Uwagi
 func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (*ImportSheetResult, error) {
 	if s.sheetsHandler == nil {
-		return nil, fmt.Errorf("Google Sheets integration not available")
+		return nil, ErrSheetsUnavailable
 	}
 
 	schedule, err := s.getActive()
@@ -400,25 +400,14 @@ func (s *Service) Generate() (*ScheduleDetail, error) {
 	}
 
 	assignments := Solve(slots, volunteers)
-	if err := s.repo.InsertAssignments(assignments); err != nil {
-		return nil, fmt.Errorf("failed to insert assignments: %w", err)
-	}
-
-	assignments, _ = s.repo.GetAssignments(id)
-	slotMap := make(map[int]Slot)
-	for _, sl := range slots {
-		slotMap[sl.ID] = sl
-	}
-	volHours := make(map[int]float64)
-	for _, a := range assignments {
-		if sl, ok := slotMap[a.SlotID]; ok {
-			volHours[a.VolunteerID] += sl.CreditHours
+	err = repository.WithTransaction(s.repo.DB(), func(tx *goqu.TxDatabase) error {
+		if err := s.repo.InsertAssignmentsTx(tx, assignments); err != nil {
+			return fmt.Errorf("failed to insert assignments: %w", err)
 		}
-	}
-	for _, v := range volunteers {
-		if err := s.repo.UpdateVolunteerHours(v.ID, volHours[v.ID]); err != nil {
-			return nil, err
-		}
+		return s.repo.RecalcVolunteerHoursTx(tx, id)
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return s.GetScheduleDetail()
@@ -505,7 +494,7 @@ func (s *Service) MoveAssignment(req MoveAssignmentRequest) (*MoveResponse, erro
 		return nil, err
 	}
 	if a == nil {
-		return nil, fmt.Errorf("assignment not found")
+		return nil, ErrAssignmentNotFound
 	}
 
 	deletedID := a.ID
@@ -551,7 +540,7 @@ func (s *Service) SwapAssignments(req SwapRequest) (*SwapResponse, error) {
 		return nil, err
 	}
 	if a == nil || b == nil {
-		return nil, fmt.Errorf("one or both assignments not found")
+		return nil, ErrAssignmentsNotFound
 	}
 
 	var newA, newB Assignment
@@ -633,7 +622,7 @@ func (s *Service) DeleteSchedule(id int) (bool, error) {
 		return false, nil
 	}
 	if time.Now().Before(schedule.EventEnd) {
-		return false, fmt.Errorf("event_not_ended")
+		return false, ErrEventNotEnded
 	}
 	return s.repo.DeleteSchedule(id)
 }
@@ -679,7 +668,7 @@ func (s *Service) GetVolunteers() ([]Volunteer, error) {
 
 func (s *Service) ExportToSheets() (int, error) {
 	if s.sheetsHandler == nil {
-		return 0, fmt.Errorf("Google Sheets integration not available")
+		return 0, ErrSheetsUnavailable
 	}
 
 	schedule, err := s.getActive()
@@ -775,19 +764,20 @@ func (s *Service) CreateSlot(req CreateSlotRequest) (*Slot, error) {
 }
 
 func (s *Service) UpdateSlot(slotID int, req UpdateSlotRequest) (*Slot, error) {
-	if _, err := s.getActive(); err != nil {
+	schedule, err := s.getActive()
+	if err != nil {
 		return nil, err
 	}
 	existing, err := s.repo.GetSlot(slotID)
 	if err != nil {
 		return nil, err
 	}
-	if existing == nil {
-		return nil, fmt.Errorf("slot not found")
+	if existing == nil || existing.ScheduleID != schedule.ID {
+		return nil, ErrSlotNotFound
 	}
 
 	if existing.SlotType == SlotTypeFestival && req.Type != nil && *req.Type != SlotTypeFestival {
-		return nil, fmt.Errorf("cannot change type of festival slot")
+		return nil, ErrFestivalSlotType
 	}
 
 	updates := make(map[string]interface{})
@@ -835,18 +825,19 @@ func (s *Service) UpdateSlot(slotID int, req UpdateSlotRequest) (*Slot, error) {
 }
 
 func (s *Service) DeleteSlot(slotID int) error {
-	if _, err := s.getActive(); err != nil {
+	schedule, err := s.getActive()
+	if err != nil {
 		return err
 	}
 	existing, err := s.repo.GetSlot(slotID)
 	if err != nil {
 		return err
 	}
-	if existing == nil {
-		return fmt.Errorf("slot not found")
+	if existing == nil || existing.ScheduleID != schedule.ID {
+		return ErrSlotNotFound
 	}
 	if existing.SlotType == SlotTypeFestival {
-		return fmt.Errorf("festival slot")
+		return ErrFestivalSlot
 	}
 
 	return s.repo.DeleteSlotByID(slotID)

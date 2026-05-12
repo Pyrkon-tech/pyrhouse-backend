@@ -89,6 +89,50 @@ func (r *Repository) ArchiveAllSchedules() error {
 	return err
 }
 
+func (r *Repository) ArchiveAllSchedulesTx(tx *goqu.TxDatabase) error {
+	_, err := tx.Update("schedules").
+		Set(goqu.Record{"status": "archived"}).
+		Where(goqu.Ex{"status": "active"}).Executor().Exec()
+	return err
+}
+
+func (r *Repository) CreateScheduleTx(tx *goqu.TxDatabase, req CreateScheduleRequest) (*Schedule, error) {
+	var schedule Schedule
+	query := tx.Insert("schedules").Rows(goqu.Record{
+		"name":           req.Name,
+		"event_start":    req.EventStart,
+		"event_end":      req.EventEnd,
+		"festival_start": req.FestivalStart,
+		"festival_end":   req.FestivalEnd,
+		"status":         "active",
+		"version":        1,
+	}).Returning(scheduleReturning...)
+	if _, err := query.Executor().ScanStruct(&schedule); err != nil {
+		return nil, fmt.Errorf("failed to create schedule: %w", err)
+	}
+	return &schedule, nil
+}
+
+func (r *Repository) InsertSlotsReturningTx(tx *goqu.TxDatabase, slots []Slot) error {
+	if len(slots) == 0 {
+		return nil
+	}
+	rows := make([]goqu.Record, len(slots))
+	for i, s := range slots {
+		rows[i] = goqu.Record{
+			"schedule_id":  s.ScheduleID,
+			"slot_type":    s.SlotType,
+			"start_time":   s.StartTime,
+			"end_time":     s.EndTime,
+			"credit_hours": s.CreditHours,
+			"capacity":     s.Capacity,
+			"label":        s.Label,
+		}
+	}
+	_, err := tx.Insert("schedule_slots").Rows(rows).Executor().Exec()
+	return err
+}
+
 // UpdateScheduleStatus updates status and bumps version atomically.
 // Returns the updated schedule.
 func (r *Repository) UpdateScheduleStatus(id int, status string) (*Schedule, error) {
@@ -174,25 +218,6 @@ func (r *Repository) GetVolunteers(scheduleID int) ([]Volunteer, error) {
 	return volunteers, nil
 }
 
-func (r *Repository) InsertSlots(slots []Slot) error {
-	rows := make([]goqu.Record, len(slots))
-	for i, s := range slots {
-		rows[i] = goqu.Record{
-			"schedule_id":  s.ScheduleID,
-			"slot_type":    s.SlotType,
-			"start_time":   s.StartTime,
-			"end_time":     s.EndTime,
-			"credit_hours": s.CreditHours,
-			"capacity":     s.Capacity,
-			"label":        s.Label,
-		}
-	}
-	query := r.repo.GoquDBWrapper.Insert("schedule_slots").Rows(rows)
-	if _, err := query.Executor().Exec(); err != nil {
-		return fmt.Errorf("failed to insert slots: %w", err)
-	}
-	return nil
-}
 
 func (r *Repository) InsertSlotsReturning(slots []Slot) ([]Slot, error) {
 	if len(slots) == 0 {

@@ -63,7 +63,7 @@ func (h *Handler) createSchedule(c *gin.Context) {
 func (h *Handler) getSchedule(c *gin.Context) {
 	detail, err := h.service.GetScheduleDetail()
 	if err != nil {
-		if err.Error() == "no active schedule" {
+		if errors.Is(err, ErrNoActiveSchedule) {
 			c.JSON(http.StatusNotFound, errorResp("not_found", "Brak aktywnego harmonogramu", nil))
 			return
 		}
@@ -152,7 +152,7 @@ func (h *Handler) deleteSchedule(c *gin.Context) {
 
 	found, err := h.service.DeleteSchedule(id)
 	if err != nil {
-		if err.Error() == "event_not_ended" {
+		if errors.Is(err, ErrEventNotEnded) {
 			c.JSON(http.StatusConflict, errorResp("event_not_ended", "Nie można usunąć harmonogramu przed zakończeniem eventu", nil))
 			return
 		}
@@ -174,7 +174,7 @@ func (h *Handler) getMySchedule(c *gin.Context) {
 
 	vs, err := h.service.GetMySchedule(authID)
 	if err != nil {
-		if err.Error() == "no active schedule" {
+		if errors.Is(err, ErrNoActiveSchedule) {
 			c.JSON(http.StatusNotFound, errorResp("not_found", "Brak aktywnego harmonogramu", nil))
 			return
 		}
@@ -259,7 +259,7 @@ func (h *Handler) moveAssignment(c *gin.Context) {
 			c.JSON(http.StatusConflict, errorResp("already_assigned", "Wolontariusz jest już przypisany do docelowego slotu", nil))
 			return
 		}
-		if err.Error() == "assignment not found" {
+		if errors.Is(err, ErrAssignmentNotFound) {
 			c.JSON(http.StatusNotFound, errorResp("not_found", "Przypisanie nie znalezione", nil))
 			return
 		}
@@ -279,7 +279,7 @@ func (h *Handler) swapAssignments(c *gin.Context) {
 
 	resp, err := h.service.SwapAssignments(req)
 	if err != nil {
-		if err.Error() == "one or both assignments not found" {
+		if errors.Is(err, ErrAssignmentsNotFound) {
 			c.JSON(http.StatusNotFound, errorResp("not_found", "Jedno lub oba przypisania nie znalezione", nil))
 			return
 		}
@@ -323,7 +323,7 @@ func (h *Handler) importVolunteersFromSheet(c *gin.Context) {
 	result, err := h.service.ImportVolunteersFromSheet(req)
 	if err != nil {
 		status := http.StatusInternalServerError
-		if err.Error() == "Google Sheets integration not available" {
+		if errors.Is(err, ErrSheetsUnavailable) {
 			status = http.StatusServiceUnavailable
 		}
 		c.JSON(status, errorResp("import_failed", "Nie udało się zaimportować wolontariuszy z arkusza", err.Error()))
@@ -429,7 +429,7 @@ func (h *Handler) exportToSheets(c *gin.Context) {
 	rowsWritten, err := h.service.ExportToSheets()
 	if err != nil {
 		status := http.StatusInternalServerError
-		if err.Error() == "Google Sheets integration not available" {
+		if errors.Is(err, ErrSheetsUnavailable) {
 			status = http.StatusServiceUnavailable
 		}
 		c.JSON(status, errorResp("export_failed", "Nie udało się wyeksportować do Google Sheets", err.Error()))
@@ -441,14 +441,14 @@ func (h *Handler) exportToSheets(c *gin.Context) {
 
 // handleServiceError maps common service errors to HTTP responses.
 func (h *Handler) handleServiceError(c *gin.Context, err error, msg string) {
-	switch err.Error() {
-	case "no active schedule":
+	switch {
+	case errors.Is(err, ErrNoActiveSchedule):
 		c.JSON(http.StatusNotFound, errorResp("not_found", "Brak aktywnego harmonogramu.", nil))
-	case "slot not found":
+	case errors.Is(err, ErrSlotNotFound):
 		c.JSON(http.StatusNotFound, errorResp("not_found", "Slot nie znaleziony.", nil))
-	case "festival slot":
+	case errors.Is(err, ErrFestivalSlot):
 		c.JSON(http.StatusForbidden, errorResp("forbidden", "Nie można usunąć slotu festiwalowego.", nil))
-	case "cannot change type of festival slot":
+	case errors.Is(err, ErrFestivalSlotType):
 		c.JSON(http.StatusUnprocessableEntity, errorResp("invalid_operation", "Nie można zmienić typu slotu festiwalowego.", nil))
 	default:
 		c.JSON(http.StatusInternalServerError, errorResp("internal_error", msg, err.Error()))

@@ -13,110 +13,28 @@ const (
 	defaultShiftHours  = 4
 )
 
-// GenerateSlots creates time slots from schedule dates.
-// volunteerCount is used to calculate dynamic festival capacity.
-func GenerateSlots(schedule *Schedule, volunteerCount int) []Slot {
-	var slots []Slot
-
-	// Montage days: event_start to day before festival (Tue, Wed, Thu)
-	montageStart := schedule.EventStart
-	festivalDate := time.Date(schedule.FestivalStart.Year(), schedule.FestivalStart.Month(), schedule.FestivalStart.Day(), 0, 0, 0, 0, schedule.FestivalStart.Location())
-
-	for d := montageStart; d.Before(festivalDate); d = d.AddDate(0, 0, 1) {
-		dayStart := time.Date(d.Year(), d.Month(), d.Day(), 8, 0, 0, 0, d.Location())
-		dayEnd := time.Date(d.Year(), d.Month(), d.Day(), 20, 0, 0, 0, d.Location())
-		label := fmt.Sprintf("Montaż - %s", polishWeekday(d.Weekday()))
-		slots = append(slots, Slot{
-			ScheduleID:  schedule.ID,
-			SlotType:    SlotTypeMontage,
-			StartTime:   dayStart,
-			EndTime:     dayEnd,
-			CreditHours: 7,
-			Capacity:    6,
-			Label:       &label,
-		})
-	}
-
-	// Festival slots: continuous 4h blocks from festival_start to festival_end (24/7 operation)
-	festivalStart := schedule.FestivalStart
-	festivalEnd := schedule.FestivalEnd
-
-	festivalHours := festivalEnd.Sub(festivalStart).Hours()
-	numFestivalSlots := int(math.Ceil(festivalHours / float64(defaultShiftHours)))
-	dayCapacity, nightCapacity := calcFestivalCapacity(volunteerCount, numFestivalSlots)
-
-	current := festivalStart
-	for current.Before(festivalEnd) {
-		end := current.Add(time.Duration(defaultShiftHours) * time.Hour)
-		if end.After(festivalEnd) {
-			end = festivalEnd
-		}
-		if end.Sub(current) < time.Hour {
-			break
-		}
-
-		hour := current.Hour()
-		capacity := dayCapacity
-		if hour >= 22 || hour < 6 {
-			capacity = nightCapacity
-		}
-
-		label := formatSlotLabel(current, end)
-		creditHours := end.Sub(current).Hours()
-
-		slots = append(slots, Slot{
-			ScheduleID:  schedule.ID,
-			SlotType:    SlotTypeFestival,
-			StartTime:   current,
-			EndTime:     end,
-			CreditHours: creditHours,
-			Capacity:    capacity,
-			Label:       &label,
-		})
-
-		current = end
-	}
-
-	// Demontage: last day of event
-	eventEnd := schedule.EventEnd
-	demonLabel := fmt.Sprintf("Demontaż - %s", polishWeekday(eventEnd.Weekday()))
-	dayStart := time.Date(eventEnd.Year(), eventEnd.Month(), eventEnd.Day(), 8, 0, 0, 0, eventEnd.Location())
-	dayEnd := time.Date(eventEnd.Year(), eventEnd.Month(), eventEnd.Day(), 20, 0, 0, 0, eventEnd.Location())
-	slots = append(slots, Slot{
-		ScheduleID:  schedule.ID,
-		SlotType:    SlotTypeDemontage,
-		StartTime:   dayStart,
-		EndTime:     dayEnd,
-		CreditHours: 7,
-		Capacity:    3,
-		Label:       &demonLabel,
-	})
-
-	return slots
-}
-
-func calcFestivalCapacity(volunteerCount, numSlots int) (dayCapacity, nightCapacity int) {
-	if numSlots == 0 {
-		return 2, 2
-	}
-	festivalVolHours := float64(volunteerCount) * 14 * 0.6
-	avgCapacity := festivalVolHours / (float64(numSlots) * float64(defaultShiftHours))
-
-	dayCapacity = int(math.Ceil(avgCapacity))
-	if dayCapacity < 2 {
-		dayCapacity = 2
-	}
-	nightCapacity = int(math.Ceil(float64(dayCapacity) * 0.5))
-	if nightCapacity < 2 {
-		nightCapacity = 2
-	}
-	return dayCapacity, nightCapacity
-}
 
 // volState tracks assignment state per volunteer during solving.
 type volState struct {
 	assignedHours float64
-	assignedIDs   []int // slot IDs assigned so far
+	assignedIDs   map[int]bool      // O(1) membership check
+	slotByEnd     map[time.Time]int // endTime → slotID, for adjacentHoursBefore
+	slotByStart   map[time.Time]int // startTime → slotID, for adjacentHoursAfter
+}
+
+func newVolState() *volState {
+	return &volState{
+		assignedIDs: make(map[int]bool),
+		slotByEnd:   make(map[time.Time]int),
+		slotByStart: make(map[time.Time]int),
+	}
+}
+
+func (vs *volState) assign(s Slot) {
+	vs.assignedHours += s.CreditHours
+	vs.assignedIDs[s.ID] = true
+	vs.slotByEnd[s.EndTime] = s.ID
+	vs.slotByStart[s.StartTime] = s.ID
 }
 
 // Solve assigns volunteers to slots.
@@ -138,7 +56,7 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 
 	state := make(map[int]*volState, len(volunteers))
 	for _, v := range volunteers {
-		state[v.ID] = &volState{}
+		state[v.ID] = newVolState()
 	}
 	slotFill := make(map[int]int) // slot.ID → assigned count
 
@@ -197,8 +115,7 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 					SlotID:      s.ID,
 					VolunteerID: v.ID,
 				})
-				state[v.ID].assignedHours += s.CreditHours
-				state[v.ID].assignedIDs = append(state[v.ID].assignedIDs, s.ID)
+				state[v.ID].assign(s)
 				slotFill[s.ID]++
 			}
 			// Skip slots already covered by this block so the next iteration
@@ -258,8 +175,7 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 				SlotID:      slot.ID,
 				VolunteerID: c.v.ID,
 			})
-			c.vs.assignedHours += slot.CreditHours
-			c.vs.assignedIDs = append(c.vs.assignedIDs, slot.ID)
+			c.vs.assign(slot)
 			slotFill[slot.ID]++
 			otherCount[c.v.ID]++
 		}
@@ -378,47 +294,35 @@ func canAssignBlock(
 }
 
 // adjacentHoursBefore sums credit hours of assigned slots that form a continuous
-// chain ending exactly at t (walking backwards).
+// chain ending exactly at t (walking backwards). O(chain length) via slotByEnd index.
 func adjacentHoursBefore(vs *volState, slotByID map[int]Slot, t time.Time) float64 {
 	total := 0.0
 	cur := t
 	for {
-		found := false
-		for _, sid := range vs.assignedIDs {
-			s, ok := slotByID[sid]
-			if ok && s.EndTime.Equal(cur) {
-				total += s.CreditHours
-				cur = s.StartTime
-				found = true
-				break
-			}
-		}
-		if !found {
+		sid, ok := vs.slotByEnd[cur]
+		if !ok {
 			break
 		}
+		s := slotByID[sid]
+		total += s.CreditHours
+		cur = s.StartTime
 	}
 	return total
 }
 
 // adjacentHoursAfter sums credit hours of assigned slots that form a continuous
-// chain starting exactly at t (walking forwards).
+// chain starting exactly at t (walking forwards). O(chain length) via slotByStart index.
 func adjacentHoursAfter(vs *volState, slotByID map[int]Slot, t time.Time) float64 {
 	total := 0.0
 	cur := t
 	for {
-		found := false
-		for _, sid := range vs.assignedIDs {
-			s, ok := slotByID[sid]
-			if ok && s.StartTime.Equal(cur) {
-				total += s.CreditHours
-				cur = s.EndTime
-				found = true
-				break
-			}
-		}
-		if !found {
+		sid, ok := vs.slotByStart[cur]
+		if !ok {
 			break
 		}
+		s := slotByID[sid]
+		total += s.CreditHours
+		cur = s.EndTime
 	}
 	return total
 }
@@ -426,20 +330,17 @@ func adjacentHoursAfter(vs *volState, slotByID map[int]Slot, t time.Time) float6
 // respectsBreak checks that the min 8h break constraint holds between `slot`
 // and all non-adjacent assigned slots.
 func respectsBreak(vs *volState, slotByID map[int]Slot, slot Slot) bool {
-	for _, sid := range vs.assignedIDs {
+	for sid := range vs.assignedIDs {
 		assigned, ok := slotByID[sid]
 		if !ok {
 			continue
 		}
-		// Adjacent slots — handled by continuous check, not a break violation
 		if assigned.EndTime.Equal(slot.StartTime) || slot.EndTime.Equal(assigned.StartTime) {
 			continue
 		}
-		// Overlapping — blocked
 		if slot.StartTime.Before(assigned.EndTime) && assigned.StartTime.Before(slot.EndTime) {
 			return false
 		}
-
 		var gap time.Duration
 		if slot.StartTime.After(assigned.EndTime) {
 			gap = slot.StartTime.Sub(assigned.EndTime)
@@ -454,12 +355,7 @@ func respectsBreak(vs *volState, slotByID map[int]Slot, slot Slot) bool {
 }
 
 func isAlreadyIn(vs *volState, slotID int) bool {
-	for _, sid := range vs.assignedIDs {
-		if sid == slotID {
-			return true
-		}
-	}
-	return false
+	return vs.assignedIDs[slotID]
 }
 
 func polishWeekday(w time.Weekday) string {

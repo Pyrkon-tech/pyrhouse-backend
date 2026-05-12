@@ -6,6 +6,14 @@ import (
 )
 
 var ErrVersionConflict = errors.New("version conflict")
+var ErrNoActiveSchedule = errors.New("no active schedule")
+var ErrSlotNotFound = errors.New("slot not found")
+var ErrFestivalSlot = errors.New("festival slot")
+var ErrFestivalSlotType = errors.New("cannot change type of festival slot")
+var ErrEventNotEnded = errors.New("event not ended")
+var ErrAssignmentNotFound = errors.New("assignment not found")
+var ErrAssignmentsNotFound = errors.New("one or both assignments not found")
+var ErrSheetsUnavailable = errors.New("Google Sheets integration not available")
 
 type GenerateBlockedError struct {
 	Volunteers []string
