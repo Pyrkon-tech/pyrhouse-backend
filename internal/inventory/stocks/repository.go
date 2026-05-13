@@ -154,7 +154,7 @@ func (r *StockRepository) GetStockItemsByTransfer(transferID int) (*[]models.Sto
 		Select(
 			goqu.I("nst.item_category_id").As("category_id"),
 			goqu.I("nst.quantity").As("quantity"),
-			goqu.L("CASE WHEN nst.origin_suffix IS NOT NULL THEN o.slug || '-' || nst.origin_suffix ELSE o.slug END").As("origin"),
+			goqu.L("COALESCE(CASE WHEN nst.origin_suffix IS NOT NULL THEN o.slug || '-' || nst.origin_suffix ELSE o.slug END, '')").As("origin"),
 			goqu.I("l.name").As("location_name"),
 			goqu.I("c.id").As("category_id"),
 			goqu.I("c.item_category").As("category_type"),

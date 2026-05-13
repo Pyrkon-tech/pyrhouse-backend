@@ -14,7 +14,7 @@ start: ## start postgres (if not running) then launch the app
 .PHONY: stop
 stop: ## stop the app process then bring down postgres
 	-lsof -ti :$(APP_PORT) | xargs kill -SIGTERM 2>/dev/null || true
-	docker-compose down
+	docker-compose stop
 
 .PHONY: test
 test: _test-db-setup ## run all tests including integration (against pyrhouse_test)

@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"warehouse/internal/integrations/googlesheets"
 	"warehouse/internal/inventory/category"
 	"warehouse/internal/models"
 	"warehouse/internal/settings"
@@ -20,8 +19,13 @@ type TransferCreator interface {
 	InitTransfer(req models.TransferRequest, transitStatus string) (int, error)
 }
 
+// SheetReader abstracts Google Sheets access so tests can inject fake data.
+type SheetReader interface {
+	FetchSheet(spreadsheetID, sheetName string) ([][]string, error)
+}
+
 type Service struct {
-	sheetReader     *googlesheets.DutyScheduleService
+	sheetReader     SheetReader
 	categoryRepo    *category.CategoryRepository
 	questRepo       QuestRepositoryInterface
 	transferCreator TransferCreator
@@ -49,7 +53,7 @@ func (s *Service) SetDispatchHooks(dispatched, ended func(transferID int)) {
 }
 
 func NewService(
-	sheetReader *googlesheets.DutyScheduleService,
+	sheetReader SheetReader,
 	categoryRepo *category.CategoryRepository,
 	questRepo *Repository,
 	settingsRepo *settings.Repository,
@@ -441,6 +445,12 @@ func (s *Service) upsertQuest(ctx context.Context, quest *Quest, stats *SyncStat
 			return nil
 		}
 
+		// Skip update when sheet content is identical to what's already stored.
+		if !questContentChanged(existing, quest) {
+			stats.Unchanged++
+			return nil
+		}
+
 		// Resolve location and set on quest before update
 		s.resolveAndSetQuestLocation(ctx, quest)
 		if err := s.questRepo.UpdateQuest(ctx, existing.ID, quest); err != nil {
@@ -453,6 +463,25 @@ func (s *Service) upsertQuest(ctx context.Context, quest *Quest, stats *SyncStat
 	}
 
 	return nil
+}
+
+// questContentChanged returns true if the incoming sheet data differs from what
+// is already persisted — used to avoid unnecessary UpdateQuest calls on every sync.
+func questContentChanged(existing, incoming *Quest) bool {
+	if existing.Recipient != incoming.Recipient ||
+		existing.DeliveryDate != incoming.DeliveryDate ||
+		existing.Destination.Pavilion != incoming.Destination.Pavilion ||
+		existing.Destination.Location != incoming.Destination.Location ||
+		len(existing.Items) != len(incoming.Items) {
+		return true
+	}
+	for i := range incoming.Items {
+		if existing.Items[i].Name != incoming.Items[i].Name ||
+			existing.Items[i].Quantity != incoming.Items[i].Quantity {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) resolveAndSetQuestLocation(ctx context.Context, quest *Quest) {

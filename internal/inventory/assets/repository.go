@@ -304,7 +304,7 @@ func (r *AssetsRepository) GetTransferAssets(transferID int) (*[]models.Asset, e
 			goqu.I("a.item_serial").As("item_serial"),
 			"a.status",
 			goqu.I("a.pyr_code").As("pyr_code"),
-			goqu.L("CASE WHEN a.origin_suffix IS NOT NULL THEN o.slug || '-' || a.origin_suffix ELSE o.slug END").As("origin"),
+			goqu.L("COALESCE(CASE WHEN a.origin_suffix IS NOT NULL THEN o.slug || '-' || a.origin_suffix ELSE o.slug END, '')").As("origin"),
 			goqu.I("c.id").As("category_id"),
 			goqu.I("c.item_category").As("category_type"),
 			goqu.I("c.label").As("category_label"),

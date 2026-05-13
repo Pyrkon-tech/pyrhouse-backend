@@ -63,7 +63,7 @@ func (r *CategoryRepository) GetCategories() ([]models.ItemCategory, error) {
 			goqu.I("item_category").As("type"),
 			goqu.I("category_type").As("category_type"),
 			goqu.I("label"),
-			goqu.I("pyr_id"),
+			goqu.L("COALESCE(pyr_id, '')").As("pyr_id"),
 		).
 		From("item_category").
 		Order(goqu.I("id").Asc())
