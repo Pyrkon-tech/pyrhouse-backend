@@ -16,6 +16,7 @@ type Scheduler struct {
 	stoppedChan  chan struct{}
 	mu           sync.RWMutex
 	errorHandler func(error)
+	postSyncHook func(context.Context) error
 	lastSync     time.Time
 	lastError    error
 }
@@ -36,6 +37,14 @@ func (s *Scheduler) SetErrorHandler(handler func(error)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.errorHandler = handler
+}
+
+// SetPostSyncHook registers a function called after each successful quest sync.
+// Errors from the hook are logged but do not affect the quest sync result.
+func (s *Scheduler) SetPostSyncHook(hook func(context.Context) error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.postSyncHook = hook
 }
 
 // Start begins the automatic sync loop
@@ -160,7 +169,14 @@ func (s *Scheduler) performSync() {
 	s.mu.Lock()
 	s.lastSync = time.Now()
 	s.lastError = nil
+	hook := s.postSyncHook
 	s.mu.Unlock()
+
+	if hook != nil {
+		if hookErr := hook(ctx); hookErr != nil {
+			log.Printf("[WARN] Auto-sync post-hook failed: %v", hookErr)
+		}
+	}
 
 	log.Printf("[INFO] Auto-sync completed in %v: %d created, %d updated, %d unchanged, %d items added, %d items removed",
 		duration,

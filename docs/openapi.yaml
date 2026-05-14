@@ -2312,6 +2312,261 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /equipment-requests/budget:
+    get:
+      tags:
+        - equipment-requests
+      summary: Get budget summary (Zapotrzebowanie techniczne)
+      description: |
+        **Requires admin role.**
+        Aggregates quest items by name, joins all supplier prices dynamically, and returns
+        per-item supplier breakdown and grand totals per supplier.
+        Any number of suppliers is supported — no schema change needed for new ones.
+        Pass vat=true to get gross prices (net × 1.23).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: budget_owner
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by person responsible for budget (case-insensitive). Empty = all.
+        - name: vat
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: If true, multiply all prices by 1.23 (gross with 23% VAT).
+      responses:
+        "200":
+          description: Budget summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudgetSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Forbidden - admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /equipment-requests/budget/persons:
+    get:
+      tags:
+        - equipment-requests
+      summary: List distinct budget owners
+      description: |
+        **Requires admin role.**
+        Returns distinct non-empty budget_owner values from quests for the person filter dropdown.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of persons
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  persons:
+                    type: array
+                    items:
+                      type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Forbidden - admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /equipment-requests/suppliers:
+    get:
+      tags:
+        - equipment-requests
+      summary: List known suppliers
+      description: |
+        **Requires admin role.**
+        Returns the distinct supplier names that have at least one price entry.
+        Use this to build dynamic column headers in the frontend.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Supplier list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suppliers:
+                    type: array
+                    items:
+                      type: string
+                    example: ["Netland", "Oki-event", "Probis"]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Forbidden - admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /equipment-requests/prices:
+    get:
+      tags:
+        - equipment-requests
+      summary: List price list entries
+      description: |
+        **Requires admin role.**
+        Returns all (item_name, supplier, unit_price) rows, sorted by item_name then supplier.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Price list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prices:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PriceListItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Forbidden - admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      tags:
+        - equipment-requests
+      summary: Create or update a price entry
+      description: |
+        **Requires admin role.**
+        Upserts the unit_price for (item_name, supplier). To add a new supplier just use its name — no schema change required.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertPriceRequest"
+      responses:
+        "200":
+          description: Price saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Forbidden - admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - equipment-requests
+      summary: Delete a price entry
+      description: "**Requires admin role.** Deletes the row for the given (item_name, supplier) combination."
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: item_name
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "Laptop"
+        - name: supplier
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "Probis"
+      responses:
+        "200":
+          description: Price deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Forbidden - admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /equipment-requests/prices/sync:
+    post:
+      tags:
+        - equipment-requests
+      summary: Sync price list from Cennik sheet
+      description: |
+        **Requires admin role.**
+        Reads the Cennik sheet (configured via app setting `equipment_request.cennik_sheet_name`).
+
+        **Multi-supplier layout (recommended):** header row defines supplier columns.
+        ```
+        Rzeczy    Probis  Netland  Oki-event
+        Laptop    140     90       120
+        ```
+        Any number of supplier columns is supported.
+
+        **Legacy single-price layout:** col A = item name, col B or C = price (stored as supplier "Cennik").
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  updated:
+                    type: integer
+        "503":
+          description: Google Sheets not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /origins:
     get:
       tags:
@@ -3259,6 +3514,111 @@ components:
         usage_count:
           type: integer
           example: 5
+
+    PriceListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        item_name:
+          type: string
+          example: "Laptop"
+        supplier:
+          type: string
+          example: "Probis"
+        unit_price:
+          type: number
+          format: float
+          example: 140
+        updated_at:
+          type: string
+          format: date-time
+
+    UpsertPriceRequest:
+      type: object
+      required:
+        - item_name
+        - supplier
+        - unit_price
+      properties:
+        item_name:
+          type: string
+          example: "Laptop"
+        supplier:
+          type: string
+          description: Supplier name — any string. Adding a new supplier requires no schema change.
+          example: "Oki-event"
+        unit_price:
+          type: number
+          format: float
+          minimum: 0
+          example: 120
+
+    SupplierPrice:
+      type: object
+      properties:
+        supplier:
+          type: string
+          example: "Probis"
+        unit_price:
+          type: number
+          format: float
+          example: 140
+        total:
+          type: number
+          format: float
+          example: 10920
+
+    SupplierTotal:
+      type: object
+      properties:
+        supplier:
+          type: string
+          example: "Probis"
+        total:
+          type: number
+          format: float
+          example: 35860
+
+    BudgetItem:
+      type: object
+      properties:
+        item_name:
+          type: string
+          example: "Laptop"
+        quantity:
+          type: integer
+          example: 78
+        prices:
+          type: array
+          description: One entry per supplier that has a price for this item. Empty array = unpriced.
+          items:
+            $ref: "#/components/schemas/SupplierPrice"
+
+    BudgetSummary:
+      type: object
+      properties:
+        total_positions:
+          type: integer
+          description: Number of distinct item types
+          example: 17
+        total_quantity:
+          type: integer
+          description: Total number of units across all items
+          example: 582
+        supplier_totals:
+          type: array
+          description: Grand total per supplier, sorted by supplier name
+          items:
+            $ref: "#/components/schemas/SupplierTotal"
+        unpriced_count:
+          type: integer
+          description: Number of item types with no price from any supplier
+          example: 7
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BudgetItem"
 
     SyncStatus:
       type: object

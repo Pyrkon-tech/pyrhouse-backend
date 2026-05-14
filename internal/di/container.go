@@ -6,6 +6,7 @@ import (
 	"warehouse/internal/auditlog"
 	auditLogRepo "warehouse/internal/auditlog"
 	"warehouse/internal/config"
+	"warehouse/internal/budget"
 	"warehouse/internal/equipment_requests"
 	"warehouse/internal/integrations/googlesheets"
 	"warehouse/internal/inventory/assets"
@@ -48,6 +49,7 @@ type Container struct {
 	GoogleHandler            *security.GoogleHandler
 	EquipmentRequestHandler   *equipment_requests.Handler
 	EquipmentRequestScheduler *equipment_requests.Scheduler
+	BudgetHandler             *budget.Handler
 	OriginHandler             *origins.Handler
 	OriginService             *origins.Service
 	SchedulingHandler         *scheduling.Handler
@@ -156,6 +158,21 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		}
 	}
 
+	// Budget handler — always wired (reads from DB; gracefully returns empty if no quests yet)
+	budgetRepo := budget.NewRepository(repo)
+	var budgetSheetReader budget.SheetReader
+	if googleSheetsHandler != nil {
+		budgetSheetReader = googleSheetsHandler.DutyScheduleService
+	}
+	budgetService := budget.NewService(budgetRepo, budgetSheetReader, settingsRepo, cfg.EquipmentRequest.SheetID)
+	budgetHandler := budget.NewHandler(budgetService)
+
+	// Hook: sync Cennik prices automatically after each quest sync (only when sheet reader is configured)
+	if equipmentRequestScheduler != nil && budgetSheetReader != nil {
+		equipmentRequestScheduler.SetPostSyncHook(budgetService.SyncPricesFromSheetCtx)
+		log.Println("[INFO] Budget price sync hooked into equipment request auto-sync")
+	}
+
 	return &Container{
 		Repository:                repo,
 		AuditLog:                  auditLog,
@@ -177,6 +194,7 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		GoogleHandler:             googleHandler,
 		EquipmentRequestHandler:   equipmentRequestHandler,
 		EquipmentRequestScheduler: equipmentRequestScheduler,
+		BudgetHandler:             budgetHandler,
 		OriginHandler:             originHandler,
 		OriginService:             originService,
 		SchedulingHandler:         schedulingHandler,

@@ -57,6 +57,9 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 		log.Println("[Equipment Requests]: Routes not registered - handler is nil")
 	}
 
+	container.BudgetHandler.RegisterRoutes(protectedRoutes)
+	log.Println("[Budget]: Routes registered successfully")
+
 	if container.DiscordHandler != nil {
 		container.DiscordHandler.RegisterProtectedRoutes(protectedRoutes)
 		log.Println("[Discord OAuth]: Protected routes registered")
