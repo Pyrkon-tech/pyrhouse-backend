@@ -73,7 +73,8 @@ func (r *userRepositoryImpl) GetUsers() ([]models.User, error) {
 func (r *userRepositoryImpl) GetUser(id int) (*models.User, error) {
 	var user models.User
 	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "password_hash", "role", "points", "active",
-		"discord_id", "discord_username", "avatar_url", "auth_provider").
+		"discord_id", "discord_username", "avatar_url", "auth_provider",
+		"google_id", "google_email").
 		From("users").
 		Where(goqu.Ex{"id": id})
 
