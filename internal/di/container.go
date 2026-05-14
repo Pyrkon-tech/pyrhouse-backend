@@ -45,6 +45,7 @@ type Container struct {
 	ReleaseHandler           *releases.Handler
 	ServiceDeskHandler       *service_desk.Handler
 	DiscordHandler           *security.DiscordHandler
+	GoogleHandler            *security.GoogleHandler
 	EquipmentRequestHandler   *equipment_requests.Handler
 	EquipmentRequestScheduler *equipment_requests.Scheduler
 	OriginHandler             *origins.Handler
@@ -103,6 +104,12 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	if cfg.Discord.ClientID != "" && cfg.Discord.ClientSecret != "" {
 		discordOAuth := oauth.NewDiscordOAuth(cfg.Discord)
 		discordHandler = security.NewDiscordHandler(discordOAuth, userRepo)
+	}
+
+	var googleHandler *security.GoogleHandler
+	if cfg.Google.ClientID != "" && cfg.Google.ClientSecret != "" {
+		googleOAuth := oauth.NewGoogleOAuth(cfg.Google)
+		googleHandler = security.NewGoogleHandler(googleOAuth, userRepo)
 	}
 
 	var equipmentRequestHandler *equipment_requests.Handler
@@ -167,6 +174,7 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		ReleaseHandler:            releaseHandler,
 		ServiceDeskHandler:        serviceDeskHandler,
 		DiscordHandler:            discordHandler,
+		GoogleHandler:             googleHandler,
 		EquipmentRequestHandler:   equipmentRequestHandler,
 		EquipmentRequestScheduler: equipmentRequestScheduler,
 		OriginHandler:             originHandler,

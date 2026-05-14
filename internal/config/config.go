@@ -13,6 +13,7 @@ type Config struct {
 	JWT              JWTConfig
 	CORS             CORSConfig
 	Discord          DiscordConfig
+	Google           GoogleConfig
 	EquipmentRequest EquipmentRequestConfig
 }
 
@@ -59,6 +60,13 @@ type DiscordConfig struct {
 	FrontendURL  string // URL frontendu do przekierowania po logowaniu
 }
 
+type GoogleConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURI  string
+	FrontendURL  string
+}
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
@@ -89,6 +97,12 @@ func Load() (*Config, error) {
 			ClientID:     os.Getenv("DISCORD_CLIENT_ID"),
 			ClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
 			RedirectURI:  os.Getenv("DISCORD_REDIRECT_URI"),
+			FrontendURL:  os.Getenv("FRONTEND_URL"),
+		},
+		Google: GoogleConfig{
+			ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+			ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+			RedirectURI:  os.Getenv("GOOGLE_REDIRECT_URI"),
 			FrontendURL:  os.Getenv("FRONTEND_URL"),
 		},
 		EquipmentRequest: EquipmentRequestConfig{

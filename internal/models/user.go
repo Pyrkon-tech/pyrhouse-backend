@@ -15,6 +15,9 @@ type User struct {
 	DiscordUsername *string `json:"discord_username,omitempty" db:"discord_username"`
 	AvatarURL       *string `json:"avatar_url,omitempty" db:"avatar_url"`
 	AuthProvider    *string `json:"auth_provider" db:"auth_provider"`
+	// Google OAuth fields
+	GoogleID    *string `json:"google_id,omitempty" db:"google_id"`
+	GoogleEmail *string `json:"google_email,omitempty" db:"google_email"`
 }
 
 type CreateUserRequest struct {

@@ -18,6 +18,11 @@ func RegisterPublicRoutes(router *gin.Engine, container *di.Container) {
 		container.DiscordHandler.RegisterRoutes(router.Group(""))
 		log.Println("[Discord OAuth]: Public routes registered")
 	}
+
+	if container.GoogleHandler != nil {
+		container.GoogleHandler.RegisterRoutes(router.Group(""))
+		log.Println("[Google OAuth]: Public routes registered")
+	}
 }
 
 func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
@@ -55,6 +60,11 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 	if container.DiscordHandler != nil {
 		container.DiscordHandler.RegisterProtectedRoutes(protectedRoutes)
 		log.Println("[Discord OAuth]: Protected routes registered")
+	}
+
+	if container.GoogleHandler != nil {
+		container.GoogleHandler.RegisterProtectedRoutes(protectedRoutes)
+		log.Println("[Google OAuth]: Protected routes registered")
 	}
 }
 

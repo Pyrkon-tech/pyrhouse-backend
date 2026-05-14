@@ -26,6 +26,11 @@ type UserRepository interface {
 	UpdateDiscordInfo(userID int, username string, avatarURL string) error
 	LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error
 	MergeDiscordAccount(targetID, sourceID int) (sourceDeleted bool, err error)
+	// Google OAuth methods
+	FindUserByGoogleID(googleID string) (*models.User, error)
+	CreateGoogleUser(user *models.User) (*models.User, error)
+	UpdateGoogleInfo(userID int, avatarURL string) error
+	LinkGoogle(userID int, googleID, googleEmail, avatarURL string) error
 }
 
 type userRepositoryImpl struct {
@@ -331,6 +336,86 @@ func (r *userRepositoryImpl) LinkDiscord(userID int, discordID, discordUsername,
 	_, err := query.Executor().Exec()
 	if err != nil {
 		return fmt.Errorf("failed to link discord: %w", err)
+	}
+	return nil
+}
+
+func (r *userRepositoryImpl) FindUserByGoogleID(googleID string) (*models.User, error) {
+	var user models.User
+	query := r.repository.GoquDBWrapper.Select(
+		"id", "username", "fullname", "role", "points", "active",
+		"google_id", "google_email", "avatar_url", "auth_provider",
+	).From("users").Where(goqu.Ex{"google_id": googleID})
+
+	found, err := query.Executor().ScanStruct(&user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find user by google_id: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return &user, nil
+}
+
+func (r *userRepositoryImpl) CreateGoogleUser(user *models.User) (*models.User, error) {
+	username := user.Username
+	isUnique, err := r.IsUsernameUnique(username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check username uniqueness: %w", err)
+	}
+	if !isUnique {
+		if user.GoogleID != nil {
+			username = fmt.Sprintf("%s_%s", user.Username, *user.GoogleID)
+		} else {
+			username = fmt.Sprintf("%s_%d", user.Username, r.generateRandomSuffix())
+		}
+	}
+
+	query := r.repository.GoquDBWrapper.Insert("users").
+		Rows(goqu.Record{
+			"username":      username,
+			"google_id":     user.GoogleID,
+			"google_email":  user.GoogleEmail,
+			"avatar_url":    user.AvatarURL,
+			"auth_provider": user.AuthProvider,
+			"role":          user.Role,
+			"active":        user.Active,
+		}).
+		Returning("id")
+
+	var id int
+	_, err = query.Executor().ScanVal(&id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create google user: %w", err)
+	}
+
+	user.ID = id
+	user.Username = username
+	return user, nil
+}
+
+func (r *userRepositoryImpl) UpdateGoogleInfo(userID int, avatarURL string) error {
+	_, err := r.repository.GoquDBWrapper.Update("users").
+		Set(goqu.Record{"avatar_url": avatarURL}).
+		Where(goqu.Ex{"id": userID}).
+		Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to update google info: %w", err)
+	}
+	return nil
+}
+
+func (r *userRepositoryImpl) LinkGoogle(userID int, googleID, googleEmail, avatarURL string) error {
+	_, err := r.repository.GoquDBWrapper.Update("users").
+		Set(goqu.Record{
+			"google_id":    googleID,
+			"google_email": googleEmail,
+			"avatar_url":   avatarURL,
+		}).
+		Where(goqu.Ex{"id": userID}).
+		Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to link google: %w", err)
 	}
 	return nil
 }
