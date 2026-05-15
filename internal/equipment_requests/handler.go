@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"warehouse/internal/security"
 )
 
 type Handler struct {
@@ -29,39 +30,29 @@ func (h *Handler) SetScheduler(s *Scheduler) {
 
 // RegisterRoutes registers equipment request routes
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
-	equipmentRoutes := router.Group("/equipment-requests")
-	{
-		// Sync operations
-		equipmentRoutes.POST("/sync", h.ManualSync)
-		equipmentRoutes.GET("/sync-log", h.GetSyncLog)
+	eq := router.Group("/equipment-requests")
 
-		// Quest management
-		equipmentRoutes.GET("/quests", h.ListQuests)
-		equipmentRoutes.GET("/quests/unresolved-locations", h.ListUnresolvedLocationQuests)
-		equipmentRoutes.GET("/quests/:id", h.GetQuest)
-		equipmentRoutes.PATCH("/quests/:id/status", h.UpdateQuestStatus)
-		equipmentRoutes.PATCH("/quests/:id/location", h.UpdateQuestLocation)
+	// Read-only — all authenticated users
+	eq.GET("/quests", h.ListQuests)
+	eq.GET("/quests/unresolved-locations", h.ListUnresolvedLocationQuests)
+	eq.GET("/quests/:id", h.GetQuest)
+	eq.GET("/quests/:id/transfer-preview", h.PreviewTransferFromQuest)
+	eq.GET("/sync-log", h.GetSyncLog)
+	eq.GET("/sync-status", h.GetSyncStatus)
+	eq.GET("/stream", h.StreamQuests)
+	eq.GET("/category-mappings", h.ListCategoryMappings)
+	eq.GET("/location-mappings", h.ListLocationMappings)
 
-		// Quest → Transfer integration
-		equipmentRoutes.POST("/quests/:id/transfer", h.CreateTransferFromQuest)
-		equipmentRoutes.GET("/quests/:id/transfer-preview", h.PreviewTransferFromQuest)
-
-		// Category mapping management
-		equipmentRoutes.POST("/category-mapping", h.CreateCategoryMapping)
-		equipmentRoutes.GET("/category-mappings", h.ListCategoryMappings)
-		equipmentRoutes.DELETE("/category-mappings/:id", h.DeleteCategoryMapping)
-
-		// Location mapping management
-		equipmentRoutes.GET("/location-mappings", h.ListLocationMappings)
-		equipmentRoutes.POST("/location-mappings", h.CreateLocationMapping)
-		equipmentRoutes.DELETE("/location-mappings/:id", h.DeleteLocationMapping)
-
-		// Real-time updates (SSE)
-		equipmentRoutes.GET("/stream", h.StreamQuests)
-
-		// Scheduler status
-		equipmentRoutes.GET("/sync-status", h.GetSyncStatus)
-	}
+	// Write operations — dispatcher and above
+	dispatch := eq.Group("", security.Authorize("dispatcher"))
+	dispatch.POST("/sync", h.ManualSync)
+	dispatch.PATCH("/quests/:id/status", h.UpdateQuestStatus)
+	dispatch.PATCH("/quests/:id/location", h.UpdateQuestLocation)
+	dispatch.POST("/quests/:id/transfer", h.CreateTransferFromQuest)
+	dispatch.POST("/category-mapping", h.CreateCategoryMapping)
+	dispatch.DELETE("/category-mappings/:id", h.DeleteCategoryMapping)
+	dispatch.POST("/location-mappings", h.CreateLocationMapping)
+	dispatch.DELETE("/location-mappings/:id", h.DeleteLocationMapping)
 }
 
 // ManualSync triggers manual sync from Google Sheets and persists to database
