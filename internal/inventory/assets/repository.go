@@ -495,15 +495,16 @@ func (r *AssetsRepository) CountAssetsInCategory(categoryID int) (int, error) {
 func (r *AssetsRepository) GenerateUniquePyrCode(categoryID int, categoryPyrID string) (string, error) {
 	var nextNumber int
 
-	// Get the largest number for the given category
-	query := r.repository.GoquDBWrapper.Select(
-		goqu.L("COALESCE(MAX(CAST(REGEXP_REPLACE(pyr_code, '^PYR-" + categoryPyrID + "(\\d+)(-\\d+)?$', '\\1') AS INTEGER)), 0)"),
-	).
-		From("items").
-		Where(goqu.L("pyr_code ~ ?", "^PYR-"+categoryPyrID+"\\d+(-\\d+)?$"))
+	pattern := "^PYR-" + categoryPyrID + `\d+(-\d+)?$`
+	extractExpr := `CAST(REGEXP_REPLACE(pyr_code, '^PYR-` + categoryPyrID + `(\d+)(-\d+)?$', '\1') AS INTEGER)`
+	rawSQL := `SELECT COALESCE(MAX(num), 0) FROM (
+		SELECT ` + extractExpr + ` AS num FROM items WHERE pyr_code ~ $1
+		UNION ALL
+		SELECT ` + extractExpr + ` AS num FROM pyr_code_reservations WHERE pyr_code ~ $2
+	) AS all_codes`
 
-	_, err := query.Executor().ScanVal(&nextNumber)
-	if err != nil {
+	row := r.repository.GoquDBWrapper.QueryRow(rawSQL, pattern, pattern)
+	if err := row.Scan(&nextNumber); err != nil {
 		return "", fmt.Errorf("failed to get next number: %w", err)
 	}
 

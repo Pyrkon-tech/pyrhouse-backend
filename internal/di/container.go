@@ -12,6 +12,7 @@ import (
 	"warehouse/internal/inventory/assets"
 	"warehouse/internal/inventory/category"
 	"warehouse/internal/inventory/items"
+	"warehouse/internal/inventory/reservations"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/inventory/transfers"
 	"warehouse/internal/locations"
@@ -56,6 +57,7 @@ type Container struct {
 	SearchHandler             *search.Handler
 	SettingsHandler           *settings.Handler
 	SettingsRepo              *settings.Repository
+	ReservationHandler        *reservations.Handler
 }
 
 func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
@@ -158,6 +160,10 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		}
 	}
 
+	reservationRepo := reservations.NewRepository(repo)
+	reservationService := reservations.NewService(reservationRepo, assetRepo, repo, originService, auditLog)
+	reservationHandler := reservations.NewHandler(reservationService)
+
 	// Budget handler — always wired (reads from DB; gracefully returns empty if no quests yet)
 	budgetRepo := budget.NewRepository(repo)
 	var budgetSheetReader budget.SheetReader
@@ -201,6 +207,7 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		SearchHandler:             searchHandler,
 		SettingsHandler:           settingsHandler,
 		SettingsRepo:              settingsRepo,
+		ReservationHandler:        reservationHandler,
 	}
 }
 

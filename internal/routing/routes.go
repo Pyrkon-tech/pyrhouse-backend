@@ -60,6 +60,9 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 	container.BudgetHandler.RegisterRoutes(protectedRoutes)
 	log.Println("[Budget]: Routes registered successfully")
 
+	container.ReservationHandler.RegisterRoutes(protectedRoutes)
+	log.Println("[Reservations]: Routes registered successfully")
+
 	if container.DiscordHandler != nil {
 		container.DiscordHandler.RegisterProtectedRoutes(protectedRoutes)
 		log.Println("[Discord OAuth]: Protected routes registered")
