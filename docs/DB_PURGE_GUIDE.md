@@ -125,6 +125,50 @@ SELECT COUNT(*) AS quest_with_transfer FROM equipment_request_quests WHERE trans
 
 ---
 
+## Opcjonalnie — usuwanie kont użytkowników
+
+> Wykonaj **po kroku 2** (po purge głównych tabel). Większość tabel referencjonujących `users` jest już wtedy pusta.
+
+### Co jeszcze blokuje usunięcie usera po purge
+
+Po wykonaniu kroku 2 zostają dwie tabele, które nadal trzymają FK do `users` i **nie były czyszczone**:
+
+| Tabela | Kolumna | ON DELETE | Co robić |
+|---|---|---|---|
+| `schedule_volunteers` | `user_id` | brak (nullable) | ustaw NULL lub usuń wolontariuszy z grafiku |
+| `equipment_request_category_mapping` | `created_by` | brak (nullable) | ustaw NULL |
+
+### Scenariusz A — usuń konkretnego usera
+
+```sql
+-- Odepnij usera od grafiku i mappingów
+UPDATE schedule_volunteers SET user_id = NULL WHERE user_id = <ID>;
+UPDATE equipment_request_category_mapping SET created_by = NULL WHERE created_by = <ID>;
+
+-- Teraz możesz usunąć
+DELETE FROM users WHERE id = <ID>;
+
+-- Opcjonalnie po usunięciu z końca listy zresetuj sekwencje
+SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
+```
+
+### Scenariusz B — wyczyść wszystkich userów (nuclear)
+
+```sql
+-- Odepnij wszystkie FK do users które zostały po purge
+UPDATE schedule_volunteers SET user_id = NULL WHERE user_id IS NOT NULL;
+UPDATE equipment_request_category_mapping SET created_by = NULL WHERE created_by IS NOT NULL;
+
+-- Wyczyść userów z resetem sekwencji
+TRUNCATE TABLE users RESTART IDENTITY CASCADE;
+```
+
+> `schedule_volunteers.user_id` jest nullable — wyzerowanie nie usuwa wolontariusza z grafiku,
+> tylko traci powiązanie z kontem. Jeśli chcesz też wyczyścić grafiki, dodaj
+> `TRUNCATE TABLE schedules RESTART IDENTITY CASCADE;` (cascade usunie volunteers/slots/assignments).
+
+---
+
 ## Przed wykonaniem
 
 Upewnij się, że masz aktualny dump bazy:
