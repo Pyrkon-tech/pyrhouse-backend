@@ -56,7 +56,7 @@ func (r *Repository) GetReservations(categoryID *int, status string) ([]PyrCodeR
 		query = query.Where(goqu.Ex{"category_id": *categoryID})
 	}
 
-	var result []PyrCodeReservation
+	result := make([]PyrCodeReservation, 0)
 	if err := query.Executor().ScanStructs(&result); err != nil {
 		return nil, fmt.Errorf("failed to get reservations: %w", err)
 	}
