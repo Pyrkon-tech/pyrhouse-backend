@@ -195,6 +195,7 @@ type ScheduleDetail struct {
 	Slots      []SlotWithVolunteers `json:"slots"`
 	Volunteers []VolunteerWithSlots `json:"volunteers"`
 	Validation *ValidationResult    `json:"validation"`
+	DayWindows []DayWindow          `json:"day_windows"`
 }
 
 type AssignmentDetail struct {
@@ -265,6 +266,22 @@ type UserInfo struct {
 	Fullname        *string `json:"fullname"`
 	AvatarURL       *string `json:"avatar_url"`
 	DiscordUsername *string `json:"discord_username"`
+}
+
+// DayWindow defines a custom operating window (start–end) for a specific calendar date.
+// Montage/demontage slots are generated as 1h blocks within this window.
+type DayWindow struct {
+	ID          int    `json:"id" db:"id"`
+	ScheduleID  int    `json:"schedule_id" db:"schedule_id"`
+	Date        string `json:"date" db:"date"`         // "2025-06-18"
+	WindowStart string `json:"window_start" db:"window_start"` // "10:00"
+	WindowEnd   string `json:"window_end" db:"window_end"`     // "18:00"
+}
+
+type UpsertDayWindowRequest struct {
+	Date        string `json:"date" binding:"required"`
+	WindowStart string `json:"window_start" binding:"required"`
+	WindowEnd   string `json:"window_end" binding:"required"`
 }
 
 // Slot types

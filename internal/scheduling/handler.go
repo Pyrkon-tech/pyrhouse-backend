@@ -43,6 +43,9 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/schedule/export/csv", security.Authorize("moderator"), h.export)
 	router.POST("/schedule/export/sheets", security.Authorize("moderator"), h.exportToSheets)
 	router.GET("/schedule/on-duty", security.Authorize("user"), h.getOnDuty)
+	router.PUT("/schedule/day-windows", security.Authorize("moderator"), h.upsertDayWindow)
+	router.DELETE("/schedule/day-windows/:date", security.Authorize("moderator"), h.deleteDayWindow)
+	router.POST("/schedule/regenerate-slots", security.Authorize("admin"), h.regenerateSlots)
 }
 
 func (h *Handler) createSchedule(c *gin.Context) {
@@ -442,6 +445,48 @@ func (h *Handler) exportToSheets(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"rows_written": rowsWritten})
+}
+
+func (h *Handler) upsertDayWindow(c *gin.Context) {
+	var req UpsertDayWindowRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errorResp("invalid_request", "Nieprawidłowe dane żądania", err.Error()))
+		return
+	}
+
+	window, err := h.service.UpsertDayWindow(req)
+	if err != nil {
+		h.handleServiceError(c, err, "Nie udało się zapisać okna czasowego")
+		return
+	}
+
+	c.JSON(http.StatusOK, window)
+}
+
+func (h *Handler) deleteDayWindow(c *gin.Context) {
+	date := c.Param("date")
+
+	found, err := h.service.DeleteDayWindow(date)
+	if err != nil {
+		h.handleServiceError(c, err, "Nie udało się usunąć okna czasowego")
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, errorResp("not_found", "Okno czasowe nie znalezione", nil))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Day window deleted"})
+}
+
+func (h *Handler) regenerateSlots(c *gin.Context) {
+	detail, err := h.service.RegenerateSlots()
+	if err != nil {
+		h.handleServiceError(c, err, "Nie udało się przeregenerować slotów")
+		return
+	}
+
+	c.JSON(http.StatusOK, detail)
 }
 
 // handleServiceError maps common service errors to HTTP responses.

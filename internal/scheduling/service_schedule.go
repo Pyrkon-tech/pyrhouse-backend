@@ -19,7 +19,8 @@ func (s *Service) CreateSchedule(req CreateScheduleRequest) (*ScheduleDetail, er
 		if err != nil {
 			return err
 		}
-		slots := generateScheduleSlots(schedule)
+		// No day windows yet for a brand-new schedule — defaults (8-20h) apply.
+		slots := generateScheduleSlots(schedule, nil)
 		return s.repo.InsertSlotsReturningTx(tx, slots)
 	})
 	if err != nil {
@@ -28,12 +29,68 @@ func (s *Service) CreateSchedule(req CreateScheduleRequest) (*ScheduleDetail, er
 	return s.GetScheduleDetail()
 }
 
-// generateScheduleSlots creates montage (8-20h), festival (1h blocks, end truncated to full hour),
-// and demontage (8-20h) slots. All times in Europe/Warsaw.
-func generateScheduleSlots(schedule *Schedule) []Slot {
+// RegenerateSlots deletes all non-festival slots for the active schedule, then
+// re-creates montage/demontage slots according to the current day windows.
+// Existing assignments are cleared (festival slots and their assignments are preserved).
+func (s *Service) RegenerateSlots() (*ScheduleDetail, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return nil, err
+	}
+
+	dayWindows, err := s.repo.GetDayWindowsAsMap(schedule.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	err = repository.WithTransaction(s.repo.DB(), func(tx *goqu.TxDatabase) error {
+		if err := s.repo.DeleteNonFestivalSlotsTx(tx, schedule.ID); err != nil {
+			return err
+		}
+		slots := generateScheduleSlots(schedule, dayWindows)
+		var nonFestival []Slot
+		for _, sl := range slots {
+			if sl.SlotType != SlotTypeFestival {
+				nonFestival = append(nonFestival, sl)
+			}
+		}
+		if err := s.repo.InsertSlotsReturningTx(tx, nonFestival); err != nil {
+			return err
+		}
+		if err := s.repo.RecalcVolunteerHoursTx(tx, schedule.ID); err != nil {
+			return err
+		}
+		_, err := s.repo.IncrementVersionTx(tx, schedule.ID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.GetScheduleDetail()
+}
+
+// generateScheduleSlots creates montage (hourly within day window), festival (1h blocks),
+// and demontage (hourly within day window) slots. All times in Europe/Warsaw.
+// dayWindows maps date string "2006-01-02" → [startHour, endHour]; nil/missing entry → default 8-20.
+func generateScheduleSlots(schedule *Schedule, dayWindows map[string][2]int) []Slot {
 	var slots []Slot
 
-	// Montage: event_start (inclusive) up to the day before festival_start
+	windowFor := func(d time.Time) (int, int) {
+		key := d.Format("2006-01-02")
+		if dayWindows != nil {
+			if w, ok := dayWindows[key]; ok {
+				return w[0], w[1]
+			}
+		}
+		return 8, 20
+	}
+
+	dayAbbr := map[time.Weekday]string{
+		time.Monday: "Pn", time.Tuesday: "Wt", time.Wednesday: "Śr",
+		time.Thursday: "Czw", time.Friday: "Pt", time.Saturday: "Sb", time.Sunday: "Nd",
+	}
+
+	// Montage: event_start (inclusive) up to the day before festival_start, hourly.
 	festivalDay := time.Date(
 		schedule.FestivalStart.In(warsawLocation).Year(),
 		schedule.FestivalStart.In(warsawLocation).Month(),
@@ -46,27 +103,30 @@ func generateScheduleSlots(schedule *Schedule) []Slot {
 		schedule.EventStart.In(warsawLocation).Day(),
 		0, 0, 0, 0, warsawLocation,
 	); d.Before(festivalDay); d = d.AddDate(0, 0, 1) {
-		label := fmt.Sprintf("Montaż - %s", polishWeekday(d.Weekday()))
-		labelStr := label
-		slots = append(slots, Slot{
-			ScheduleID:  schedule.ID,
-			SlotType:    SlotTypeMontage,
-			StartTime:   time.Date(d.Year(), d.Month(), d.Day(), 8, 0, 0, 0, warsawLocation),
-			EndTime:     time.Date(d.Year(), d.Month(), d.Day(), 20, 0, 0, 0, warsawLocation),
-			CreditHours: 7,
-			Capacity:    8,
-			Label:       &labelStr,
-		})
+		startH, endH := windowFor(d)
+		abbr := dayAbbr[d.Weekday()]
+		for h := startH; h < endH; h++ {
+			slotStart := time.Date(d.Year(), d.Month(), d.Day(), h, 0, 0, 0, warsawLocation)
+			slotEnd := slotStart.Add(time.Hour)
+			label := fmt.Sprintf("Montaż - %s %02d:00-%02d:00", abbr, h, h+1)
+			slots = append(slots, Slot{
+				ScheduleID:  schedule.ID,
+				SlotType:    SlotTypeMontage,
+				StartTime:   slotStart,
+				EndTime:     slotEnd,
+				CreditHours: 1,
+				Capacity:    2,
+				Label:       &label,
+			})
+		}
 	}
 
 	// Festival: 1-hour blocks from festival_start to festival_end truncated to full hour.
-	// e.g. festival_end 21:37 → last slot is 20:00-21:00.
 	festEnd := schedule.FestivalEnd.Truncate(time.Hour)
 	cur := schedule.FestivalStart.Truncate(time.Hour).In(warsawLocation)
 	for cur.Before(festEnd) {
 		slotEnd := cur.Add(time.Hour)
 		label := fmt.Sprintf("Festiwal %s", cur.In(warsawLocation).Format("02.01 15:04"))
-		labelStr := label
 		slots = append(slots, Slot{
 			ScheduleID:  schedule.ID,
 			SlotType:    SlotTypeFestival,
@@ -74,24 +134,30 @@ func generateScheduleSlots(schedule *Schedule) []Slot {
 			EndTime:     slotEnd,
 			CreditHours: 1,
 			Capacity:    2,
-			Label:       &labelStr,
+			Label:       &label,
 		})
 		cur = slotEnd
 	}
 
-	// Demontage: event_end day, 8:00-20:00
+	// Demontage: event_end day, hourly within window.
 	ed := schedule.EventEnd.In(warsawLocation)
-	dLabel := fmt.Sprintf("Demontaż - %s", polishWeekday(time.Date(ed.Year(), ed.Month(), ed.Day(), 0, 0, 0, 0, warsawLocation).Weekday()))
-	dLabelStr := dLabel
-	slots = append(slots, Slot{
-		ScheduleID:  schedule.ID,
-		SlotType:    SlotTypeDemontage,
-		StartTime:   time.Date(ed.Year(), ed.Month(), ed.Day(), 8, 0, 0, 0, warsawLocation),
-		EndTime:     time.Date(ed.Year(), ed.Month(), ed.Day(), 20, 0, 0, 0, warsawLocation),
-		CreditHours: 7,
-		Capacity:    3,
-		Label:       &dLabelStr,
-	})
+	edDay := time.Date(ed.Year(), ed.Month(), ed.Day(), 0, 0, 0, 0, warsawLocation)
+	startH, endH := windowFor(edDay)
+	deAbbr := dayAbbr[edDay.Weekday()]
+	for h := startH; h < endH; h++ {
+		slotStart := time.Date(edDay.Year(), edDay.Month(), edDay.Day(), h, 0, 0, 0, warsawLocation)
+		slotEnd := slotStart.Add(time.Hour)
+		label := fmt.Sprintf("Demontaż - %s %02d:00-%02d:00", deAbbr, h, h+1)
+		slots = append(slots, Slot{
+			ScheduleID:  schedule.ID,
+			SlotType:    SlotTypeDemontage,
+			StartTime:   slotStart,
+			EndTime:     slotEnd,
+			CreditHours: 1,
+			Capacity:    2,
+			Label:       &label,
+		})
+	}
 
 	return slots
 }
@@ -165,11 +231,17 @@ func (s *Service) buildDetail(schedule *Schedule) (*ScheduleDetail, error) {
 	}
 	validation := Validate(slots, volunteers, plainAssignments)
 
+	dayWindows, err := s.repo.GetDayWindows(id)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ScheduleDetail{
 		Schedule:   *schedule,
 		Slots:      slotsWithVols,
 		Volunteers: volsWithSlots,
 		Validation: validation,
+		DayWindows: dayWindows,
 	}, nil
 }
 
@@ -343,6 +415,22 @@ func (s *Service) SaveDraft(req SaveDraftRequest) (*SaveDraftResponse, error) {
 		CreatedSlots: createdSlots,
 		Validation:   detail.Validation,
 	}, nil
+}
+
+func (s *Service) UpsertDayWindow(req UpsertDayWindowRequest) (*DayWindow, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.UpsertDayWindow(schedule.ID, req)
+}
+
+func (s *Service) DeleteDayWindow(date string) (bool, error) {
+	schedule, err := s.getActive()
+	if err != nil {
+		return false, err
+	}
+	return s.repo.DeleteDayWindow(schedule.ID, date)
 }
 
 type VersionConflictError struct {

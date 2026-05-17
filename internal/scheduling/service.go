@@ -16,10 +16,7 @@ func NewService(repo *Repository, sheetsHandler *googlesheets.GoogleSheetsHandle
 	return &Service{repo: repo, sheetsHandler: sheetsHandler, settingsRepo: settingsRepo}
 }
 
-func calculateCreditHours(slotType string, start, end time.Time) float64 {
-	if slotType == SlotTypeMontage || slotType == SlotTypeDemontage {
-		return 7
-	}
+func calculateCreditHours(_ string, start, end time.Time) float64 {
 	return end.Sub(start).Hours()
 }
 

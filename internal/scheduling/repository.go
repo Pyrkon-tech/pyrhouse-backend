@@ -687,6 +687,81 @@ func (r *Repository) DB() *goqu.Database {
 	return r.repo.GoquDBWrapper
 }
 
+// Day window CRUD
+
+func (r *Repository) GetDayWindows(scheduleID int) ([]DayWindow, error) {
+	var windows []DayWindow
+	query := r.repo.GoquDBWrapper.From("schedule_day_windows").
+		Where(goqu.Ex{"schedule_id": scheduleID}).
+		Order(goqu.C("date").Asc())
+	if err := query.Executor().ScanStructs(&windows); err != nil {
+		return nil, fmt.Errorf("failed to get day windows: %w", err)
+	}
+	if windows == nil {
+		windows = []DayWindow{}
+	}
+	return windows, nil
+}
+
+// GetDayWindowsAsMap returns a map of date string → [startHour, endHour] for fast lookup.
+func (r *Repository) GetDayWindowsAsMap(scheduleID int) (map[string][2]int, error) {
+	windows, err := r.GetDayWindows(scheduleID)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string][2]int, len(windows))
+	for _, w := range windows {
+		var sh, eh int
+		fmt.Sscanf(w.WindowStart, "%d", &sh)
+		fmt.Sscanf(w.WindowEnd, "%d", &eh)
+		m[w.Date] = [2]int{sh, eh}
+	}
+	return m, nil
+}
+
+func (r *Repository) UpsertDayWindow(scheduleID int, req UpsertDayWindowRequest) (*DayWindow, error) {
+	const sql = `
+		INSERT INTO schedule_day_windows (schedule_id, date, window_start, window_end)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (schedule_id, date) DO UPDATE
+		  SET window_start = EXCLUDED.window_start,
+		      window_end   = EXCLUDED.window_end
+		RETURNING id, schedule_id, date::text, window_start::text, window_end::text
+	`
+	row := r.repo.DB.QueryRow(sql, scheduleID, req.Date, req.WindowStart, req.WindowEnd)
+	var w DayWindow
+	if err := row.Scan(&w.ID, &w.ScheduleID, &w.Date, &w.WindowStart, &w.WindowEnd); err != nil {
+		return nil, fmt.Errorf("failed to upsert day window: %w", err)
+	}
+	return &w, nil
+}
+
+func (r *Repository) DeleteDayWindow(scheduleID int, date string) (bool, error) {
+	res, err := r.repo.GoquDBWrapper.Delete("schedule_day_windows").
+		Where(goqu.Ex{"schedule_id": scheduleID, "date": date}).
+		Executor().Exec()
+	if err != nil {
+		return false, fmt.Errorf("failed to delete day window: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
+func (r *Repository) DeleteNonFestivalSlotsTx(tx *goqu.TxDatabase, scheduleID int) error {
+	_, err := tx.Delete("schedule_slots").
+		Where(goqu.Ex{
+			"schedule_id": scheduleID,
+			"slot_type":   goqu.Op{"neq": SlotTypeFestival},
+		}).Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to delete non-festival slots: %w", err)
+	}
+	return nil
+}
+
 // GetOnDutyVolunteers returns volunteers assigned to slots active at time at,
 // enriched with real-time dispatch status derived from in-progress quests.
 func (r *Repository) GetOnDutyVolunteers(at time.Time) ([]OnDutyEntry, error) {

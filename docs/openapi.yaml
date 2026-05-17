@@ -40,6 +40,8 @@ tags:
     description: Dispatch map — volunteer status and quest assignment
   - name: releases
     description: Permanent inventory releases — remove items from stock with a receipt for PDF generation
+  - name: scheduling
+    description: Volunteer schedule management — slots, day windows, assignments, and generation
 
 paths:
   /health:
@@ -2967,6 +2969,82 @@ paths:
         "409":
           description: Validation error (items changed since draft creation)
 
+  /schedule/day-windows:
+    put:
+      tags: [scheduling]
+      summary: Upsert day window
+      description: |
+        Creates or updates the operating time window for a specific calendar date.
+        Montage/demontage slots for that date will use this window when regenerated.
+        If a window already exists for the date it is overwritten.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertDayWindowRequest"
+      responses:
+        "200":
+          description: Window saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DayWindow"
+        "400":
+          $ref: "#/components/responses/DefaultError"
+        "404":
+          description: No active schedule
+
+  /schedule/day-windows/{date}:
+    delete:
+      tags: [scheduling]
+      summary: Delete day window
+      description: Removes the custom window for the given date. The next slot regeneration will use the default 08:00–20:00 window for that day.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "2026-06-16"
+      responses:
+        "200":
+          description: Window deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "404":
+          description: Window not found
+
+  /schedule/regenerate-slots:
+    post:
+      tags: [scheduling]
+      summary: Regenerate montage/demontage slots
+      description: |
+        Deletes all non-festival slots for the active schedule and re-creates them
+        using the current day windows. Festival slots and their assignments are preserved.
+        All non-festival assignments are removed. Bumps the schedule version.
+        Requires admin role.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Schedule detail after regeneration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleDetail"
+        "404":
+          description: No active schedule
+
 servers:
   - url: https://pyrhouse-backend-f26ml.ondigitalocean.app/api
     description: Production
@@ -4027,3 +4105,78 @@ components:
                 type: integer
                 minimum: 1
 
+
+    DayWindow:
+      type: object
+      properties:
+        id:
+          type: integer
+        schedule_id:
+          type: integer
+        date:
+          type: string
+          example: "2026-06-16"
+        window_start:
+          type: string
+          example: "10:00"
+        window_end:
+          type: string
+          example: "18:00"
+
+    UpsertDayWindowRequest:
+      type: object
+      required: [date, window_start, window_end]
+      properties:
+        date:
+          type: string
+          example: "2026-06-16"
+        window_start:
+          type: string
+          example: "10:00"
+        window_end:
+          type: string
+          example: "18:00"
+
+    ScheduleDetail:
+      type: object
+      description: Full schedule state including slots, volunteers, validation, and day windows.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        event_start:
+          type: string
+          format: date-time
+        event_end:
+          type: string
+          format: date-time
+        festival_start:
+          type: string
+          format: date-time
+        festival_end:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [draft, active, archived]
+        version:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/SlotWithVolunteers"
+        volunteers:
+          type: array
+          items:
+            $ref: "#/components/schemas/VolunteerWithSlots"
+        validation:
+          $ref: "#/components/schemas/ValidationResult"
+        day_windows:
+          type: array
+          description: Custom operating windows per calendar date. Empty = all days use default 08:00–20:00.
+          items:
+            $ref: "#/components/schemas/DayWindow"

@@ -43,6 +43,9 @@ func (vs *volState) assign(s Slot) {
 //   - Fair distribution: always pick the volunteer with the least assigned hours
 //   - Block preference: try 4h blocks first, then 2h, then 1h as last resort
 //   - Constraints: max 6h continuous, min 8h break between non-adjacent shifts
+//
+// All slot types (festival, montage, demontage) are treated uniformly:
+// 1h blocks allow the same block-filling algorithm to work for every slot type.
 func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 	if len(slots) == 0 || len(volunteers) == 0 {
 		return nil
@@ -60,18 +63,11 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 	}
 	slotFill := make(map[int]int) // slot.ID → assigned count
 
-	// Separate festival slots and sort by start time
-	var festSlots []Slot
-	var otherSlots []Slot
-	for _, s := range slots {
-		if s.SlotType == SlotTypeFestival {
-			festSlots = append(festSlots, s)
-		} else {
-			otherSlots = append(otherSlots, s)
-		}
-	}
-	sort.Slice(festSlots, func(i, j int) bool {
-		return festSlots[i].StartTime.Before(festSlots[j].StartTime)
+	// Sort all slots by start time — block-fill works on the unified list.
+	allSlots := make([]Slot, len(slots))
+	copy(allSlots, slots)
+	sort.Slice(allSlots, func(i, j int) bool {
+		return allSlots[i].StartTime.Before(allSlots[j].StartTime)
 	})
 
 	var assignments []Assignment
@@ -87,20 +83,20 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 	progress := true
 	for progress {
 		progress = false
-		for i := 0; i < len(festSlots); i++ {
-			slot := festSlots[i]
+		for i := 0; i < len(allSlots); i++ {
+			slot := allSlots[i]
 			if slotFill[slot.ID] >= slot.Capacity {
 				continue
 			}
 
-			v := pickMinHoursVolunteer(volunteers, state, slotByID, festSlots, i, slotFill)
+			v := pickMinHoursVolunteer(volunteers, state, slotByID, allSlots, i, slotFill)
 			if v == nil {
 				continue
 			}
 
 			blockLen := 0
 			for _, size := range blockSizes {
-				if canAssignBlock(v, state[v.ID], slotByID, festSlots, i, size, slotFill) {
+				if canAssignBlock(v, state[v.ID], slotByID, allSlots, i, size, slotFill) {
 					blockLen = size
 					break
 				}
@@ -110,7 +106,7 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 			}
 
 			for b := 0; b < blockLen; b++ {
-				s := festSlots[i+b]
+				s := allSlots[i+b]
 				assignments = append(assignments, Assignment{
 					SlotID:      s.ID,
 					VolunteerID: v.ID,
@@ -122,62 +118,6 @@ func Solve(slots []Slot, volunteers []Volunteer) []Assignment {
 			// starts a fresh non-overlapping block.
 			i += blockLen - 1
 			progress = true
-		}
-	}
-
-	// Montage / demontage: max 1 per volunteer, strict availability, sorted min-hours-first.
-	// Count how many montage/demontage slots each volunteer already has.
-	otherCount := make(map[int]int, len(volunteers))
-
-	// Sort other slots by start time so earlier slots are filled first.
-	sort.Slice(otherSlots, func(i, j int) bool {
-		return otherSlots[i].StartTime.Before(otherSlots[j].StartTime)
-	})
-
-	for _, slot := range otherSlots {
-		// Build candidate list sorted by assigned hours (min first) for fairness.
-		type candidate struct {
-			v  *Volunteer
-			vs *volState
-		}
-		var cands []candidate
-		for i := range volunteers {
-			v := &volunteers[i]
-			vs := state[v.ID]
-			if slotFill[slot.ID] >= slot.Capacity {
-				break
-			}
-			// Max 1 montage/demontage assignment per volunteer.
-			if otherCount[v.ID] >= 1 {
-				continue
-			}
-			// Adding this slot must not exceed target+2h.
-			if vs.assignedHours+slot.CreditHours > float64(v.TargetHours)+2 {
-				continue
-			}
-			// Strict availability: slot must start after volunteer arrives and end before they leave.
-			if slot.StartTime.Before(v.AvailableFrom) || slot.EndTime.After(v.AvailableTo) {
-				continue
-			}
-			if isAlreadyIn(vs, slot.ID) {
-				continue
-			}
-			cands = append(cands, candidate{v, vs})
-		}
-		sort.Slice(cands, func(i, j int) bool {
-			return cands[i].vs.assignedHours < cands[j].vs.assignedHours
-		})
-		for _, c := range cands {
-			if slotFill[slot.ID] >= slot.Capacity {
-				break
-			}
-			assignments = append(assignments, Assignment{
-				SlotID:      slot.ID,
-				VolunteerID: c.v.ID,
-			})
-			c.vs.assign(slot)
-			slotFill[slot.ID]++
-			otherCount[c.v.ID]++
 		}
 	}
 
