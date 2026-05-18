@@ -31,6 +31,7 @@ type UserRepository interface {
 	CreateGoogleUser(user *models.User) (*models.User, error)
 	UpdateGoogleInfo(userID int, avatarURL string) error
 	LinkGoogle(userID int, googleID, googleEmail, avatarURL string) error
+	ActivateUser(userID int) error
 }
 
 type userRepositoryImpl struct {
@@ -402,6 +403,17 @@ func (r *userRepositoryImpl) UpdateGoogleInfo(userID int, avatarURL string) erro
 		Executor().Exec()
 	if err != nil {
 		return fmt.Errorf("failed to update google info: %w", err)
+	}
+	return nil
+}
+
+func (r *userRepositoryImpl) ActivateUser(userID int) error {
+	_, err := r.repository.GoquDBWrapper.Update("users").
+		Set(goqu.Record{"active": true}).
+		Where(goqu.Ex{"id": userID}).
+		Executor().Exec()
+	if err != nil {
+		return fmt.Errorf("failed to activate user: %w", err)
 	}
 	return nil
 }

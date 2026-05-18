@@ -22,17 +22,26 @@ type DiscordUserRepository interface {
 	UpdateDiscordInfo(userID int, username string, avatarURL string) error
 	LinkDiscord(userID int, discordID, discordUsername, avatarURL string) error
 	MergeDiscordAccount(targetID, sourceID int) (sourceDeleted bool, err error)
+	ActivateUser(userID int) error
+}
+
+// VolunteerConfirmationChecker checks whether a Discord username is on the confirmed volunteer list.
+// FindConfirmedVolunteer returns the volunteer's nickname (Pseudonim from spreadsheet), found flag, and error.
+type VolunteerConfirmationChecker interface {
+	FindConfirmedVolunteer(discordUsername string) (nickname string, found bool, err error)
 }
 
 type DiscordHandler struct {
-	oauth    *oauth.DiscordOAuth
-	userRepo DiscordUserRepository
+	oauth         *oauth.DiscordOAuth
+	userRepo      DiscordUserRepository
+	volunteerRepo VolunteerConfirmationChecker
 }
 
-func NewDiscordHandler(oauth *oauth.DiscordOAuth, userRepo DiscordUserRepository) *DiscordHandler {
+func NewDiscordHandler(oauth *oauth.DiscordOAuth, userRepo DiscordUserRepository, volunteerRepo VolunteerConfirmationChecker) *DiscordHandler {
 	return &DiscordHandler{
-		oauth:    oauth,
-		userRepo: userRepo,
+		oauth:         oauth,
+		userRepo:      userRepo,
+		volunteerRepo: volunteerRepo,
 	}
 }
 
@@ -166,23 +175,39 @@ func (h *DiscordHandler) findOrCreateUser(discordUser *oauth.DiscordUser) (*mode
 		if err := h.userRepo.LinkDiscord(existingUser.ID, discordUser.ID, discordUser.Username, avatarURL); err != nil {
 			return nil, err
 		}
-		// Get the updated user
 		existingUser.DiscordID = &discordUser.ID
 		existingUser.DiscordUsername = &discordUser.Username
 		existingUser.AvatarURL = &avatarURL
+		// Auto-activate inactive accounts found on the confirmed volunteer list
+		if !existingUser.Active && h.volunteerRepo != nil {
+			if _, found, err := h.volunteerRepo.FindConfirmedVolunteer(discordUser.Username); err == nil && found {
+				if err := h.userRepo.ActivateUser(existingUser.ID); err == nil {
+					existingUser.Active = true
+				}
+			}
+		}
 		return existingUser, nil
 	}
 
-	// Create a new user
+	// Create a new user — use volunteer nickname as username and auto-activate if on confirmed list
 	avatarURL := h.oauth.GetAvatarURL(discordUser)
+	username := discordUser.Username
+	active := false
+	if h.volunteerRepo != nil {
+		if nickname, found, err := h.volunteerRepo.FindConfirmedVolunteer(discordUser.Username); err == nil && found {
+			active = true
+			username = nickname
+		}
+	}
 	newUser := &models.User{
-		Username:        discordUser.Username,
+		Username:        username,
+		Fullname:        discordUser.GlobalName,
 		DiscordID:       &discordUser.ID,
 		DiscordUsername: &discordUser.Username,
 		AvatarURL:       &avatarURL,
 		AuthProvider:    strPtr("discord"),
 		Role:            roles.User,
-		Active:          false, // Manual activation by admin required
+		Active:          active,
 	}
 
 	createdUser, err := h.userRepo.CreateDiscordUser(newUser)

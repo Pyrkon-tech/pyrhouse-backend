@@ -122,7 +122,12 @@ func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (*Import
 			continue
 		}
 
+		discordConfirmed := cellStrPtr(row, cols.discordConfirmed)
+
 		if existingByNick[nickname] {
+			if discordConfirmed != nil {
+				_ = s.repo.UpdateVolunteerDiscordConfirmed(schedule.ID, nickname, discordConfirmed)
+			}
 			updated++
 			continue
 		}
@@ -146,13 +151,14 @@ func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (*Import
 		}
 
 		volunteers = append(volunteers, Volunteer{
-			ScheduleID:    schedule.ID,
-			Nickname:      nickname,
-			City:          city,
-			TargetHours:   hours,
-			AvailableFrom: availFrom,
-			AvailableTo:   availTo,
-			Notes:         notes,
+			ScheduleID:       schedule.ID,
+			Nickname:         nickname,
+			City:             city,
+			TargetHours:      hours,
+			AvailableFrom:    availFrom,
+			AvailableTo:      availTo,
+			Notes:            notes,
+			DiscordConfirmed: discordConfirmed,
 		})
 	}
 

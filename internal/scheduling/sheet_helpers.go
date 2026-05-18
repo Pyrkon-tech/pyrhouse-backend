@@ -10,13 +10,14 @@ import (
 // Column names expected in the spreadsheet header row.
 // Change these constants if the spreadsheet layout changes.
 const (
-	colNickname      = "Pseudonim"
-	colCity          = "Miasto"
-	colHours         = "Deklaracja godzin dyżuru"
-	colAvailableFrom = "Przyjazd"
-	colAvailableTo   = "Wyjazd"
-	colNotes         = "Uwagi"
-	colTags          = "Tagi"
+	colNickname         = "Pseudonim"
+	colCity             = "Miasto"
+	colHours            = "Deklaracja godzin dyżuru"
+	colAvailableFrom    = "Przyjazd"
+	colAvailableTo      = "Wyjazd"
+	colNotes            = "Uwagi"
+	colTags             = "Tagi"
+	colDiscordConfirmed = "Discord (potwierdzony)"
 )
 
 // Tags that cause a volunteer row to be skipped during import.
@@ -24,13 +25,14 @@ var skipTags = []string{"Przegżdacz"}
 
 // columnMap maps known header names to their column index in the sheet.
 type columnMap struct {
-	nickname      int
-	city          int
-	hours         int
-	availableFrom int
-	availableTo   int
-	notes         int
-	tags          int
+	nickname         int
+	city             int
+	hours            int
+	availableFrom    int
+	availableTo      int
+	notes            int
+	tags             int
+	discordConfirmed int
 }
 
 // parseHeader reads the first row and builds a column map.
@@ -39,7 +41,7 @@ func parseHeader(headerRow []interface{}) (columnMap, error) {
 	cm := columnMap{
 		nickname: -1, city: -1, hours: -1,
 		availableFrom: -1, availableTo: -1,
-		notes: -1, tags: -1,
+		notes: -1, tags: -1, discordConfirmed: -1,
 	}
 
 	for i, cell := range headerRow {
@@ -59,6 +61,8 @@ func parseHeader(headerRow []interface{}) (columnMap, error) {
 			cm.notes = i
 		case colTags:
 			cm.tags = i
+		case colDiscordConfirmed:
+			cm.discordConfirmed = i
 		}
 	}
 

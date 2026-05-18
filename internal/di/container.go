@@ -107,7 +107,7 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	var discordHandler *security.DiscordHandler
 	if cfg.Discord.ClientID != "" && cfg.Discord.ClientSecret != "" {
 		discordOAuth := oauth.NewDiscordOAuth(cfg.Discord)
-		discordHandler = security.NewDiscordHandler(discordOAuth, userRepo)
+		discordHandler = security.NewDiscordHandler(discordOAuth, userRepo, schedulingRepo)
 	}
 
 	var googleHandler *security.GoogleHandler

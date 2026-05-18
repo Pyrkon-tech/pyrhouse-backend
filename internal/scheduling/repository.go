@@ -190,14 +190,15 @@ func (r *Repository) InsertVolunteers(scheduleID int, volunteers []Volunteer) er
 	rows := make([]goqu.Record, len(volunteers))
 	for i, v := range volunteers {
 		rows[i] = goqu.Record{
-			"schedule_id":    scheduleID,
-			"user_id":        v.UserID,
-			"nickname":       v.Nickname,
-			"city":           v.City,
-			"target_hours":   v.TargetHours,
-			"available_from": v.AvailableFrom,
-			"available_to":   v.AvailableTo,
-			"notes":          v.Notes,
+			"schedule_id":      scheduleID,
+			"user_id":          v.UserID,
+			"nickname":         v.Nickname,
+			"city":             v.City,
+			"target_hours":     v.TargetHours,
+			"available_from":   v.AvailableFrom,
+			"available_to":     v.AvailableTo,
+			"notes":            v.Notes,
+			"discord_confirmed": v.DiscordConfirmed,
 		}
 	}
 	query := r.repo.GoquDBWrapper.Insert("schedule_volunteers").Rows(rows)
@@ -205,6 +206,32 @@ func (r *Repository) InsertVolunteers(scheduleID int, volunteers []Volunteer) er
 		return fmt.Errorf("failed to insert volunteers: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) UpdateVolunteerDiscordConfirmed(scheduleID int, nickname string, discordConfirmed *string) error {
+	_, err := r.repo.GoquDBWrapper.Update("schedule_volunteers").
+		Set(goqu.Record{"discord_confirmed": discordConfirmed}).
+		Where(goqu.Ex{"schedule_id": scheduleID, "nickname": nickname}).
+		Executor().Exec()
+	return err
+}
+
+// FindConfirmedVolunteer returns the nickname of the volunteer whose discord_confirmed matches
+// the given Discord username. Returns ("", false, nil) when not found.
+func (r *Repository) FindConfirmedVolunteer(discordUsername string) (nickname string, found bool, err error) {
+	var v struct {
+		Nickname string `db:"nickname"`
+	}
+	found, err = r.repo.GoquDBWrapper.
+		Select("nickname").
+		From("schedule_volunteers").
+		Where(goqu.Ex{"discord_confirmed": discordUsername}).
+		Limit(1).
+		Executor().ScanStruct(&v)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to find confirmed volunteer: %w", err)
+	}
+	return v.Nickname, found, nil
 }
 
 func (r *Repository) GetVolunteers(scheduleID int) ([]Volunteer, error) {
@@ -410,7 +437,7 @@ func (r *Repository) UpdateVolunteer(id int, updates map[string]interface{}) (*V
 	query := r.repo.GoquDBWrapper.Update("schedule_volunteers").
 		Set(updates).
 		Where(goqu.Ex{"id": id}).
-		Returning("id", "schedule_id", "user_id", "nickname", "city", "target_hours", "available_from", "available_to", "notes", "assigned_hours")
+		Returning("id", "schedule_id", "user_id", "nickname", "city", "target_hours", "available_from", "available_to", "notes", "assigned_hours", "discord_confirmed")
 	found, err := query.Executor().ScanStruct(&v)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update volunteer: %w", err)
