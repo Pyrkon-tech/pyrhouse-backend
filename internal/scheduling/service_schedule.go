@@ -139,10 +139,15 @@ func generateScheduleSlots(schedule *Schedule, dayWindows map[string][2]int) []S
 		cur = slotEnd
 	}
 
-	// Demontage: event_end day, hourly within window.
+	// Demontage: event_end day, hourly 10:00–16:00 (overridable via day window).
 	ed := schedule.EventEnd.In(warsawLocation)
 	edDay := time.Date(ed.Year(), ed.Month(), ed.Day(), 0, 0, 0, 0, warsawLocation)
-	startH, endH := windowFor(edDay)
+	startH, endH := 10, 16
+	if dayWindows != nil {
+		if w, ok := dayWindows[edDay.Format("2006-01-02")]; ok {
+			startH, endH = w[0], w[1]
+		}
+	}
 	deAbbr := dayAbbr[edDay.Weekday()]
 	for h := startH; h < endH; h++ {
 		slotStart := time.Date(edDay.Year(), edDay.Month(), edDay.Day(), h, 0, 0, 0, warsawLocation)
