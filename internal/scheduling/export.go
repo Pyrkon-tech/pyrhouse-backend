@@ -70,19 +70,11 @@ func buildExportRows(slots []Slot, volunteers []Volunteer, assignments []Assignm
 	sortByStart(festivalSlots)
 	sortByStart(demontageSlots)
 
-	// Montage days
-	for _, s := range montageSlots {
-		label := ""
-		if s.Label != nil {
-			label = *s.Label
-		}
-		rows = append(rows, sectionRow(fmt.Sprintf("--- %s ---", label), maxCols))
-		rows = append(rows, makeRow(label, slotVolunteers[s.ID], maxCols))
-	}
+	// Montage: one section header per day, one data row per slot
+	rows = append(rows, dayGroupedSlots(montageSlots, "Montaż", slotVolunteers, maxCols)...)
 
-	// Festival: hourly breakdown
+	// Festival: hourly breakdown grouped by day
 	if len(festivalSlots) > 0 {
-		// Index volunteers per hour: hour truncated to hour → nicknames
 		type hourKey = time.Time
 		hourVolunteers := make(map[hourKey][]string)
 		for _, s := range festivalSlots {
@@ -99,22 +91,16 @@ func buildExportRows(slots []Slot, volunteers []Volunteer, assignments []Assignm
 			dateStr := t.Format("2006-01-02")
 			if dateStr != currentDate {
 				currentDate = dateStr
-				rows = append(rows, sectionRow(fmt.Sprintf("--- %s ---", polishWeekday(t.Weekday())), maxCols))
+				header := fmt.Sprintf("%s - Festiwal %s", polishWeekday(t.Weekday()), t.Format("02.01"))
+				rows = append(rows, sectionRow(header, maxCols))
 			}
 			hourLabel := fmt.Sprintf("%02d:00-%02d:00", t.Hour(), t.Add(time.Hour).Hour())
 			rows = append(rows, makeRow(hourLabel, hourVolunteers[t], maxCols))
 		}
 	}
 
-	// Demontage days
-	for _, s := range demontageSlots {
-		label := ""
-		if s.Label != nil {
-			label = *s.Label
-		}
-		rows = append(rows, sectionRow(fmt.Sprintf("--- %s ---", label), maxCols))
-		rows = append(rows, makeRow(label, slotVolunteers[s.ID], maxCols))
-	}
+	// Demontage: one section header per day, one data row per slot
+	rows = append(rows, dayGroupedSlots(demontageSlots, "Demontaż", slotVolunteers, maxCols)...)
 
 	return rows
 }
@@ -129,6 +115,22 @@ func ExportCSV(schedule *Schedule, slots []Slot, volunteers []Volunteer, assignm
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func dayGroupedSlots(slots []Slot, typeName string, slotVolunteers map[int][]string, maxCols int) [][]string {
+	var rows [][]string
+	currentDate := ""
+	for _, s := range slots {
+		dateStr := s.StartTime.Format("2006-01-02")
+		if dateStr != currentDate {
+			currentDate = dateStr
+			header := fmt.Sprintf("%s - %s %s", polishWeekday(s.StartTime.Weekday()), typeName, s.StartTime.Format("02.01"))
+			rows = append(rows, sectionRow(header, maxCols))
+		}
+		timeLabel := fmt.Sprintf("%s-%s", s.StartTime.Format("15:04"), s.EndTime.Format("15:04"))
+		rows = append(rows, makeRow(timeLabel, slotVolunteers[s.ID], maxCols))
+	}
+	return rows
 }
 
 func sectionRow(title string, maxCols int) []string {
