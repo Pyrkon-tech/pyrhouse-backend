@@ -217,8 +217,8 @@ func TestUsers_List(t *testing.T) {
 	}{
 		{"moderator sees list", "moderator", http.StatusOK},
 		{"admin sees list", "admin", http.StatusOK},
+		{"dispatcher sees list", "dispatcher", http.StatusOK},
 		{"user is forbidden", "user", http.StatusForbidden},
-		{"dispatcher is forbidden", "dispatcher", http.StatusForbidden},
 	}
 
 	for _, tt := range tests {

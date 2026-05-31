@@ -47,6 +47,7 @@ func newLocationsRouter(h *LocationHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(func(c *gin.Context) { c.Set("role", "admin"); c.Next() })
+	h.RegisterPublicRoutes(r)
 	h.RegisterRoutes(r.Group("/"))
 	return r
 }
