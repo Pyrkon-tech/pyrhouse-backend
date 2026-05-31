@@ -13,6 +13,7 @@ func RegisterPublicRoutes(router *gin.Engine, container *di.Container) {
 	container.LoginHandler.RegisterRoutes(router)
 	container.ServiceDeskHandler.RegisterPublicRoutes(router)
 	container.UserHandler.RegisterPublicRoutes(router)
+	container.LocationHandler.RegisterPublicRoutes(router)
 
 	if container.DiscordHandler != nil {
 		container.DiscordHandler.RegisterRoutes(router.Group(""))

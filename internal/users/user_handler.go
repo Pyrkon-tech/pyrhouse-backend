@@ -27,7 +27,7 @@ func (h *UsersHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/users", security.Authorize("admin"), h.RegisterUser)
 	router.PATCH("/users/:id", security.Authorize("user"), h.UpdateUser)
 	router.GET("/users/:id", security.Authorize("user"), h.GetUser)
-	router.GET("/users", security.Authorize("moderator"), h.GetUserList)
+	router.GET("/users", security.Authorize("dispatcher"), h.GetUserList)
 	router.POST("/users/:id/points", security.Authorize("admin"), h.AddUserPoints)
 	router.DELETE("/users/:id", security.Authorize("admin"), h.DeleteUser)
 }

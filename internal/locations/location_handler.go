@@ -19,10 +19,13 @@ func NewLocationHandler(r *LocationRepository) *LocationHandler {
 	return &LocationHandler{Repository: r}
 }
 
+func (h *LocationHandler) RegisterPublicRoutes(router *gin.Engine) {
+	router.GET("/locations", h.GetLocations)
+}
+
 func (h *LocationHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/locations", security.Authorize("moderator"), h.CreateLocation)
 	router.PATCH("/locations/:id", security.Authorize("moderator"), h.UpdateLocation)
-	router.GET("/locations", h.GetLocations)
 	router.GET("/locations/:id/assets", h.GetLocationItems)
 	router.GET("/locations/:id/search", h.SearchLocationItems)
 	router.GET("locations/:id", h.GetLocationDetails)
