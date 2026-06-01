@@ -1,6 +1,7 @@
 package scheduling
 
 import (
+	"context"
 	"fmt"
 	"time"
 	"warehouse/internal/repository"
@@ -791,7 +792,7 @@ func (r *Repository) DeleteNonFestivalSlotsTx(tx *goqu.TxDatabase, scheduleID in
 
 // GetOnDutyVolunteers returns volunteers assigned to slots active at time at,
 // enriched with real-time dispatch status derived from in-progress quests.
-func (r *Repository) GetOnDutyVolunteers(at time.Time) ([]OnDutyEntry, error) {
+func (r *Repository) GetOnDutyVolunteers(ctx context.Context, at time.Time) ([]OnDutyEntry, error) {
 	const query = `
 		SELECT
 			v.id          AS volunteer_id,
@@ -832,7 +833,7 @@ func (r *Repository) GetOnDutyVolunteers(at time.Time) ([]OnDutyEntry, error) {
 		  AND s.end_time   >  $1
 		ORDER BY v.nickname ASC
 	`
-	rows, err := r.repo.DB.Query(query, at)
+	rows, err := r.repo.DB.QueryContext(ctx, query, at)
 	if err != nil {
 		return nil, fmt.Errorf("on-duty query failed: %w", err)
 	}

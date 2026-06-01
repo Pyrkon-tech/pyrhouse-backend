@@ -70,10 +70,10 @@ func (s *Service) ExportCSV() (string, *Schedule, error) {
 }
 
 // GetOnDuty returns volunteers on duty at the given time (defaults to now).
-func (s *Service) GetOnDuty(at *time.Time) ([]OnDutyEntry, error) {
+func (s *Service) GetOnDuty(ctx context.Context, at *time.Time) ([]OnDutyEntry, error) {
 	t := time.Now()
 	if at != nil {
 		t = *at
 	}
-	return s.repo.GetOnDutyVolunteers(t)
+	return s.repo.GetOnDutyVolunteers(ctx, t)
 }

@@ -536,7 +536,7 @@ func (h *Handler) getOnDuty(c *gin.Context) {
 		at = &t
 	}
 
-	entries, err := h.service.GetOnDuty(at)
+	entries, err := h.service.GetOnDuty(c.Request.Context(), at)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorResp("fetch_failed", "Nie udało się pobrać dyżurujących wolontariuszy", err.Error()))
 		return
