@@ -385,8 +385,9 @@ func transformToStockItem(flatStock models.FlatStockRecord) models.StockItem {
 			Type:  flatStock.CategoryEquipmentType,
 		},
 		Location: models.Location{
-			ID:   flatStock.LocationID,
-			Name: flatStock.LocationName,
+			ID:       flatStock.LocationID,
+			Name:     flatStock.LocationName,
+			Pavilion: flatStock.LocationPavilion,
 		},
 	}
 }
