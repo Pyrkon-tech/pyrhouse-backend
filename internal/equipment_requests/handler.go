@@ -1,7 +1,6 @@
 package equipment_requests
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -167,10 +166,10 @@ func (h *Handler) UpdateQuestStatus(c *gin.Context) {
 		return
 	}
 
-	if quest.TransferID != nil {
+	if quest.HasActiveTransfer() {
 		c.JSON(http.StatusConflict, gin.H{
-			"error":   "Quest status is managed by linked transfer",
-			"details": fmt.Sprintf("Quest is linked to transfer %d. Use transfer endpoints to change status.", *quest.TransferID),
+			"error":   "Quest has active transfers",
+			"details": "Quest has in-progress transfers. Use transfer endpoints to change status.",
 		})
 		return
 	}
@@ -209,8 +208,7 @@ func (h *Handler) CreateTransferFromQuest(c *gin.Context) {
 		status := http.StatusInternalServerError
 
 		switch {
-		case strings.Contains(errMsg, "already linked to transfer"),
-			strings.Contains(errMsg, "status must be"):
+		case strings.Contains(errMsg, "cannot create transfer for quest with status"):
 			status = http.StatusConflict
 		case strings.Contains(errMsg, "could not resolve"),
 			strings.Contains(errMsg, "no stock items"):

@@ -134,10 +134,11 @@ func (b *Broadcaster) lookupTransfer(transferID int) ([]int, *string, error) {
 
 	var mission *string
 	row := b.db.QueryRow(`
-		SELECT destination_pavilion
-		       || COALESCE(' - ' || NULLIF(TRIM(destination_location), ''), '')
-		FROM equipment_request_quests
-		WHERE transfer_id = $1
+		SELECT q.destination_pavilion
+		       || COALESCE(' - ' || NULLIF(TRIM(q.destination_location), ''), '')
+		FROM quest_transfers qt
+		JOIN equipment_request_quests q ON qt.quest_id = q.quest_id
+		WHERE qt.transfer_id = $1
 		LIMIT 1
 	`, transferID)
 	var m string

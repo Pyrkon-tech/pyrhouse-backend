@@ -437,11 +437,11 @@ func (s *Service) upsertQuest(ctx context.Context, quest *Quest, stats *SyncStat
 		stats.ItemsAdded += len(quest.Items)
 		log.Printf("[equipment-requests] Created new quest: %s", quest.ID)
 	} else {
-		// Skip update for quests managed by a linked transfer — their status
-		// is controlled exclusively by transfer callbacks.
-		if existing.TransferID != nil {
+		// Skip update for quests with active transfers or already completed/cancelled —
+		// their status is managed externally.
+		if existing.Status == "in_progress" || existing.Status == "completed" || existing.Status == "cancelled" {
 			stats.Unchanged++
-			log.Printf("[equipment-requests] Skipping update for quest %s — managed by transfer %d", existing.ID, *existing.TransferID)
+			log.Printf("[equipment-requests] Skipping update for quest %s — status is '%s'", existing.ID, existing.Status)
 			return nil
 		}
 
@@ -775,12 +775,8 @@ func (s *Service) CreateTransferFromQuest(ctx context.Context, questID string, r
 		return 0, fmt.Errorf("quest not found: %w", err)
 	}
 
-	if quest.TransferID != nil {
-		return 0, fmt.Errorf("quest already linked to transfer %d", *quest.TransferID)
-	}
-
-	if quest.Status != "pending" {
-		return 0, fmt.Errorf("quest status must be 'pending', got '%s'", quest.Status)
+	if quest.Status == "completed" || quest.Status == "cancelled" {
+		return 0, fmt.Errorf("cannot create transfer for quest with status '%s'", quest.Status)
 	}
 
 	// 2. Resolve destination location
@@ -849,7 +845,7 @@ func (s *Service) CreateTransferFromQuest(ctx context.Context, questID string, r
 	}
 
 	// 5. Link quest to transfer
-	if err := s.questRepo.LinkQuestToTransfer(ctx, questID, transferID); err != nil {
+	if err := s.questRepo.AddTransferToQuest(ctx, questID, transferID); err != nil {
 		log.Printf("[equipment-requests] ORPHANED TRANSFER %d: created but failed to link to quest %s — manual cleanup required: %v", transferID, questID, err)
 		return transferID, fmt.Errorf("transfer created (ID: %d) but failed to link to quest: %w", transferID, err)
 	}
@@ -871,24 +867,36 @@ func (s *Service) OnTransferStatusChanged(transferID int, newStatus string) erro
 		return fmt.Errorf("failed to find quest for transfer %d: %w", transferID, err)
 	}
 	if quest == nil {
-		return nil // No quest linked to this transfer — nothing to do
+		return nil // transfer not linked to any quest
 	}
 
 	switch newStatus {
 	case "completed":
-		if err := s.questRepo.UpdateQuestStatus(ctx, quest.ID, "completed"); err != nil {
-			return fmt.Errorf("failed to complete quest %s: %w", quest.ID, err)
+		// Check whether any other active transfers remain.
+		active, err := s.questRepo.GetActiveTransfersForQuest(ctx, quest.ID)
+		if err != nil {
+			return fmt.Errorf("failed to check active transfers for quest %s: %w", quest.ID, err)
 		}
-		log.Printf("[equipment-requests] Quest %s completed via transfer %d", quest.ID, transferID)
+		// The completed transfer still has status "completed" in the DB at this point,
+		// so GetActiveTransfersForQuest won't include it — length 0 means this was the last one.
+		if len(active) == 0 {
+			if err := s.questRepo.UpdateQuestStatus(ctx, quest.ID, "completed"); err != nil {
+				return fmt.Errorf("failed to complete quest %s: %w", quest.ID, err)
+			}
+			log.Printf("[equipment-requests] Quest %s completed — all transfers done", quest.ID)
+		} else {
+			log.Printf("[equipment-requests] Transfer %d completed, quest %s still has %d active transfer(s)", transferID, quest.ID, len(active))
+		}
 		if s.onTransferEnded != nil {
 			go s.onTransferEnded(transferID)
 		}
 
 	case "cancelled":
-		if err := s.questRepo.UnlinkQuestFromTransfer(ctx, quest.ID); err != nil {
-			return fmt.Errorf("failed to unlink quest %s from cancelled transfer %d: %w", quest.ID, transferID, err)
+		// RemoveTransferFromQuest handles resetting quest to pending when all transfers are gone.
+		if err := s.questRepo.RemoveTransferFromQuest(ctx, transferID); err != nil {
+			return fmt.Errorf("failed to remove cancelled transfer %d from quest %s: %w", transferID, quest.ID, err)
 		}
-		log.Printf("[equipment-requests] Quest %s unlinked from cancelled transfer %d, status reset to pending", quest.ID, transferID)
+		log.Printf("[equipment-requests] Transfer %d cancelled, removed from quest %s", transferID, quest.ID)
 		if s.onTransferEnded != nil {
 			go s.onTransferEnded(transferID)
 		}

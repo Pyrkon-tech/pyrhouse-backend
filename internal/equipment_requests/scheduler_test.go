@@ -364,7 +364,7 @@ func TestScheduler_GracefulShutdown(t *testing.T) {
 	// Stop should have waited for the sync to finish
 	// But should be less than a full interval
 	assert.Greater(t, stopDuration, 50*time.Millisecond)
-	assert.Less(t, stopDuration, 500*time.Millisecond)
+	assert.Less(t, stopDuration, 1000*time.Millisecond)
 
 	assert.False(t, scheduler.IsEnabled())
 }

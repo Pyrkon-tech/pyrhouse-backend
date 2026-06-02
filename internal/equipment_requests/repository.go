@@ -18,9 +18,10 @@ type QuestRepositoryInterface interface {
 	GetQuestByKey(ctx context.Context, questKey string) (*Quest, error)
 	ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error)
 	UpdateQuestStatus(ctx context.Context, questID string, status string) error
-	LinkQuestToTransfer(ctx context.Context, questID string, transferID int) error
+	AddTransferToQuest(ctx context.Context, questID string, transferID int) error
+	RemoveTransferFromQuest(ctx context.Context, transferID int) error
 	GetQuestByTransferID(ctx context.Context, transferID int) (*Quest, error)
-	UnlinkQuestFromTransfer(ctx context.Context, questID string) error
+	GetActiveTransfersForQuest(ctx context.Context, questID string) ([]int, error)
 	FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error)
 	ResolveLocationByPavilionAndName(pavilion, name string) (*int, error)
 	ResolveLocationByNameOnly(name string) (*int, error)
@@ -110,7 +111,6 @@ type QuestDB struct {
 	PickupTime          *string    `db:"pickup_time"`
 	BudgetOwner         *string    `db:"budget_owner"`
 	Status              string     `db:"status"`
-	TransferID          *int       `db:"transfer_id"`
 	LocationID          *int       `db:"location_id"`
 	LocationName        *string    `db:"location_name"`
 	LocationResolved    bool       `db:"location_resolved"`
@@ -252,9 +252,20 @@ func (r *Repository) GetQuestByID(ctx context.Context, questID string) (*Quest, 
 
 	quest := r.recordToQuest(&questDB, items)
 
-	// Fetch transfer participants when a transfer is linked
-	if questDB.TransferID != nil {
-		volunteers, err := r.getQuestVolunteers(ctx, *questDB.TransferID)
+	// Load all linked transfers
+	transfers, err := r.getQuestTransfers(ctx, questID)
+	if err != nil {
+		return nil, err
+	}
+	quest.Transfers = transfers
+
+	// Aggregate volunteers across all linked transfers
+	if len(transfers) > 0 {
+		ids := make([]int, len(transfers))
+		for i, t := range transfers {
+			ids[i] = t.TransferID
+		}
+		volunteers, err := r.getQuestVolunteers(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
@@ -264,8 +275,12 @@ func (r *Repository) GetQuestByID(ctx context.Context, questID string) (*Quest, 
 	return quest, nil
 }
 
-// getQuestVolunteers returns users linked to a transfer via transfer_users.
-func (r *Repository) getQuestVolunteers(_ context.Context, transferID int) ([]QuestVolunteer, error) {
+// getQuestVolunteers returns unique users linked to any of the given transfers via transfer_users.
+func (r *Repository) getQuestVolunteers(_ context.Context, transferIDs []int) ([]QuestVolunteer, error) {
+	if len(transferIDs) == 0 {
+		return []QuestVolunteer{}, nil
+	}
+
 	query := r.repo.GoquDBWrapper.
 		Select(
 			goqu.I("u.id"),
@@ -274,7 +289,7 @@ func (r *Repository) getQuestVolunteers(_ context.Context, transferID int) ([]Qu
 		).
 		From(goqu.T("transfer_users").As("tu")).
 		Join(goqu.T("users").As("u"), goqu.On(goqu.Ex{"tu.user_id": goqu.I("u.id")})).
-		Where(goqu.Ex{"tu.transfer_id": transferID}).
+		Where(goqu.I("tu.transfer_id").In(transferIDs)).
 		Order(goqu.I("u.id").Asc())
 
 	rows, err := query.Executor().Query()
@@ -283,13 +298,17 @@ func (r *Repository) getQuestVolunteers(_ context.Context, transferID int) ([]Qu
 	}
 	defer rows.Close()
 
+	seen := make(map[int]struct{})
 	var volunteers []QuestVolunteer
 	for rows.Next() {
 		var v QuestVolunteer
 		if err := rows.Scan(&v.ID, &v.Username, &v.Fullname); err != nil {
 			return nil, fmt.Errorf("failed to scan volunteer: %w", err)
 		}
-		volunteers = append(volunteers, v)
+		if _, dup := seen[v.ID]; !dup {
+			seen[v.ID] = struct{}{}
+			volunteers = append(volunteers, v)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("row error: %w", err)
@@ -298,6 +317,33 @@ func (r *Repository) getQuestVolunteers(_ context.Context, transferID int) ([]Qu
 		volunteers = []QuestVolunteer{}
 	}
 	return volunteers, nil
+}
+
+// getQuestTransfers returns all transfers linked to a quest, with their current status.
+func (r *Repository) getQuestTransfers(_ context.Context, questID string) ([]QuestTransfer, error) {
+	var rows []QuestTransfer
+
+	query := r.repo.GoquDBWrapper.
+		Select(
+			goqu.I("qt.transfer_id"),
+			goqu.I("t.status").As("transfer_status"),
+			goqu.I("qt.created_at"),
+		).
+		From(goqu.T("quest_transfers").As("qt")).
+		Join(
+			goqu.T("transfers").As("t"),
+			goqu.On(goqu.Ex{"qt.transfer_id": goqu.I("t.id")}),
+		).
+		Where(goqu.Ex{"qt.quest_id": questID}).
+		Order(goqu.I("qt.created_at").Asc())
+
+	if err := query.Executor().ScanStructs(&rows); err != nil {
+		return nil, fmt.Errorf("failed to fetch quest transfers: %w", err)
+	}
+	if rows == nil {
+		rows = []QuestTransfer{}
+	}
+	return rows, nil
 }
 
 // GetQuestByKey retrieves quest by quest_key hash
@@ -398,25 +444,29 @@ func (r *Repository) UpdateQuestStatus(ctx context.Context, questID string, stat
 	return nil
 }
 
-// LinkQuestToTransfer links quest to a created transfer
-func (r *Repository) LinkQuestToTransfer(ctx context.Context, questID string, transferID int) error {
-	result, err := r.repo.GoquDBWrapper.
-		Update("equipment_request_quests").
-		Set(goqu.Record{
-			"transfer_id": transferID,
-			"status":      "in_progress",
-		}).
-		Where(goqu.Ex{"quest_id": questID}).
-		Executor().Exec()
+// AddTransferToQuest inserts a row into quest_transfers and sets quest status to in_progress.
+func (r *Repository) AddTransferToQuest(ctx context.Context, questID string, transferID int) error {
+	return repository.WithTransaction(r.repo.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		if _, err := tx.Insert("quest_transfers").
+			Rows(goqu.Record{
+				"quest_id":    questID,
+				"transfer_id": transferID,
+			}).
+			Executor().Exec(); err != nil {
+			return fmt.Errorf("failed to insert quest_transfer: %w", err)
+		}
 
-	if err != nil {
-		return fmt.Errorf("failed to link quest to transfer: %w", err)
-	}
-	if n, _ := result.RowsAffected(); n == 0 {
-		return fmt.Errorf("quest not found: %s", questID)
-	}
-
-	return nil
+		result, err := tx.Update("equipment_request_quests").
+			Set(goqu.Record{"status": "in_progress"}).
+			Where(goqu.Ex{"quest_id": questID, "status": "pending"}).
+			Executor().Exec()
+		if err != nil {
+			return fmt.Errorf("failed to set quest in_progress: %w", err)
+		}
+		// RowsAffected == 0 is fine — quest was already in_progress
+		_ = result
+		return nil
+	})
 }
 
 // CreateSyncLog creates a sync history record
@@ -650,19 +700,23 @@ func (r *Repository) itemToRecord(questDBID int, item *QuestItem, sourceRow int)
 	return record
 }
 
-// GetQuestByTransferID retrieves quest linked to a specific transfer
+// GetQuestByTransferID retrieves the quest linked to a specific transfer via quest_transfers.
 func (r *Repository) GetQuestByTransferID(ctx context.Context, transferID int) (*Quest, error) {
 	var questDB QuestDB
 
 	query := r.questBaseQuery().
-		Where(goqu.Ex{"q.transfer_id": transferID})
+		Join(
+			goqu.T("quest_transfers").As("qt"),
+			goqu.On(goqu.Ex{"qt.quest_id": goqu.I("q.quest_id")}),
+		).
+		Where(goqu.Ex{"qt.transfer_id": transferID})
 
 	found, err := query.Executor().ScanStruct(&questDB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch quest by transfer ID: %w", err)
 	}
 	if !found {
-		return nil, nil // No quest linked to this transfer
+		return nil, nil
 	}
 
 	items, err := r.getItemsByQuestDBID(ctx, questDB.ID)
@@ -673,22 +727,81 @@ func (r *Repository) GetQuestByTransferID(ctx context.Context, transferID int) (
 	return r.recordToQuest(&questDB, items), nil
 }
 
-// UnlinkQuestFromTransfer removes transfer link and resets quest to pending
-func (r *Repository) UnlinkQuestFromTransfer(ctx context.Context, questID string) error {
-	_, err := r.repo.GoquDBWrapper.
-		Update("equipment_request_quests").
-		Set(goqu.Record{
-			"transfer_id": nil,
-			"status":      "pending",
-		}).
-		Where(goqu.Ex{"quest_id": questID}).
-		Executor().Exec()
+// RemoveTransferFromQuest deletes the quest_transfers row for the given transfer.
+// If no active transfers remain for the quest, it resets quest status to pending.
+func (r *Repository) RemoveTransferFromQuest(ctx context.Context, transferID int) error {
+	return repository.WithTransaction(r.repo.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
+		// Identify the quest before deletion
+		var questID string
+		found, err := tx.Select("quest_id").
+			From("quest_transfers").
+			Where(goqu.Ex{"transfer_id": transferID}).
+			Executor().ScanVal(&questID)
+		if err != nil {
+			return fmt.Errorf("failed to find quest for transfer %d: %w", transferID, err)
+		}
+		if !found {
+			return nil // already gone
+		}
 
-	if err != nil {
-		return fmt.Errorf("failed to unlink quest from transfer: %w", err)
+		if _, err := tx.Delete("quest_transfers").
+			Where(goqu.Ex{"transfer_id": transferID}).
+			Executor().Exec(); err != nil {
+			return fmt.Errorf("failed to delete quest_transfer: %w", err)
+		}
+
+		// Count remaining active transfers for this quest
+		var remaining int
+		if _, err := tx.Select(goqu.COUNT("qt.transfer_id")).
+			From(goqu.T("quest_transfers").As("qt")).
+			Join(goqu.T("transfers").As("t"), goqu.On(goqu.Ex{"qt.transfer_id": goqu.I("t.id")})).
+			Where(
+				goqu.Ex{"qt.quest_id": questID},
+				goqu.I("t.status").NotIn("completed", "cancelled"),
+			).
+			Executor().ScanVal(&remaining); err != nil {
+			return fmt.Errorf("failed to count active transfers: %w", err)
+		}
+
+		if remaining == 0 {
+			if _, err := tx.Update("equipment_request_quests").
+				Set(goqu.Record{"status": "pending"}).
+				Where(goqu.Ex{"quest_id": questID, "status": "in_progress"}).
+				Executor().Exec(); err != nil {
+				return fmt.Errorf("failed to reset quest to pending: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+// GetActiveTransfersForQuest returns IDs of non-completed, non-cancelled transfers for the quest.
+func (r *Repository) GetActiveTransfersForQuest(ctx context.Context, questID string) ([]int, error) {
+	var rows []struct {
+		TransferID int `db:"transfer_id"`
 	}
 
-	return nil
+	query := r.repo.GoquDBWrapper.
+		Select(goqu.I("qt.transfer_id")).
+		From(goqu.T("quest_transfers").As("qt")).
+		Join(
+			goqu.T("transfers").As("t"),
+			goqu.On(goqu.Ex{"qt.transfer_id": goqu.I("t.id")}),
+		).
+		Where(
+			goqu.Ex{"qt.quest_id": questID},
+			goqu.I("t.status").NotIn("completed", "cancelled"),
+		)
+
+	if err := query.Executor().ScanStructs(&rows); err != nil {
+		return nil, fmt.Errorf("failed to get active transfers for quest %s: %w", questID, err)
+	}
+
+	ids := make([]int, len(rows))
+	for i, row := range rows {
+		ids[i] = row.TransferID
+	}
+	return ids, nil
 }
 
 // FindStockItemsByCategory finds non-serialized stock items at a location matching a category
@@ -903,19 +1016,19 @@ func (r *Repository) ListUnresolvedLocationQuests(ctx context.Context) ([]Quest,
 // Helper: Convert DB records to Quest
 func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 	quest := &Quest{
-		ID:               questDB.QuestID,
-		QuestKey:         questDB.QuestKey,
-		Destination:      Destination{Pavilion: questDB.DestinationPavilion, Location: questDB.DestinationLocation},
-		Recipient:        questDB.Recipient,
-		DeliveryDate:     questDB.DeliveryDate.Format("2006-01-02"),
-		Status:           questDB.Status,
-		TransferID:       questDB.TransferID,
-		LocationID:       questDB.LocationID,
-		LocationName:     questDB.LocationName,
-		LocationResolved: questDB.LocationResolved,
-		LastSynced:       questDB.LastSyncedAt,
+		ID:                 questDB.QuestID,
+		QuestKey:           questDB.QuestKey,
+		Destination:        Destination{Pavilion: questDB.DestinationPavilion, Location: questDB.DestinationLocation},
+		Recipient:          questDB.Recipient,
+		DeliveryDate:       questDB.DeliveryDate.Format("2006-01-02"),
+		Status:             questDB.Status,
+		LocationID:         questDB.LocationID,
+		LocationName:       questDB.LocationName,
+		LocationResolved:   questDB.LocationResolved,
+		LastSynced:         questDB.LastSyncedAt,
 		Items:              make([]QuestItem, len(itemsDB)),
 		SourceRows:         make([]int, len(itemsDB)),
+		Transfers:          []QuestTransfer{},
 		AssignedVolunteers: []QuestVolunteer{},
 	}
 

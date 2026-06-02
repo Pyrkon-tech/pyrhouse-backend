@@ -47,7 +47,8 @@ const baseVolunteerQuery = `
 			q.destination_location
 		FROM transfer_users tu
 		JOIN transfers t                  ON tu.transfer_id = t.id
-		JOIN equipment_request_quests q   ON q.transfer_id  = t.id
+		JOIN quest_transfers qt           ON qt.transfer_id = t.id
+		JOIN equipment_request_quests q   ON qt.quest_id    = q.quest_id
 		WHERE q.status = 'in_progress'
 		ORDER BY tu.user_id, t.id DESC
 	) aq ON u.id = aq.user_id

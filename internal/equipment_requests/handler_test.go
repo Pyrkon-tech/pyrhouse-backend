@@ -135,10 +135,10 @@ func (m *mockQuestRepository) IncrementMappingUsage(ctx context.Context, itemNam
 	return nil
 }
 
-func (m *mockQuestRepository) LinkQuestToTransfer(ctx context.Context, questID string, transferID int) error {
+func (m *mockQuestRepository) AddTransferToQuest(ctx context.Context, questID string, transferID int) error {
 	for i, q := range m.quests {
 		if q.ID == questID {
-			m.quests[i].TransferID = &transferID
+			m.quests[i].Transfers = append(m.quests[i].Transfers, QuestTransfer{TransferID: transferID, Status: "in_transit"})
 			m.quests[i].Status = "in_progress"
 			return nil
 		}
@@ -148,22 +148,43 @@ func (m *mockQuestRepository) LinkQuestToTransfer(ctx context.Context, questID s
 
 func (m *mockQuestRepository) GetQuestByTransferID(ctx context.Context, transferID int) (*Quest, error) {
 	for _, q := range m.quests {
-		if q.TransferID != nil && *q.TransferID == transferID {
-			return &q, nil
+		for _, t := range q.Transfers {
+			if t.TransferID == transferID {
+				return &q, nil
+			}
 		}
 	}
 	return nil, nil
 }
 
-func (m *mockQuestRepository) UnlinkQuestFromTransfer(ctx context.Context, questID string) error {
+func (m *mockQuestRepository) RemoveTransferFromQuest(ctx context.Context, transferID int) error {
 	for i, q := range m.quests {
-		if q.ID == questID {
-			m.quests[i].TransferID = nil
-			m.quests[i].Status = "pending"
-			return nil
+		for j, t := range q.Transfers {
+			if t.TransferID == transferID {
+				m.quests[i].Transfers = append(m.quests[i].Transfers[:j], m.quests[i].Transfers[j+1:]...)
+				if len(m.quests[i].Transfers) == 0 {
+					m.quests[i].Status = "pending"
+				}
+				return nil
+			}
 		}
 	}
-	return assert.AnError
+	return nil
+}
+
+func (m *mockQuestRepository) GetActiveTransfersForQuest(ctx context.Context, questID string) ([]int, error) {
+	for _, q := range m.quests {
+		if q.ID == questID {
+			var ids []int
+			for _, t := range q.Transfers {
+				if t.Status != "completed" && t.Status != "cancelled" {
+					ids = append(ids, t.TransferID)
+				}
+			}
+			return ids, nil
+		}
+	}
+	return nil, nil
 }
 
 func (m *mockQuestRepository) FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error) {
@@ -625,11 +646,10 @@ func TestHandler_UpdateQuestStatus_409_WhenQuestHasTransfer(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler, mockRepo := setupTestHandler()
 
-	transferID := 42
 	mockRepo.quests = append(mockRepo.quests, Quest{
 		ID:         "quest-linked",
 		Status:     "in_progress",
-		TransferID: &transferID,
+		Transfers:  []QuestTransfer{{TransferID: 42, Status: "in_transit"}},
 		SourceRows: []int{1},
 	})
 
@@ -646,7 +666,7 @@ func TestHandler_UpdateQuestStatus_409_WhenQuestHasTransfer(t *testing.T) {
 	var resp map[string]interface{}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Contains(t, resp, "error")
-	assert.Contains(t, resp["error"], "managed by linked transfer")
+	assert.Contains(t, resp["error"], "active transfers")
 }
 
 func setupHandlerWithTransferCreator(tc TransferCreator) (*Handler, *mockQuestRepository) {
@@ -683,19 +703,7 @@ func TestHandler_CreateTransferFromQuest(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 		},
 		{
-			name:    "Quest already has transfer returns 409",
-			questID: "quest-linked",
-			quest: &Quest{
-				ID:         "quest-linked",
-				Status:     "pending",
-				TransferID: func() *int { id := 99; return &id }(),
-				SourceRows: []int{1},
-			},
-			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
-			expectedStatus: http.StatusConflict,
-		},
-		{
-			name:    "Quest not pending returns 409",
+			name:    "Quest completed returns 409",
 			questID: "quest-done",
 			quest: &Quest{
 				ID:         "quest-done",
@@ -704,6 +712,19 @@ func TestHandler_CreateTransferFromQuest(t *testing.T) {
 			},
 			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
 			expectedStatus: http.StatusConflict,
+		},
+		{
+			name:    "Quest in_progress allows second transfer",
+			questID: "quest-in-progress",
+			quest: &Quest{
+				ID:        "quest-in-progress",
+				Status:    "in_progress",
+				Transfers: []QuestTransfer{{TransferID: 99, Status: "in_transit"}},
+				SourceRows: []int{1},
+			},
+			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
+			transferID:     200,
+			expectedStatus: http.StatusCreated,
 		},
 		{
 			name:    "Missing from_location_id returns 400",
@@ -842,24 +863,52 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 		expectError   bool
 	}{
 		{
-			name:      "completed → quest UpdateQuestStatus completed",
+			name:      "completed with no remaining active transfers → quest completed",
 			newStatus: "completed",
 			initialQuests: []Quest{
-				{ID: questID, Status: "in_progress", TransferID: &transferID, SourceRows: []int{1}},
+				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{{TransferID: transferID, Status: "completed"}}, SourceRows: []int{1}},
 			},
 			checkResult: func(t *testing.T, repo *mockQuestRepository) {
 				assert.Equal(t, "completed", repo.quests[0].Status)
 			},
 		},
 		{
-			name:      "cancelled → quest unlinked and status reset to pending",
+			name:      "completed with another active transfer → quest stays in_progress",
+			newStatus: "completed",
+			initialQuests: []Quest{
+				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{
+					{TransferID: transferID, Status: "completed"},
+					{TransferID: 99, Status: "in_transit"},
+				}, SourceRows: []int{1}},
+			},
+			checkResult: func(t *testing.T, repo *mockQuestRepository) {
+				assert.Equal(t, "in_progress", repo.quests[0].Status)
+			},
+		},
+		{
+			name:      "cancelled → transfer removed, no active transfers left → quest pending",
 			newStatus: "cancelled",
 			initialQuests: []Quest{
-				{ID: questID, Status: "in_progress", TransferID: &transferID, SourceRows: []int{1}},
+				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{{TransferID: transferID, Status: "in_transit"}}, SourceRows: []int{1}},
 			},
 			checkResult: func(t *testing.T, repo *mockQuestRepository) {
 				assert.Equal(t, "pending", repo.quests[0].Status)
-				assert.Nil(t, repo.quests[0].TransferID)
+				assert.Empty(t, repo.quests[0].Transfers)
+			},
+		},
+		{
+			name:      "cancelled → transfer removed, another active transfer remains → quest stays in_progress",
+			newStatus: "cancelled",
+			initialQuests: []Quest{
+				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{
+					{TransferID: transferID, Status: "in_transit"},
+					{TransferID: 99, Status: "in_transit"},
+				}, SourceRows: []int{1}},
+			},
+			checkResult: func(t *testing.T, repo *mockQuestRepository) {
+				assert.Equal(t, "in_progress", repo.quests[0].Status)
+				assert.Len(t, repo.quests[0].Transfers, 1)
+				assert.Equal(t, 99, repo.quests[0].Transfers[0].TransferID)
 			},
 		},
 		{
@@ -872,11 +921,11 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 			name:      "unknown status → no action taken",
 			newStatus: "unknown_status",
 			initialQuests: []Quest{
-				{ID: questID, Status: "in_progress", TransferID: &transferID, SourceRows: []int{1}},
+				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{{TransferID: transferID, Status: "in_transit"}}, SourceRows: []int{1}},
 			},
 			checkResult: func(t *testing.T, repo *mockQuestRepository) {
 				assert.Equal(t, "in_progress", repo.quests[0].Status)
-				assert.NotNil(t, repo.quests[0].TransferID)
+				assert.Len(t, repo.quests[0].Transfers, 1)
 			},
 		},
 	}
