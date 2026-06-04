@@ -32,7 +32,7 @@ func NewItemCategoryHandler(r *repository.Repository, ar *assets.AssetsRepositor
 
 func (h *ItemCategoryHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/assets/categories", security.Authorize("user"), h.GetItemCategories)
-	router.POST("/assets/categories", security.Authorize("moderator"), h.CreateItemCategory)
+	router.POST("/assets/categories", security.Authorize("dispatcher"), h.CreateItemCategory)
 	router.DELETE("/assets/categories/:id", security.Authorize("moderator"), h.RemoveItemCategory)
 	router.PATCH("/assets/categories/:id", security.Authorize("admin"), h.UpdateItemCategory)
 }
