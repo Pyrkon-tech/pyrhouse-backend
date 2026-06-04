@@ -19,9 +19,9 @@ func NewHandler(service *Service) *Handler {
 
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/origins", h.ListActive)
-	router.GET("/origins/all", security.Authorize("moderator"), h.ListAll)
-	router.POST("/origins", security.Authorize("admin"), h.Create)
-	router.PATCH("/origins/:id", security.Authorize("admin"), h.Update)
+	router.GET("/origins/all", security.Authorize("dispatcher"), h.ListAll)
+	router.POST("/origins", security.Authorize("moderator"), h.Create)
+	router.PATCH("/origins/:id", security.Authorize("moderator"), h.Update)
 	router.DELETE("/origins/:id", security.Authorize("admin"), h.Delete)
 }
 

@@ -39,7 +39,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	router.DELETE("/schedule/slots/:sid", security.Authorize("moderator"), h.deleteSlot)
 	router.PUT("/schedule/draft", security.Authorize("moderator"), h.saveDraft)
 	router.GET("/schedule/validate", security.Authorize("user"), h.validate)
-	router.POST("/schedule/validate", security.Authorize("user"), h.validateDraft)
+	router.POST("/schedule/validate", security.Authorize("moderator"), h.validateDraft)
 	router.GET("/schedule/export/csv", security.Authorize("moderator"), h.export)
 	router.POST("/schedule/export/sheets", security.Authorize("moderator"), h.exportToSheets)
 	router.GET("/schedule/on-duty", security.Authorize("user"), h.getOnDuty)
