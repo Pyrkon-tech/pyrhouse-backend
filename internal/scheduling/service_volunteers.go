@@ -205,8 +205,8 @@ func (s *Service) UpdateVolunteer(volunteerID int, req UpdateVolunteerRequest) (
 	if req.Notes != nil {
 		updates["notes"] = *req.Notes
 	}
-	if req.UserID != nil {
-		updates["user_id"] = *req.UserID
+	if req.UserID.Set {
+		updates["user_id"] = req.UserID.Value
 	}
 
 	if len(updates) == 0 {

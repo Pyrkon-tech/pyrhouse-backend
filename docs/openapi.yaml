@@ -3045,6 +3045,58 @@ paths:
         "404":
           description: No active schedule
 
+  /schedule/volunteers/{vid}:
+    patch:
+      tags: [scheduling]
+      summary: Update volunteer
+      description: |
+        Partially updates a volunteer. Only fields present in the request body are changed.
+        Send `"user_id": null` to unlink the volunteer from a user account;
+        omit the field to leave the link unchanged. Requires moderator role.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vid
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nickname:
+                  type: string
+                city:
+                  type: string
+                hours:
+                  type: integer
+                  description: Target hours
+                available_from:
+                  type: string
+                  example: "2026-06-16 08:00"
+                available_to:
+                  type: string
+                  example: "2026-06-16 20:00"
+                notes:
+                  type: string
+                user_id:
+                  type: integer
+                  nullable: true
+                  description: Linked user account ID. Explicit null unlinks the user.
+      responses:
+        "200":
+          description: Updated volunteer
+        "400":
+          $ref: "#/components/responses/DefaultError"
+        "404":
+          description: Volunteer not found
+        "422":
+          description: Provided user_id does not exist
+
 servers:
   - url: https://pyrhouse-backend-f26ml.ondigitalocean.app/api
     description: Production

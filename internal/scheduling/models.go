@@ -1,6 +1,7 @@
 package scheduling
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -97,14 +98,26 @@ type ImportFromSheetRequest struct {
 	SheetName string `json:"sheet_name" binding:"required"`
 }
 
+// NullableInt distinguishes a JSON field that was omitted (Set=false) from one
+// explicitly sent as null (Set=true, Value=nil), which *int alone cannot express.
+type NullableInt struct {
+	Set   bool
+	Value *int
+}
+
+func (n *NullableInt) UnmarshalJSON(data []byte) error {
+	n.Set = true
+	return json.Unmarshal(data, &n.Value)
+}
+
 type UpdateVolunteerRequest struct {
-	Nickname      *string `json:"nickname"`
-	City          *string `json:"city"`
-	Hours         *int    `json:"hours"`
-	AvailableFrom *string `json:"available_from"`
-	AvailableTo   *string `json:"available_to"`
-	Notes         *string `json:"notes"`
-	UserID        *int    `json:"user_id"`
+	Nickname      *string     `json:"nickname"`
+	City          *string     `json:"city"`
+	Hours         *int        `json:"hours"`
+	AvailableFrom *string     `json:"available_from"`
+	AvailableTo   *string     `json:"available_to"`
+	Notes         *string     `json:"notes"`
+	UserID        NullableInt `json:"user_id"`
 }
 
 type AddAssignmentRequest struct {
