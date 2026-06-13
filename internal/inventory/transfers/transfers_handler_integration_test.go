@@ -432,6 +432,58 @@ func TestTransfer_Confirm(t *testing.T) {
 	})
 }
 
+// TestTransfer_ConfirmAccumulatesNullSuffixStock is a regression test for the production
+// bug where transferring a stock item with NULL origin_suffix into a location that already
+// holds the same item created a duplicate row instead of summing the quantity. Root cause:
+// UNIQUE (item_category_id, location_id, origin_id, origin_suffix) treats a NULL suffix as
+// distinct, so the ON CONFLICT in IncreaseStockAtDestination never fires.
+func TestTransfer_ConfirmAccumulatesNullSuffixStock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+	db, cleanup := setupTransfersTestDB(t)
+	defer cleanup()
+	fx := createTransferFixtures(t, db)
+	router := newTransfersRouter(db, fx.userID)
+
+	var originID int
+	require.NoError(t, db.QueryRow("SELECT id FROM origins LIMIT 1").Scan(&originID))
+
+	// Source stock at the origin location with NULL origin_suffix (plain origin).
+	var srcStockID int
+	require.NoError(t, db.QueryRow(
+		"INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin_id, origin_suffix) VALUES ($1, $2, 100, $3, NULL) RETURNING id",
+		fx.categoryID, fx.fromLocID, originID,
+	).Scan(&srcStockID))
+
+	// Destination already holds the same item (same category, origin, NULL suffix).
+	_, err := db.Exec(
+		"INSERT INTO non_serialized_items (item_category_id, location_id, quantity, origin_id, origin_suffix) VALUES ($1, $2, 20, $3, NULL)",
+		fx.categoryID, fx.toLocID, originID,
+	)
+	require.NoError(t, err)
+
+	transfer := createTransferViaAPI(t, router, map[string]any{
+		"from_location_id": fx.fromLocID,
+		"location_id":      fx.toLocID,
+		"stocks":           []map[string]any{{"id": srcStockID, "quantity": 40}},
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/transfers/%d/confirm", transfer.ID), nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	var rowCount, totalQty int
+	require.NoError(t, db.QueryRow(
+		"SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM non_serialized_items WHERE item_category_id = $1 AND location_id = $2 AND origin_id = $3 AND origin_suffix IS NULL",
+		fx.categoryID, fx.toLocID, originID,
+	).Scan(&rowCount, &totalQty))
+
+	assert.Equal(t, 1, rowCount, "transferred stock must merge into the existing destination row")
+	assert.Equal(t, 60, totalQty, "destination quantity must be 20 (existing) + 40 (transferred)")
+}
+
 // TestTransfer_Cancel covers PATCH /transfers/:id/cancel
 func TestTransfer_Cancel(t *testing.T) {
 	if testing.Short() {

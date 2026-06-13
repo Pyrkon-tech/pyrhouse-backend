@@ -293,3 +293,44 @@ func TestCreateStock_DifferentOriginsSameCategory(t *testing.T) {
 	).Scan(&personal))
 	assert.Equal(t, 7, personal)
 }
+
+// TestCreateStock_PlainOriginAccumulatesIntoSingleRow is a regression test for the
+// ON CONFLICT / NULL origin_suffix bug: adding the same plain-origin stock (NULL suffix)
+// twice must accumulate into ONE row, not create duplicate rows. PostgreSQL treats NULLs
+// as distinct in a UNIQUE constraint unless it is declared NULLS NOT DISTINCT, so the
+// ON CONFLICT (item_category_id, location_id, origin_id, origin_suffix) clause in
+// PersistStockItem silently fails to merge when origin_suffix is NULL.
+func TestCreateStock_PlainOriginAccumulatesIntoSingleRow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+	db, cleanup := setupStocksTestDB(t)
+	defer cleanup()
+	fx := createStocksFixtures(t, db)
+	router := newStocksRouter(db)
+
+	post := func(qty int) int {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/stocks", stockJSON(t, map[string]any{
+			"category_id": fx.cableCategoryID,
+			"quantity":    qty,
+			"origin":      fx.plainOriginSlug,
+			"location_id": fx.locationID,
+		}))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	require.Equal(t, http.StatusCreated, post(40))
+	require.Equal(t, http.StatusCreated, post(20))
+
+	var rowCount, totalQty int
+	require.NoError(t, db.QueryRow(
+		"SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM non_serialized_items WHERE item_category_id = $1 AND location_id = $2 AND origin_id = $3 AND origin_suffix IS NULL",
+		fx.cableCategoryID, fx.locationID, fx.plainOriginID,
+	).Scan(&rowCount, &totalQty))
+
+	assert.Equal(t, 1, rowCount, "plain-origin stock added twice must accumulate into a single row")
+	assert.Equal(t, 60, totalQty, "quantities must be summed (40 + 20)")
+}
