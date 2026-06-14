@@ -16,6 +16,7 @@ type QuestRepositoryInterface interface {
 	UpdateQuest(ctx context.Context, questID string, quest *Quest) error
 	GetQuestByID(ctx context.Context, questID string) (*Quest, error)
 	GetQuestByKey(ctx context.Context, questKey string) (*Quest, error)
+	DeleteOrphanedPendingQuests(ctx context.Context, keepKeys []string) (int, error)
 	ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error)
 	UpdateQuestStatus(ctx context.Context, questID string, status string) error
 	AddTransferToQuest(ctx context.Context, questID string, transferID int) error
@@ -124,7 +125,7 @@ type ItemDB struct {
 	ID                      int       `db:"id"`
 	QuestID                 int       `db:"quest_id"`
 	ItemName                string    `db:"item_name"`
-	Quantity                int       `db:"quantity"`
+	Quantity                *int      `db:"quantity"`
 	CategoryID              *int      `db:"category_id"`
 	CategoryMatchType       string    `db:"category_match_type"`
 	CategoryMatchConfidence *float64  `db:"category_match_confidence"`
@@ -368,6 +369,34 @@ func (r *Repository) GetQuestByKey(ctx context.Context, questKey string) (*Quest
 	}
 
 	return r.recordToQuest(&questDB, items), nil
+}
+
+// DeleteOrphanedPendingQuests removes pending quests whose quest_key is no longer present
+// in the latest sheet sync (keepKeys) and that have no linked transfer. Items cascade via
+// the ON DELETE CASCADE FK. Quests that are in_progress/completed/cancelled, or linked to a
+// transfer, are never touched. Returns the number of quests deleted. As a safety guard it is
+// a no-op when keepKeys is empty (so an empty/failed sheet fetch can never wipe the table).
+func (r *Repository) DeleteOrphanedPendingQuests(ctx context.Context, keepKeys []string) (int, error) {
+	if len(keepKeys) == 0 {
+		return 0, nil
+	}
+
+	linkedQuestIDs := r.repo.GoquDBWrapper.From("quest_transfers").Select("quest_id")
+
+	result, err := r.repo.GoquDBWrapper.
+		Delete("equipment_request_quests").
+		Where(
+			goqu.C("status").Eq("pending"),
+			goqu.C("quest_key").NotIn(keepKeys),
+			goqu.C("quest_id").NotIn(linkedQuestIDs),
+		).
+		Executor().Exec()
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete orphaned pending quests: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	return int(rows), nil
 }
 
 // ListQuests retrieves quests with filtering and pagination
@@ -665,10 +694,15 @@ func (r *Repository) questToRecord(quest *Quest) goqu.Record {
 // Helper: Convert QuestItem to database record.
 // All columns must be present for batch insert — goqu requires identical keys across rows.
 func (r *Repository) itemToRecord(questDBID int, item *QuestItem, sourceRow int) goqu.Record {
+	var qty interface{}
+	if item.Quantity != nil {
+		qty = *item.Quantity
+	}
+
 	record := goqu.Record{
 		"quest_id":            questDBID,
 		"item_name":           item.Name,
-		"quantity":            item.Quantity,
+		"quantity":            qty,
 		"category_match_type": item.CategoryMatch,
 		"source_row_number":   sourceRow,
 	}

@@ -66,6 +66,27 @@ func (m *mockQuestRepository) GetQuestByKey(ctx context.Context, questKey string
 	return nil, nil
 }
 
+func (m *mockQuestRepository) DeleteOrphanedPendingQuests(ctx context.Context, keepKeys []string) (int, error) {
+	if len(keepKeys) == 0 {
+		return 0, nil
+	}
+	keep := make(map[string]bool, len(keepKeys))
+	for _, k := range keepKeys {
+		keep[k] = true
+	}
+	kept := make([]Quest, 0, len(m.quests))
+	deleted := 0
+	for _, q := range m.quests {
+		if q.Status == "pending" && !keep[q.QuestKey] {
+			deleted++
+			continue
+		}
+		kept = append(kept, q)
+	}
+	m.quests = kept
+	return deleted, nil
+}
+
 func (m *mockQuestRepository) ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error) {
 	result := []Quest{}
 	for _, q := range m.quests {
@@ -294,7 +315,7 @@ func TestHandler_GetQuest(t *testing.T) {
 		Recipient:    "Jan Kowalski",
 		DeliveryDate: "2025-06-13",
 		Items: []QuestItem{
-			{Name: "Laptop", Quantity: 2, CategoryMatch: "exact"},
+			{Name: "Laptop", Quantity: intPtr(2), CategoryMatch: "exact"},
 		},
 		Status:     "pending",
 		SourceRows: []int{10},
@@ -333,7 +354,7 @@ func TestHandler_ListQuests(t *testing.T) {
 			Destination:  Destination{Pavilion: "P1", Location: "L1"},
 			Recipient:    "User 1",
 			DeliveryDate: "2025-06-13",
-			Items:        []QuestItem{{Name: "Item 1", Quantity: 1, CategoryMatch: "none"}},
+			Items:        []QuestItem{{Name: "Item 1", Quantity: intPtr(1), CategoryMatch: "none"}},
 			Status:       "pending",
 			SourceRows:   []int{1},
 			LastSynced:   time.Now(),
@@ -344,7 +365,7 @@ func TestHandler_ListQuests(t *testing.T) {
 			Destination:  Destination{Pavilion: "P2", Location: "L2"},
 			Recipient:    "User 2",
 			DeliveryDate: "2025-06-14",
-			Items:        []QuestItem{{Name: "Item 2", Quantity: 1, CategoryMatch: "none"}},
+			Items:        []QuestItem{{Name: "Item 2", Quantity: intPtr(1), CategoryMatch: "none"}},
 			Status:       "in_progress",
 			SourceRows:   []int{2},
 			LastSynced:   time.Now(),
@@ -717,9 +738,9 @@ func TestHandler_CreateTransferFromQuest(t *testing.T) {
 			name:    "Quest in_progress allows second transfer",
 			questID: "quest-in-progress",
 			quest: &Quest{
-				ID:        "quest-in-progress",
-				Status:    "in_progress",
-				Transfers: []QuestTransfer{{TransferID: 99, Status: "in_transit"}},
+				ID:         "quest-in-progress",
+				Status:     "in_progress",
+				Transfers:  []QuestTransfer{{TransferID: 99, Status: "in_transit"}},
 				SourceRows: []int{1},
 			},
 			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
@@ -813,7 +834,7 @@ func TestHandler_PreviewTransferFromQuest(t *testing.T) {
 				ID:          "quest-2",
 				Status:      "pending",
 				Destination: Destination{Pavilion: "P1", Location: "L1"},
-				Items:       []QuestItem{{Name: "Laptop", Quantity: 2}},
+				Items:       []QuestItem{{Name: "Laptop", Quantity: intPtr(2)}},
 				SourceRows:  []int{1},
 			},
 			expectedStatus: http.StatusOK,

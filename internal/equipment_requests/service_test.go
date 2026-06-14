@@ -62,7 +62,7 @@ func TestService_aggregateQuests(t *testing.T) {
 				{
 					RowNumber:    1,
 					Item:         "Laptop",
-					Quantity:     2,
+					Quantity:     intPtr(2),
 					Pavilion:     "PCC",
 					Location:     "Maskarada",
 					Recipient:    "Jan Kowalski",
@@ -72,7 +72,7 @@ func TestService_aggregateQuests(t *testing.T) {
 				{
 					RowNumber:    2,
 					Item:         "Mouse",
-					Quantity:     2,
+					Quantity:     intPtr(2),
 					Pavilion:     "PCC",
 					Location:     "Maskarada",
 					Recipient:    "Jan Kowalski",
@@ -88,7 +88,7 @@ func TestService_aggregateQuests(t *testing.T) {
 				{
 					RowNumber:    1,
 					Item:         "Laptop",
-					Quantity:     1,
+					Quantity:     intPtr(1),
 					Pavilion:     "PCC",
 					Location:     "Maskarada",
 					Recipient:    "Jan Kowalski",
@@ -98,7 +98,7 @@ func TestService_aggregateQuests(t *testing.T) {
 				{
 					RowNumber:    2,
 					Item:         "Mouse",
-					Quantity:     1,
+					Quantity:     intPtr(1),
 					Pavilion:     "PCC",
 					Location:     "Maskarada",
 					Recipient:    "Anna Nowak", // Different recipient
@@ -114,7 +114,7 @@ func TestService_aggregateQuests(t *testing.T) {
 				{
 					RowNumber:    1,
 					Item:         "Laptop",
-					Quantity:     1,
+					Quantity:     intPtr(1),
 					Pavilion:     "PCC",
 					Location:     "Maskarada",
 					Recipient:    "Jan Kowalski",
@@ -124,7 +124,7 @@ func TestService_aggregateQuests(t *testing.T) {
 				{
 					RowNumber:    2,
 					Item:         "Mouse",
-					Quantity:     1,
+					Quantity:     intPtr(1),
 					Pavilion:     "PCC",
 					Location:     "Maskarada",
 					Recipient:    "Jan Kowalski",
@@ -140,7 +140,7 @@ func TestService_aggregateQuests(t *testing.T) {
 				{
 					RowNumber:    1,
 					Item:         "Laptop",
-					Quantity:     1,
+					Quantity:     intPtr(1),
 					Pavilion:     "PCC",
 					Location:     "Maskarada",
 					Recipient:    "Jan Kowalski",
@@ -151,7 +151,7 @@ func TestService_aggregateQuests(t *testing.T) {
 				{
 					RowNumber:    2,
 					Item:         "Mouse",
-					Quantity:     1,
+					Quantity:     intPtr(1),
 					Pavilion:     "PCC",
 					Location:     "Maskarada",
 					Recipient:    "Jan Kowalski",
@@ -190,7 +190,7 @@ func TestService_aggregateQuests_ItemsGrouping(t *testing.T) {
 		{
 			RowNumber:    10,
 			Item:         "Laptop",
-			Quantity:     2,
+			Quantity:     intPtr(2),
 			Pavilion:     "PCC",
 			Location:     "Maskarada",
 			Recipient:    "Jan Kowalski",
@@ -203,7 +203,7 @@ func TestService_aggregateQuests_ItemsGrouping(t *testing.T) {
 		{
 			RowNumber:    11,
 			Item:         "Mouse",
-			Quantity:     3,
+			Quantity:     intPtr(3),
 			Pavilion:     "PCC",
 			Location:     "Maskarada",
 			Recipient:    "Jan Kowalski",
@@ -226,12 +226,12 @@ func TestService_aggregateQuests_ItemsGrouping(t *testing.T) {
 
 	// Verify first item
 	assert.Equal(t, "Laptop", quest.Items[0].Name)
-	assert.Equal(t, 2, quest.Items[0].Quantity)
+	assert.Equal(t, 2, *quest.Items[0].Quantity)
 	assert.Equal(t, "Test note 1", quest.Items[0].Notes)
 
 	// Verify second item
 	assert.Equal(t, "Mouse", quest.Items[1].Name)
-	assert.Equal(t, 3, quest.Items[1].Quantity)
+	assert.Equal(t, 3, *quest.Items[1].Quantity)
 	assert.Equal(t, "Test note 2", quest.Items[1].Notes)
 
 	// Verify quest metadata

@@ -59,28 +59,52 @@ func (m *ColumnMapper) ParseRow(row []string, rowNumber int) (*SheetRow, error) 
 	sr.Pavilion = getCell("pavilion")
 	sr.Location = getCell("location")
 	sr.Status = getCell("status")
-	sr.PickupTime = getCell("pickup_time")
+	sr.PickupTime = normalizePickupTime(getCell("pickup_time"))
 	sr.DeliveryDate = getCell("delivery_date")
 	sr.BudgetOwner = getCell("budget_owner")
 	sr.Recipient = getCell("recipient")
 	sr.Notes = getCell("notes")
 
-	// Parse quantity
-	qtyStr := getCell("quantity")
-	if qtyStr != "" {
-		qty, err := strconv.Atoi(qtyStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid quantity '%s' in row %d: %w", qtyStr, rowNumber, err)
+	// Parse quantity — optional. A blank, zero, negative or unparseable value is treated as
+	// "not specified" (nil) so the row is still imported and surfaced for the dispatcher to fix,
+	// instead of being silently dropped.
+	if qtyStr := getCell("quantity"); qtyStr != "" {
+		if qty, err := strconv.Atoi(qtyStr); err == nil && qty > 0 {
+			sr.Quantity = &qty
 		}
-		sr.Quantity = qty
 	}
 
-	// Validate required fields
-	if sr.Item == "" || sr.Quantity == 0 {
-		return nil, fmt.Errorf("row %d missing required fields (item or quantity)", rowNumber)
+	// A row only needs an item name; the quantity may be filled in later.
+	if sr.Item == "" {
+		return nil, fmt.Errorf("row %d missing required field (item)", rowNumber)
 	}
 
 	return sr, nil
+}
+
+// normalizePickupTime canonicalises pickup-time strings to "HH:MM" so that cosmetic
+// formatting differences in the sheet (e.g. "10.00", "10:00:00", "9:00") do not change
+// the quest_key and spawn duplicate quests. Values that are not recognisable times are
+// returned trimmed but otherwise unchanged.
+func normalizePickupTime(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+
+	// Split on the time separators used in the sheet (":" or ".").
+	fields := strings.FieldsFunc(s, func(r rune) bool { return r == ':' || r == '.' })
+	if len(fields) < 2 {
+		return s
+	}
+
+	hour, err1 := strconv.Atoi(strings.TrimSpace(fields[0]))
+	minute, err2 := strconv.Atoi(strings.TrimSpace(fields[1]))
+	if err1 != nil || err2 != nil || hour < 0 || hour > 23 || minute < 0 || minute > 59 {
+		return s
+	}
+
+	return fmt.Sprintf("%02d:%02d", hour, minute)
 }
 
 // HasRequiredColumns checks if all required columns are present

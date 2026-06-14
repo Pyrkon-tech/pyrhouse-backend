@@ -6,6 +6,34 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// intPtr is a test helper for building optional-int fields (e.g. QuestItem.Quantity).
+func intPtr(i int) *int { return &i }
+
+func TestNormalizePickupTime(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty stays empty", "", ""},
+		{"whitespace trimmed to empty", "   ", ""},
+		{"dot separator", "10.00", "10:00"},
+		{"seconds dropped", "10:00:00", "10:00"},
+		{"already canonical", "10:00", "10:00"},
+		{"single-digit hour padded", "9:00", "09:00"},
+		{"dot with seconds", "16.00.00", "16:00"},
+		{"surrounding spaces", "  12:30:00 ", "12:30"},
+		{"non-time left as-is", "rano", "rano"},
+		{"bare hour left as-is", "10", "10"},
+		{"out-of-range left as-is", "25:00", "25:00"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, normalizePickupTime(tt.in))
+		})
+	}
+}
+
 func TestNewColumnMapper(t *testing.T) {
 	headers := []string{
 		"Rzeczy",
@@ -51,22 +79,22 @@ func TestColumnMapper_ParseRow(t *testing.T) {
 		{
 			name: "Valid row",
 			row: []string{
-				"Laptop",           // Rzeczy
-				"4",                // Ilość
-				"PCC",              // Pawilon
-				"Maskarada",        // Miejsce
-				"Zamówione",        // Stan
-				"17-18",            // Godzina odbioru
-				"2025-06-13",       // Dostawa do
-				"Jan Kowalski",     // Osoba odpowiedzialna za budżet
-				"Anna Nowak",       // Do kogo ma trafić
-				"Test note",        // UWAGI
+				"Laptop",       // Rzeczy
+				"4",            // Ilość
+				"PCC",          // Pawilon
+				"Maskarada",    // Miejsce
+				"Zamówione",    // Stan
+				"17-18",        // Godzina odbioru
+				"2025-06-13",   // Dostawa do
+				"Jan Kowalski", // Osoba odpowiedzialna za budżet
+				"Anna Nowak",   // Do kogo ma trafić
+				"Test note",    // UWAGI
 			},
 			rowNumber: 5,
 			expected: &SheetRow{
 				RowNumber:    5,
 				Item:         "Laptop",
-				Quantity:     4,
+				Quantity:     intPtr(4),
 				Pavilion:     "PCC",
 				Location:     "Maskarada",
 				Status:       "Zamówione",
@@ -81,37 +109,47 @@ func TestColumnMapper_ParseRow(t *testing.T) {
 		{
 			name: "Missing item",
 			row: []string{
-				"",              // Rzeczy (empty)
-				"4",             // Ilość
-				"PCC",           // Pawilon
-				"Maskarada",     // Miejsce
-				"Zamówione",     // Stan
+				"",          // Rzeczy (empty)
+				"4",         // Ilość
+				"PCC",       // Pawilon
+				"Maskarada", // Miejsce
+				"Zamówione", // Stan
 			},
 			rowNumber: 10,
 			expected:  nil,
 			wantErr:   true,
 		},
 		{
-			name: "Invalid quantity",
+			name: "Unparseable quantity is kept as unspecified",
 			row: []string{
-				"Laptop",        // Rzeczy
-				"abc",           // Ilość (invalid)
-				"PCC",           // Pawilon
+				"Laptop", // Rzeczy
+				"abc",    // Ilość (invalid → nil)
+				"PCC",    // Pawilon
 			},
 			rowNumber: 15,
-			expected:  nil,
-			wantErr:   true,
+			expected: &SheetRow{
+				RowNumber: 15,
+				Item:      "Laptop",
+				Quantity:  nil,
+				Pavilion:  "PCC",
+			},
+			wantErr: false,
 		},
 		{
-			name: "Zero quantity",
+			name: "Blank quantity is kept as unspecified",
 			row: []string{
-				"Laptop",        // Rzeczy
-				"0",             // Ilość (zero)
-				"PCC",           // Pawilon
+				"Laptop", // Rzeczy
+				"",       // Ilość (blank → nil)
+				"PCC",    // Pawilon
 			},
 			rowNumber: 20,
-			expected:  nil,
-			wantErr:   true,
+			expected: &SheetRow{
+				RowNumber: 20,
+				Item:      "Laptop",
+				Quantity:  nil,
+				Pavilion:  "PCC",
+			},
+			wantErr: false,
 		},
 	}
 

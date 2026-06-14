@@ -18,10 +18,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"warehouse/internal/auditlog"
 	"warehouse/internal/inventory/assets"
+	"warehouse/internal/inventory/category"
 	inventorylog "warehouse/internal/inventory/inventory_log"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/inventory/transfers"
-	"warehouse/internal/inventory/category"
 	"warehouse/internal/repository"
 	"warehouse/internal/settings"
 	"warehouse/internal/users"
@@ -79,13 +79,14 @@ func setupEQTestDB(t *testing.T) (*sql.DB, func()) {
 		_, _ = db.Exec("DELETE FROM equipment_request_category_mapping WHERE form_item_name LIKE '__TEST__%'")
 		_, _ = db.Exec("DELETE FROM equipment_request_location_mapping WHERE pavilion LIKE '__TEST__%'")
 
-		// transfers linked to test quests
-		_, _ = db.Exec(`DELETE FROM transfer_users WHERE transfer_id IN (
-			SELECT transfer_id FROM equipment_request_quests WHERE destination_pavilion LIKE '__TEST__%' AND transfer_id IS NOT NULL)`)
-		_, _ = db.Exec(`DELETE FROM serialized_transfers WHERE transfer_id IN (
-			SELECT transfer_id FROM equipment_request_quests WHERE destination_pavilion LIKE '__TEST__%' AND transfer_id IS NOT NULL)`)
-		_, _ = db.Exec(`DELETE FROM non_serialized_transfers WHERE transfer_id IN (
-			SELECT transfer_id FROM equipment_request_quests WHERE destination_pavilion LIKE '__TEST__%' AND transfer_id IS NOT NULL)`)
+		// transfers linked to test quests (via the quest_transfers join table)
+		linkedTransfers := `transfer_id IN (
+			SELECT qt.transfer_id FROM quest_transfers qt
+			JOIN equipment_request_quests q ON q.quest_id = qt.quest_id
+			WHERE q.destination_pavilion LIKE '__TEST__%')`
+		_, _ = db.Exec("DELETE FROM transfer_users WHERE " + linkedTransfers)
+		_, _ = db.Exec("DELETE FROM serialized_transfers WHERE " + linkedTransfers)
+		_, _ = db.Exec("DELETE FROM non_serialized_transfers WHERE " + linkedTransfers)
 		_, _ = db.Exec("DELETE FROM transfers WHERE from_location_id IN (SELECT id FROM locations WHERE name LIKE '__TEST__%')")
 
 		_, _ = db.Exec("DELETE FROM equipment_request_quests WHERE destination_pavilion LIKE '__TEST__%'")
@@ -332,7 +333,9 @@ func TestSync_SkipsQuestWithLinkedTransfer(t *testing.T) {
 	var transferID int
 	require.NoError(t, db.QueryRow(`INSERT INTO transfers (from_location_id, to_location_id, status) VALUES ($1, $2, 'in_transit') RETURNING id`,
 		fx.fromLocID, fx.toLocID).Scan(&transferID))
-	_, err = db.Exec("UPDATE equipment_request_quests SET transfer_id = $1, status = 'in_progress' WHERE id = $2", transferID, dbQuestID)
+	_, err = db.Exec("INSERT INTO quest_transfers (quest_id, transfer_id) VALUES ($1, $2)", questID, transferID)
+	require.NoError(t, err)
+	_, err = db.Exec("UPDATE equipment_request_quests SET status = 'in_progress' WHERE id = $1", dbQuestID)
 	require.NoError(t, err)
 
 	// second sync — same rows, but quest has transfer_id → should be skipped
@@ -346,6 +349,150 @@ func TestSync_SkipsQuestWithLinkedTransfer(t *testing.T) {
 	var status string
 	require.NoError(t, db.QueryRow("SELECT status FROM equipment_request_quests WHERE id = $1", dbQuestID).Scan(&status))
 	assert.Equal(t, "in_progress", status)
+}
+
+// ─────────────────────────────────────────────
+// TestSync_ReconcilesStalePendingDuplicate
+// ─────────────────────────────────────────────
+
+// Reproduces the production duplicate bug: a quest whose pickup time is edited in the
+// sheet used to leave the pre-edit row behind forever. With pickup normalisation +
+// reconciliation, the edited row replaces the old one instead of duplicating it.
+func TestSync_ReconcilesStalePendingDuplicate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+	db, cleanup := setupEQTestDB(t)
+	defer cleanup()
+	_ = createEQFixtures(t, db)
+
+	const recipient = "Dedup Recipient"
+
+	// v1: pickup "10.00" (normalises to 10:00).
+	svc1 := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
+		sheetHeader(),
+		sheetRow("__TEST__Kabel", "2", "__TEST__pav", "__TEST__loc", "Nowe", "10.00", "2099-03-03", "", recipient, ""),
+	}}))
+	r1, err := svc1.SyncQuestsToDatabase(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, r1.Stats.Created)
+
+	// v2: same recipient/location/date, pickup edited to "12:00:00" → different quest_key.
+	svc2 := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
+		sheetHeader(),
+		sheetRow("__TEST__Kabel", "2", "__TEST__pav", "__TEST__loc", "Nowe", "12:00:00", "2099-03-03", "", recipient, ""),
+	}}))
+	r2, err := svc2.SyncQuestsToDatabase(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, r2.Stats.Created, "edited pickup time creates a new quest")
+	assert.Equal(t, 1, r2.Stats.Deleted, "the stale pre-edit quest is reconciled away")
+
+	// Exactly one quest remains for this recipient — no duplicate.
+	var count int
+	require.NoError(t, db.QueryRow(
+		"SELECT COUNT(*) FROM equipment_request_quests WHERE recipient = $1 AND destination_pavilion = '__TEST__pav'",
+		recipient,
+	).Scan(&count))
+	assert.Equal(t, 1, count)
+
+	// The survivor carries the normalised pickup time.
+	var pickup string
+	require.NoError(t, db.QueryRow(
+		"SELECT pickup_time FROM equipment_request_quests WHERE recipient = $1 AND destination_pavilion = '__TEST__pav'",
+		recipient,
+	).Scan(&pickup))
+	assert.Equal(t, "12:00", pickup)
+}
+
+// ─────────────────────────────────────────────
+// TestSync_ReconcileKeepsQuestWithTransfer
+// ─────────────────────────────────────────────
+
+// Reconciliation must never remove a quest that has a linked transfer or a non-pending
+// status, even when it no longer appears in the sheet.
+func TestSync_ReconcileKeepsQuestWithTransfer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+	db, cleanup := setupEQTestDB(t)
+	defer cleanup()
+	fx := createEQFixtures(t, db)
+
+	svc := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
+		sheetHeader(),
+		sheetRow("__TEST__Kabel", "1", "__TEST__pav", "__TEST__loc", "Nowe", "", "2099-04-04", "", "Linked Recipient", ""),
+	}}))
+	r1, err := svc.SyncQuestsToDatabase(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, r1.Stats.Created)
+	questID := r1.Quests[0].ID
+
+	var transferID int
+	require.NoError(t, db.QueryRow(`INSERT INTO transfers (from_location_id, to_location_id, status) VALUES ($1, $2, 'in_transit') RETURNING id`,
+		fx.fromLocID, fx.toLocID).Scan(&transferID))
+	_, err = db.Exec("INSERT INTO quest_transfers (quest_id, transfer_id) VALUES ($1, $2)", questID, transferID)
+	require.NoError(t, err)
+	_, err = db.Exec("UPDATE equipment_request_quests SET status = 'in_progress' WHERE quest_id = $1", questID)
+	require.NoError(t, err)
+
+	// Next sync with a completely different sheet — the linked quest is gone from it.
+	svc2 := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
+		sheetHeader(),
+		sheetRow("__TEST__Inny", "1", "__TEST__pav", "__TEST__loc", "Nowe", "", "2099-04-05", "", "Other Recipient", ""),
+	}}))
+	_, err = svc2.SyncQuestsToDatabase(context.Background())
+	require.NoError(t, err)
+
+	// The quest with a transfer must survive reconciliation.
+	var status string
+	require.NoError(t, db.QueryRow("SELECT status FROM equipment_request_quests WHERE quest_id = $1", questID).Scan(&status))
+	assert.Equal(t, "in_progress", status)
+}
+
+// ─────────────────────────────────────────────
+// TestSync_KeepsItemWithoutQuantity
+// ─────────────────────────────────────────────
+
+// A sheet row with an item but a blank quantity must be imported (quantity NULL) instead of
+// being dropped, and the transfer preview must flag it so the dispatcher fills it in.
+func TestSync_KeepsItemWithoutQuantity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+	db, cleanup := setupEQTestDB(t)
+	defer cleanup()
+	fx := createEQFixtures(t, db)
+
+	svc := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
+		sheetHeader(),
+		sheetRow("__TEST__Kabel", "", "__TEST__pav", "__TEST__loc", "Nowe", "", "2099-05-05", "", "NoQty Recipient", ""),
+	}}))
+	r, err := svc.SyncQuestsToDatabase(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, r.Stats.Created)
+
+	// Item is persisted with NULL quantity (not dropped).
+	var rowCount int
+	var qty sql.NullInt64
+	require.NoError(t, db.QueryRow(`
+		SELECT COUNT(*), MAX(i.quantity) FROM equipment_request_items i
+		JOIN equipment_request_quests q ON q.id = i.quest_id
+		WHERE q.destination_pavilion = '__TEST__pav' AND i.item_name = '__TEST__Kabel'`,
+	).Scan(&rowCount, &qty))
+	assert.Equal(t, 1, rowCount, "item with no quantity must still be imported")
+	assert.False(t, qty.Valid, "quantity must be NULL when the sheet leaves it blank")
+
+	// API model exposes the quantity as nil.
+	require.Len(t, r.Quests, 1)
+	require.Len(t, r.Quests[0].Items, 1)
+	assert.Nil(t, r.Quests[0].Items[0].Quantity)
+
+	// Transfer preview flags it so the dispatcher must supply a quantity.
+	preview, err := svc.PreviewTransferFromQuest(context.Background(), r.Quests[0].ID, fx.fromLocID)
+	require.NoError(t, err)
+	require.Len(t, preview.UnresolvedItems, 1)
+	assert.Equal(t, "quantity not specified in sheet", preview.UnresolvedItems[0].Reason)
+	assert.Nil(t, preview.UnresolvedItems[0].Quantity)
 }
 
 // ─────────────────────────────────────────────
@@ -500,7 +647,7 @@ func TestUpdateQuestStatus(t *testing.T) {
 		var transferID int
 		require.NoError(t, db.QueryRow(`INSERT INTO transfers (from_location_id, to_location_id, status) VALUES ($1, $2, 'in_transit') RETURNING id`,
 			fx.fromLocID, fx.toLocID).Scan(&transferID))
-		_, _ = db.Exec("UPDATE equipment_request_quests SET transfer_id = $1 WHERE id = $2", transferID, dbQuestID)
+		_, _ = db.Exec("INSERT INTO quest_transfers (quest_id, transfer_id) SELECT quest_id, $1 FROM equipment_request_quests WHERE id = $2", transferID, dbQuestID)
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPatch,
@@ -704,7 +851,7 @@ func TestCreateTransferFromQuest_E2E(t *testing.T) {
 		// quest must now be linked and in_progress
 		var status string
 		var linkedTransferID *int
-		require.NoError(t, db.QueryRow("SELECT status, transfer_id FROM equipment_request_quests WHERE quest_id = $1", questID).Scan(&status, &linkedTransferID))
+		require.NoError(t, db.QueryRow("SELECT q.status, qt.transfer_id FROM equipment_request_quests q LEFT JOIN quest_transfers qt ON qt.quest_id = q.quest_id WHERE q.quest_id = $1", questID).Scan(&status, &linkedTransferID))
 		assert.Equal(t, "in_progress", status)
 		require.NotNil(t, linkedTransferID)
 		assert.Equal(t, transferID, *linkedTransferID)
@@ -742,14 +889,10 @@ func TestCreateTransferFromQuest_E2E(t *testing.T) {
 		assert.Equal(t, http.StatusCreated, w.Code, "body: %s", w.Body.String())
 	})
 
-	t.Run("quest already linked returns 409", func(t *testing.T) {
-		questID := insertTestQuest(t, db, &fx.toLocID, "in_progress")
-		dbQuestID := getQuestDBID(t, db, questID)
-
-		var transferID int
-		require.NoError(t, db.QueryRow(`INSERT INTO transfers (from_location_id, to_location_id, status) VALUES ($1, $2, 'in_transit') RETURNING id`,
-			fx.fromLocID, fx.toLocID).Scan(&transferID))
-		_, _ = db.Exec("UPDATE equipment_request_quests SET transfer_id = $1 WHERE id = $2", transferID, dbQuestID)
+	// A quest can now have multiple transfers (see migration 000046), so an in_progress
+	// quest is no longer blocked. Only a completed/cancelled quest rejects new transfers.
+	t.Run("completed quest returns 409", func(t *testing.T) {
+		questID := insertTestQuest(t, db, &fx.toLocID, "completed")
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost,
@@ -758,7 +901,7 @@ func TestCreateTransferFromQuest_E2E(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusConflict, w.Code)
+		assert.Equal(t, http.StatusConflict, w.Code, "body: %s", w.Body.String())
 	})
 
 	t.Run("quest not found returns 404", func(t *testing.T) {
@@ -793,7 +936,7 @@ func TestTransferCallback_QuestLifecycle(t *testing.T) {
 		require.NoError(t, db.QueryRow(`INSERT INTO transfers (from_location_id, to_location_id, status) VALUES ($1, $2, 'in_transit') RETURNING id`,
 			fx.fromLocID, fx.toLocID).Scan(&transferID))
 		dbQuestID := getQuestDBID(t, db, questID)
-		_, err := db.Exec("UPDATE equipment_request_quests SET transfer_id = $1 WHERE id = $2", transferID, dbQuestID)
+		_, err := db.Exec("INSERT INTO quest_transfers (quest_id, transfer_id) SELECT quest_id, $1 FROM equipment_request_quests WHERE id = $2", transferID, dbQuestID)
 		require.NoError(t, err)
 		return
 	}
@@ -801,7 +944,11 @@ func TestTransferCallback_QuestLifecycle(t *testing.T) {
 	t.Run("completed transfer marks quest completed", func(t *testing.T) {
 		questID, transferID := setupLinkedQuest(t)
 
-		err := svc.OnTransferStatusChanged(transferID, "completed")
+		// The transfer service flips the row to completed before firing the callback.
+		_, err := db.Exec("UPDATE transfers SET status = 'completed' WHERE id = $1", transferID)
+		require.NoError(t, err)
+
+		err = svc.OnTransferStatusChanged(transferID, "completed")
 		require.NoError(t, err)
 
 		var status string
@@ -817,7 +964,7 @@ func TestTransferCallback_QuestLifecycle(t *testing.T) {
 
 		var status string
 		var linkedID *int
-		require.NoError(t, db.QueryRow("SELECT status, transfer_id FROM equipment_request_quests WHERE quest_id = $1", questID).Scan(&status, &linkedID))
+		require.NoError(t, db.QueryRow("SELECT q.status, qt.transfer_id FROM equipment_request_quests q LEFT JOIN quest_transfers qt ON qt.quest_id = q.quest_id WHERE q.quest_id = $1", questID).Scan(&status, &linkedID))
 		assert.Equal(t, "pending", status)
 		assert.Nil(t, linkedID, "transfer_id must be NULL after cancel")
 	})

@@ -39,7 +39,7 @@ func TestRepository_CreateQuest(t *testing.T) {
 		Items: []QuestItem{
 			{
 				Name:                    "Laptop",
-				Quantity:                2,
+				Quantity:                intPtr(2),
 				CategoryID:              &categoryID,
 				CategoryMatch:           "exact",
 				CategoryMatchConfidence: 1.0,
@@ -88,7 +88,7 @@ func TestRepository_UpdateQuest(t *testing.T) {
 		Recipient:    "Anna Nowak",
 		DeliveryDate: "2025-06-14",
 		Items: []QuestItem{
-			{Name: "Mouse", Quantity: 3, CategoryMatch: "none"},
+			{Name: "Mouse", Quantity: intPtr(3), CategoryMatch: "none"},
 		},
 		Status:     "pending",
 		SourceRows: []int{20},
@@ -101,10 +101,10 @@ func TestRepository_UpdateQuest(t *testing.T) {
 	// Update quest with new items
 	categoryID := 456
 	quest.Items = []QuestItem{
-		{Name: "Mouse", Quantity: 3, CategoryMatch: "none"},
+		{Name: "Mouse", Quantity: intPtr(3), CategoryMatch: "none"},
 		{
 			Name:          "Keyboard",
-			Quantity:      2,
+			Quantity:      intPtr(2),
 			CategoryID:    &categoryID,
 			CategoryMatch: "fuzzy",
 		},
@@ -143,7 +143,7 @@ func TestRepository_GetQuestByKey(t *testing.T) {
 		Recipient:    "Test User",
 		DeliveryDate: "2025-06-15",
 		Items: []QuestItem{
-			{Name: "Test Item", Quantity: 1, CategoryMatch: "none"},
+			{Name: "Test Item", Quantity: intPtr(1), CategoryMatch: "none"},
 		},
 		Status:     "pending",
 		SourceRows: []int{30},
@@ -180,7 +180,7 @@ func TestRepository_ListQuests(t *testing.T) {
 			Destination:  Destination{Pavilion: "P1", Location: "L1"},
 			Recipient:    "User 1",
 			DeliveryDate: "2025-06-13",
-			Items:        []QuestItem{{Name: "Item 1", Quantity: 1, CategoryMatch: "none"}},
+			Items:        []QuestItem{{Name: "Item 1", Quantity: intPtr(1), CategoryMatch: "none"}},
 			Status:       "pending",
 			SourceRows:   []int{1},
 			LastSynced:   time.Now(),
@@ -191,7 +191,7 @@ func TestRepository_ListQuests(t *testing.T) {
 			Destination:  Destination{Pavilion: "P2", Location: "L2"},
 			Recipient:    "User 2",
 			DeliveryDate: "2025-06-14",
-			Items:        []QuestItem{{Name: "Item 2", Quantity: 1, CategoryMatch: "none"}},
+			Items:        []QuestItem{{Name: "Item 2", Quantity: intPtr(1), CategoryMatch: "none"}},
 			Status:       "in_progress",
 			SourceRows:   []int{2},
 			LastSynced:   time.Now(),
@@ -202,7 +202,7 @@ func TestRepository_ListQuests(t *testing.T) {
 			Destination:  Destination{Pavilion: "P3", Location: "L3"},
 			Recipient:    "User 3",
 			DeliveryDate: "2025-06-15",
-			Items:        []QuestItem{{Name: "Item 3", Quantity: 1, CategoryMatch: "none"}},
+			Items:        []QuestItem{{Name: "Item 3", Quantity: intPtr(1), CategoryMatch: "none"}},
 			Status:       "completed",
 			SourceRows:   []int{3},
 			LastSynced:   time.Now(),
@@ -255,7 +255,7 @@ func TestRepository_UpdateQuestStatus(t *testing.T) {
 		Destination:  Destination{Pavilion: "PCC", Location: "Test"},
 		Recipient:    "Test User",
 		DeliveryDate: "2025-06-16",
-		Items:        []QuestItem{{Name: "Test", Quantity: 1, CategoryMatch: "none"}},
+		Items:        []QuestItem{{Name: "Test", Quantity: intPtr(1), CategoryMatch: "none"}},
 		Status:       "pending",
 		SourceRows:   []int{40},
 		LastSynced:   time.Now(),

@@ -317,6 +317,7 @@ type SyncStats struct {
 	Created      int
 	Updated      int
 	Unchanged    int
+	Deleted      int
 	ItemsAdded   int
 	ItemsRemoved int
 }
@@ -394,6 +395,21 @@ func (s *Service) SyncQuestsToDatabase(ctx context.Context) (*SyncResult, error)
 			log.Printf("[equipment-requests] Failed to upsert quest %s: %v", quests[i].ID, err)
 			continue
 		}
+	}
+
+	// 6b. Reconcile: drop stale pending quests no longer present in the sheet and not
+	// linked to a transfer. This is what stops duplicates from a changed quest_key (e.g.
+	// an edited pickup time) lingering forever. Safe because we already returned early on
+	// an empty fetch (< 2 rows) and the repo no-ops when there are no keys to keep.
+	keepKeys := make([]string, len(quests))
+	for i := range quests {
+		keepKeys[i] = quests[i].QuestKey
+	}
+	if deleted, err := s.questRepo.DeleteOrphanedPendingQuests(ctx, keepKeys); err != nil {
+		log.Printf("[equipment-requests] Reconciliation failed: %v", err)
+	} else if deleted > 0 {
+		stats.Deleted = deleted
+		log.Printf("[equipment-requests] Reconciliation removed %d stale pending quest(s)", deleted)
 	}
 
 	// 7. Log sync result
@@ -477,11 +493,19 @@ func questContentChanged(existing, incoming *Quest) bool {
 	}
 	for i := range incoming.Items {
 		if existing.Items[i].Name != incoming.Items[i].Name ||
-			existing.Items[i].Quantity != incoming.Items[i].Quantity {
+			!intPtrEqual(existing.Items[i].Quantity, incoming.Items[i].Quantity) {
 			return true
 		}
 	}
 	return false
+}
+
+// intPtrEqual compares two optional ints by value (both nil == equal).
+func intPtrEqual(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 func (s *Service) resolveAndSetQuestLocation(ctx context.Context, quest *Quest) {
@@ -705,6 +729,16 @@ func (s *Service) ResolveQuestStockItems(quest *Quest, fromLocationID int) ([]Re
 	var unresolved []UnresolvedItem
 
 	for _, item := range quest.Items {
+		if item.Quantity == nil {
+			unresolved = append(unresolved, UnresolvedItem{
+				ItemName:   item.Name,
+				Quantity:   nil,
+				CategoryID: item.CategoryID,
+				Reason:     "quantity not specified in sheet",
+			})
+			continue
+		}
+
 		if item.CategoryID == nil {
 			unresolved = append(unresolved, UnresolvedItem{
 				ItemName: item.Name,
@@ -732,7 +766,7 @@ func (s *Service) ResolveQuestStockItems(quest *Quest, fromLocationID int) ([]Re
 			CategoryID:   match.CategoryID,
 			CategoryName: match.CategoryName,
 			ItemName:     item.Name,
-			Quantity:     item.Quantity,
+			Quantity:     *item.Quantity,
 			Available:    match.Quantity,
 		})
 	}

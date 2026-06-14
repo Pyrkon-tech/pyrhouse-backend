@@ -1878,6 +1878,8 @@ paths:
                           type: string
                         quantity:
                           type: integer
+                          nullable: true
+                          description: Null when the item has no quantity in the sheet (reason "quantity not specified in sheet")
                         category_id:
                           type: integer
                           nullable: true
@@ -3506,7 +3508,8 @@ components:
         quantity:
           type: integer
           minimum: 1
-          description: Quantity requested
+          nullable: true
+          description: Quantity requested. Null when the source sheet left it blank — the dispatcher must supply a quantity before a transfer can be created.
           example: 4
         category_id:
           type: integer

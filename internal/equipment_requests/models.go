@@ -56,10 +56,12 @@ type LocationMapping struct {
 	UsageCount   int       `json:"usage_count" db:"usage_count"`
 }
 
-// QuestItem represents a single item in a quest
+// QuestItem represents a single item in a quest.
+// Quantity is a pointer because the source sheet may leave it blank — a nil Quantity
+// means "not specified yet" (serialised as JSON null) and blocks auto-dispatch until set.
 type QuestItem struct {
 	Name                    string  `json:"name"`
-	Quantity                int     `json:"quantity"`
+	Quantity                *int    `json:"quantity"`
 	CategoryID              *int    `json:"category_id,omitempty"`
 	CategoryMatch           string  `json:"category_match"`                      // exact, fuzzy, manual, none
 	CategoryMatchConfidence float64 `json:"category_match_confidence,omitempty"` // 0.00-1.00 for fuzzy matches
@@ -77,7 +79,7 @@ type Destination struct {
 type SheetRow struct {
 	RowNumber     int
 	Item          string
-	Quantity      int
+	Quantity      *int // nil when the sheet leaves the quantity cell blank
 	Pavilion      string
 	Location      string
 	Status        string
@@ -149,10 +151,10 @@ type ResolvedStockItem struct {
 	Available    int    `json:"available"`
 }
 
-// UnresolvedItem is a quest item that could not be matched to stock
+// UnresolvedItem is a quest item that could not be matched to stock (or has no quantity)
 type UnresolvedItem struct {
 	ItemName   string `json:"item_name"`
-	Quantity   int    `json:"quantity"`
+	Quantity   *int   `json:"quantity"`
 	CategoryID *int   `json:"category_id,omitempty"`
 	Reason     string `json:"reason"`
 }
