@@ -243,7 +243,13 @@ func (r *StockRepository) DecreaseStockItemsQuantity(tx *goqu.TxDatabase, stocks
 				"id":          stockItem.ID,
 				"location_id": fromLocationID,
 			}).
-			Where(goqu.C("quantity").Eq(0)) // Only delete records where quantity is now zero
+			Where(goqu.C("quantity").Eq(0)). // Only delete records where quantity is now zero
+			// Keep the row (at quantity 0) if any transfer history references it, otherwise
+			// the fk_non_serialized_transfers_stock foreign key would block the delete.
+			Where(goqu.L(
+				"NOT EXISTS (SELECT 1 FROM non_serialized_transfers WHERE stock_id = ?)",
+				stockItem.ID,
+			))
 
 		if _, err := deleteQuery.Executor().Exec(); err != nil {
 			return fmt.Errorf("failed to remove stock item with zero quantity: %w", err)
