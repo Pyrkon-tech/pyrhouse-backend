@@ -832,30 +832,19 @@ func (s *Service) CreateTransferFromQuest(ctx context.Context, questID string, r
 		LocationID:     toLocationID,
 	}
 
-	// 3a. Stock items — use override or auto-resolve
-	if len(req.StockItems) > 0 {
-		for _, si := range req.StockItems {
-			transferReq.StockItemCollection = append(transferReq.StockItemCollection, models.StockItemRequest{
-				ID:       si.ID,
-				Quantity: si.Quantity,
-			})
-		}
-	} else {
-		// Auto-resolve from quest items
-		resolved, unresolved := s.ResolveQuestStockItems(quest, req.FromLocationID)
-		if len(resolved) == 0 && len(req.Assets) == 0 {
-			reasons := make([]string, len(unresolved))
-			for i, u := range unresolved {
-				reasons[i] = fmt.Sprintf("%s: %s", u.ItemName, u.Reason)
-			}
-			return 0, fmt.Errorf("no stock items could be resolved: %v", reasons)
-		}
-		for _, r := range resolved {
-			transferReq.StockItemCollection = append(transferReq.StockItemCollection, models.StockItemRequest{
-				ID:       r.StockID,
-				Quantity: r.Quantity,
-			})
-		}
+	// 3a. Stock items — only what the request explicitly lists. We do NOT auto-resolve
+	// from the quest sheet, so callers can send assets-only, stock-only, or a combination.
+	// (Use the transfer-preview endpoint to get suggested stock items to send back here.)
+	for _, si := range req.StockItems {
+		transferReq.StockItemCollection = append(transferReq.StockItemCollection, models.StockItemRequest{
+			ID:       si.ID,
+			Quantity: si.Quantity,
+		})
+	}
+
+	// Must move at least something.
+	if len(req.StockItems) == 0 && len(req.Assets) == 0 {
+		return 0, fmt.Errorf("transfer must include at least one stock item or asset")
 	}
 
 	// 3b. Assets — optional
