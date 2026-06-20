@@ -23,6 +23,7 @@ type QuestRepositoryInterface interface {
 	RemoveTransferFromQuest(ctx context.Context, transferID int) error
 	GetQuestByTransferID(ctx context.Context, transferID int) (*Quest, error)
 	GetActiveTransfersForQuest(ctx context.Context, questID string) ([]int, error)
+	GetFulfilledQuantitiesByCategory(ctx context.Context, questID string) (map[int]int, error)
 	FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error)
 	ResolveLocationByPavilionAndName(pavilion, name string) (*int, error)
 	ResolveLocationByNameOnly(name string) (*int, error)
@@ -836,6 +837,64 @@ func (r *Repository) GetActiveTransfersForQuest(ctx context.Context, questID str
 		ids[i] = row.TransferID
 	}
 	return ids, nil
+}
+
+// GetFulfilledQuantitiesByCategory sums the quantities actually delivered for a quest,
+// grouped by item category, across all of its completed transfers. Both non-serialized
+// stock (summed quantity) and serialized assets (counted, 1 each) contribute. Cancelled
+// and in-transit transfers are excluded — only goods that have arrived count. The result
+// is what HasActiveTransfer-driven auto-close validates the quest's requested items against.
+func (r *Repository) GetFulfilledQuantitiesByCategory(ctx context.Context, questID string) (map[int]int, error) {
+	fulfilled := make(map[int]int)
+
+	// 1. Non-serialized stock delivered (sum of quantities per category).
+	var stockRows []struct {
+		CategoryID int `db:"item_category_id"`
+		Quantity   int `db:"quantity"`
+	}
+	stockQuery := r.repo.GoquDBWrapper.
+		Select(
+			goqu.I("nst.item_category_id"),
+			goqu.COALESCE(goqu.SUM(goqu.I("nst.quantity")), 0).As("quantity"),
+		).
+		From(goqu.T("non_serialized_transfers").As("nst")).
+		Join(goqu.T("quest_transfers").As("qt"), goqu.On(goqu.Ex{"qt.transfer_id": goqu.I("nst.transfer_id")})).
+		Join(goqu.T("transfers").As("t"), goqu.On(goqu.Ex{"t.id": goqu.I("nst.transfer_id")})).
+		Where(goqu.Ex{"qt.quest_id": questID, "t.status": "completed"}).
+		GroupBy(goqu.I("nst.item_category_id"))
+
+	if err := stockQuery.Executor().ScanStructs(&stockRows); err != nil {
+		return nil, fmt.Errorf("failed to sum delivered stock for quest %s: %w", questID, err)
+	}
+	for _, row := range stockRows {
+		fulfilled[row.CategoryID] += row.Quantity
+	}
+
+	// 2. Serialized assets delivered (one unit each, per category).
+	var assetRows []struct {
+		CategoryID int `db:"item_category_id"`
+		Quantity   int `db:"quantity"`
+	}
+	assetQuery := r.repo.GoquDBWrapper.
+		Select(
+			goqu.I("i.item_category_id"),
+			goqu.COUNT(goqu.I("st.item_id")).As("quantity"),
+		).
+		From(goqu.T("serialized_transfers").As("st")).
+		Join(goqu.T("quest_transfers").As("qt"), goqu.On(goqu.Ex{"qt.transfer_id": goqu.I("st.transfer_id")})).
+		Join(goqu.T("transfers").As("t"), goqu.On(goqu.Ex{"t.id": goqu.I("st.transfer_id")})).
+		Join(goqu.T("items").As("i"), goqu.On(goqu.Ex{"i.id": goqu.I("st.item_id")})).
+		Where(goqu.Ex{"qt.quest_id": questID, "t.status": "completed"}).
+		GroupBy(goqu.I("i.item_category_id"))
+
+	if err := assetQuery.Executor().ScanStructs(&assetRows); err != nil {
+		return nil, fmt.Errorf("failed to count delivered assets for quest %s: %w", questID, err)
+	}
+	for _, row := range assetRows {
+		fulfilled[row.CategoryID] += row.Quantity
+	}
+
+	return fulfilled, nil
 }
 
 // FindStockItemsByCategory finds non-serialized stock items at a location matching a category

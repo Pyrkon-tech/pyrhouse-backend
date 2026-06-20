@@ -903,10 +903,23 @@ func (s *Service) OnTransferStatusChanged(transferID int, newStatus string) erro
 		// The completed transfer still has status "completed" in the DB at this point,
 		// so GetActiveTransfersForQuest won't include it — length 0 means this was the last one.
 		if len(active) == 0 {
-			if err := s.questRepo.UpdateQuestStatus(ctx, quest.ID, "completed"); err != nil {
-				return fmt.Errorf("failed to complete quest %s: %w", quest.ID, err)
+			// Last active transfer is done — but only auto-close the quest if the goods
+			// actually delivered across all transfers cover what was requested. If anything
+			// is short (or can't be verified), leave the quest in_progress so an operator
+			// can dispatch the remainder rather than silently marking it fulfilled.
+			fulfilled, err := s.questRepo.GetFulfilledQuantitiesByCategory(ctx, quest.ID)
+			if err != nil {
+				return fmt.Errorf("failed to check fulfillment for quest %s: %w", quest.ID, err)
 			}
-			log.Printf("[equipment-requests] Quest %s completed — all transfers done", quest.ID)
+			if complete, shortfalls := questFulfillment(quest, fulfilled); complete {
+				if err := s.questRepo.UpdateQuestStatus(ctx, quest.ID, "completed"); err != nil {
+					return fmt.Errorf("failed to complete quest %s: %w", quest.ID, err)
+				}
+				log.Printf("[equipment-requests] Quest %s completed — all transfers done and requested items fulfilled", quest.ID)
+			} else {
+				log.Printf("[equipment-requests] Transfer %d completed and no active transfers remain, but quest %s is not fully fulfilled — kept in_progress (%s)",
+					transferID, quest.ID, strings.Join(shortfalls, "; "))
+			}
 		} else {
 			log.Printf("[equipment-requests] Transfer %d completed, quest %s still has %d active transfer(s)", transferID, quest.ID, len(active))
 		}
@@ -926,6 +939,39 @@ func (s *Service) OnTransferStatusChanged(transferID int, newStatus string) erro
 	}
 
 	return nil
+}
+
+// questFulfillment reports whether everything the quest requested has been delivered,
+// comparing requested quantities (aggregated per category from quest.Items) against the
+// quantities actually delivered per category (fulfilled, from completed transfers).
+//
+// It is deliberately conservative: an item that can't be verified — no category match or
+// no quantity in the sheet — counts as a shortfall, because we cannot prove it was sent.
+// The second return value lists human-readable shortfalls for logging. A quest with no
+// items is trivially complete.
+func questFulfillment(quest *Quest, fulfilled map[int]int) (bool, []string) {
+	requested := make(map[int]int) // category_id -> total requested quantity
+	var shortfalls []string
+
+	for _, item := range quest.Items {
+		if item.CategoryID == nil {
+			shortfalls = append(shortfalls, fmt.Sprintf("item %q has no category match", item.Name))
+			continue
+		}
+		if item.Quantity == nil {
+			shortfalls = append(shortfalls, fmt.Sprintf("item %q (category %d) has no quantity", item.Name, *item.CategoryID))
+			continue
+		}
+		requested[*item.CategoryID] += *item.Quantity
+	}
+
+	for categoryID, want := range requested {
+		if got := fulfilled[categoryID]; got < want {
+			shortfalls = append(shortfalls, fmt.Sprintf("category %d: requested %d, delivered %d", categoryID, want, got))
+		}
+	}
+
+	return len(shortfalls) == 0, shortfalls
 }
 
 // isEmptyRow returns true when every cell in the row is blank — signals end of sheet data.

@@ -25,6 +25,7 @@ type mockQuestRepository struct {
 	categoryMappings []CategoryMapping
 	statusUpdate     func(ctx context.Context, questID string, status string) error
 	stockFinder      func(locationID, categoryID int) ([]StockMatch, error)
+	fulfilled        map[string]map[int]int // questID -> category_id -> delivered quantity
 }
 
 // mockTransferCreator is a mock TransferCreator for testing
@@ -206,6 +207,15 @@ func (m *mockQuestRepository) GetActiveTransfersForQuest(ctx context.Context, qu
 		}
 	}
 	return nil, nil
+}
+
+func (m *mockQuestRepository) GetFulfilledQuantitiesByCategory(ctx context.Context, questID string) (map[int]int, error) {
+	if m.fulfilled != nil {
+		if byCat, ok := m.fulfilled[questID]; ok {
+			return byCat, nil
+		}
+	}
+	return map[int]int{}, nil
 }
 
 func (m *mockQuestRepository) FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error) {
@@ -876,10 +886,14 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 	transferID := 10
 	questID := "quest-linked"
 
+	catID := func(id int) *int { return &id }
+	qty := func(q int) *int { return &q }
+
 	tests := []struct {
 		name          string
 		newStatus     string
 		initialQuests []Quest
+		fulfilled     map[string]map[int]int
 		checkResult   func(t *testing.T, repo *mockQuestRepository)
 		expectError   bool
 	}{
@@ -891,6 +905,52 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 			},
 			checkResult: func(t *testing.T, repo *mockQuestRepository) {
 				assert.Equal(t, "completed", repo.quests[0].Status)
+			},
+		},
+		{
+			name:      "completed, no active transfers, requested items fully delivered → quest completed",
+			newStatus: "completed",
+			initialQuests: []Quest{
+				{ID: questID, Status: "in_progress", SourceRows: []int{1, 2},
+					Items: []QuestItem{
+						{Name: "Chairs", CategoryID: catID(1), Quantity: qty(5)},
+						{Name: "Tables", CategoryID: catID(2), Quantity: qty(2)},
+					},
+					Transfers: []QuestTransfer{{TransferID: transferID, Status: "completed"}}},
+			},
+			fulfilled: map[string]map[int]int{questID: {1: 5, 2: 2}},
+			checkResult: func(t *testing.T, repo *mockQuestRepository) {
+				assert.Equal(t, "completed", repo.quests[0].Status)
+			},
+		},
+		{
+			name:      "completed, no active transfers, but delivered quantity short → quest stays in_progress",
+			newStatus: "completed",
+			initialQuests: []Quest{
+				{ID: questID, Status: "in_progress", SourceRows: []int{1, 2},
+					Items: []QuestItem{
+						{Name: "Chairs", CategoryID: catID(1), Quantity: qty(5)},
+						{Name: "Tables", CategoryID: catID(2), Quantity: qty(2)},
+					},
+					Transfers: []QuestTransfer{{TransferID: transferID, Status: "completed"}}},
+			},
+			fulfilled: map[string]map[int]int{questID: {1: 3, 2: 2}}, // 3 of 5 chairs delivered
+			checkResult: func(t *testing.T, repo *mockQuestRepository) {
+				assert.Equal(t, "in_progress", repo.quests[0].Status)
+			},
+		},
+		{
+			name:      "completed, no active transfers, item without category → quest stays in_progress",
+			newStatus: "completed",
+			initialQuests: []Quest{
+				{ID: questID, Status: "in_progress", SourceRows: []int{1},
+					Items: []QuestItem{
+						{Name: "Mystery item", CategoryID: nil, Quantity: qty(1)},
+					},
+					Transfers: []QuestTransfer{{TransferID: transferID, Status: "completed"}}},
+			},
+			checkResult: func(t *testing.T, repo *mockQuestRepository) {
+				assert.Equal(t, "in_progress", repo.quests[0].Status)
 			},
 		},
 		{
@@ -954,8 +1014,9 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRepo := &mockQuestRepository{
-				quests:   tt.initialQuests,
-				mappings: make(map[string]int),
+				quests:    tt.initialQuests,
+				mappings:  make(map[string]int),
+				fulfilled: tt.fulfilled,
 			}
 			svc := &Service{questRepo: mockRepo}
 
