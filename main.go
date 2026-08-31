@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"log"
 	"net/http"
@@ -38,20 +40,34 @@ func main() {
 		log.Fatalf("Error loading configuration: %v", err)
 	}
 
-	// Validate required config
-	if cfg.Database.URL == "" {
-		log.Fatal("DATABASE_URL environment variable is not set")
-	}
-
 	// Parse command line flags
 	migrateOnly := flag.Bool("migrate", false, "run only migrations without starting the server")
 	migrationsDir := flag.String("dir", "./migrations", "directory containing migration files")
 	flag.Parse()
 
+	middleware.SetVersion(cfg.Server.Version)
+
+	// Without DATABASE_URL the app cannot serve any real traffic, but it must still
+	// boot and answer the platform health check instead of crash-looping.
+	// Set DATABASE_URL and redeploy to start in full mode.
+	if cfg.Database.URL == "" {
+		if *migrateOnly {
+			log.Fatal("DATABASE_URL environment variable is not set - cannot run migrations")
+		}
+		log.Println("[WARN] DATABASE_URL is not set - starting in degraded mode (only /health is served)")
+		runServer(setupDegradedRouter(cfg, "DATABASE_URL is not configured"), cfg)
+		return
+	}
+
 	// Setup DB
 	db, err := database.NewPostgresConnection(cfg.Database)
 	if err != nil {
-		log.Fatalf("Error connecting to database: %v", err)
+		if *migrateOnly {
+			log.Fatalf("Error connecting to database: %v", err)
+		}
+		log.Printf("[WARN] Error connecting to database: %v - starting in degraded mode (only /health is served)", err)
+		runServer(setupDegradedRouter(cfg, "database connection is unavailable"), cfg)
+		return
 	}
 	defer db.Close()
 	log.Println("[DB]: Setup completed")
@@ -66,6 +82,14 @@ func main() {
 	}
 
 	// Initialize security module
+	if cfg.JWT.Secret == "" {
+		secret, genErr := generateEphemeralSecret()
+		if genErr != nil {
+			log.Fatalf("Error generating ephemeral JWT secret: %v", genErr)
+		}
+		cfg.JWT.Secret = secret
+		log.Println("[WARN] JWT_SECRET is not set - using an ephemeral secret; issued tokens break on restart and are not shared between instances")
+	}
 	if err := security.Initialize(cfg.JWT); err != nil {
 		log.Fatalf("Error initializing security: %v", err)
 	}
@@ -73,9 +97,12 @@ func main() {
 	// Setup server
 	container := di.NewAppContainer(db, cfg)
 	defer container.Close() // Ensure cleanup on shutdown
-	router := setupRouter(container, cfg)
-	middleware.SetVersion(cfg.Server.Version)
 
+	runServer(setupRouter(container, cfg), cfg)
+}
+
+// runServer starts the HTTP server and blocks until an interrupt signal arrives.
+func runServer(router http.Handler, cfg *config.Config) {
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
 		Handler: router,
@@ -115,14 +142,7 @@ func setupRouter(container *di.Container, cfg *config.Config) *gin.Engine {
 	if cfg.Server.RequestTimeout > 0 {
 		router.Use(middleware.TimeoutMiddleware(cfg.Server.RequestTimeout * time.Second))
 	}
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     cfg.CORS.AllowedOrigins,
-		AllowMethods:     cfg.CORS.AllowedMethods,
-		AllowHeaders:     cfg.CORS.AllowedHeaders,
-		ExposeHeaders:    cfg.CORS.ExposedHeaders,
-		AllowCredentials: cfg.CORS.AllowCredentials,
-		MaxAge:           cfg.CORS.MaxAge,
-	}))
+	router.Use(corsMiddleware(cfg))
 
 	routes.RegisterPublicRoutes(router, container)
 	routes.RegisterProtectedRoutes(router, container)
@@ -131,4 +151,47 @@ func setupRouter(container *di.Container, cfg *config.Config) *gin.Engine {
 	log.Println("[Router]: Setup completed")
 
 	return router
+}
+
+// setupDegradedRouter serves only the health check so the platform keeps the
+// instance alive; every other route answers 503 with the reason.
+func setupDegradedRouter(cfg *config.Config, reason string) *gin.Engine {
+	middleware.UpdateHealthStatus("degraded")
+
+	router := gin.Default()
+
+	router.Use(middleware.RecoveryMiddleware())
+	router.Use(corsMiddleware(cfg))
+
+	routes.RegisterUtilityRoutes(router)
+
+	router.NoRoute(func(c *gin.Context) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":   "Service is running in degraded mode",
+			"details": reason,
+		})
+	})
+
+	log.Printf("[Router]: Degraded setup completed (%s)", reason)
+
+	return router
+}
+
+func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
+	return cors.New(cors.Config{
+		AllowOrigins:     cfg.CORS.AllowedOrigins,
+		AllowMethods:     cfg.CORS.AllowedMethods,
+		AllowHeaders:     cfg.CORS.AllowedHeaders,
+		ExposeHeaders:    cfg.CORS.ExposedHeaders,
+		AllowCredentials: cfg.CORS.AllowCredentials,
+		MaxAge:           cfg.CORS.MaxAge,
+	})
+}
+
+func generateEphemeralSecret() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
