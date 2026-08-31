@@ -496,7 +496,20 @@ func (r *Repository) ConfirmRelease(tx *goqu.TxDatabase, releaseID int) error {
 		return fmt.Errorf("failed to clean serialized_transfers: %w", err)
 	}
 
-	// 4. Delete assets from items table
+	// 4. Release the PYR codes back to the free pool. The printed stickers outlive the
+	//    equipment, so the reservation row stays and only its claim is cleared — this also
+	//    releases the fk on pyr_code_reservations.item_id before the delete below.
+	_, err = tx.Exec(`
+		UPDATE pyr_code_reservations SET
+			claimed_at = NULL,
+			item_id = NULL
+		WHERE item_id IN (SELECT item_id FROM release_assets WHERE release_id = $1)
+	`, releaseID)
+	if err != nil {
+		return fmt.Errorf("failed to release pyr code reservations: %w", err)
+	}
+
+	// 5. Delete assets from items table
 	_, err = tx.Exec(`
 		DELETE FROM items
 		WHERE id IN (SELECT item_id FROM release_assets WHERE release_id = $1)
@@ -505,7 +518,7 @@ func (r *Repository) ConfirmRelease(tx *goqu.TxDatabase, releaseID int) error {
 		return fmt.Errorf("failed to delete released assets: %w", err)
 	}
 
-	// 5. Decrease stock quantities
+	// 6. Decrease stock quantities
 	_, err = tx.Exec(`
 		UPDATE non_serialized_items s SET
 			quantity = s.quantity - rs.quantity
@@ -516,16 +529,23 @@ func (r *Repository) ConfirmRelease(tx *goqu.TxDatabase, releaseID int) error {
 		return fmt.Errorf("failed to decrease stock quantities: %w", err)
 	}
 
-	// 6. Delete zero-quantity stock records (except main warehouse location_id=1)
+	// 7. Delete zero-quantity stock records for this release (except main warehouse location_id=1).
+	//    Rows still referenced by transfer history are kept at quantity 0, otherwise the
+	//    fk_non_serialized_transfers_stock foreign key blocks the delete.
 	_, err = tx.Exec(`
-		DELETE FROM non_serialized_items
-		WHERE quantity <= 0 AND location_id != 1
-	`)
+		DELETE FROM non_serialized_items s
+		WHERE s.quantity <= 0
+		  AND s.location_id != 1
+		  AND s.id IN (SELECT rs.stock_id FROM release_stocks rs WHERE rs.release_id = $1)
+		  AND NOT EXISTS (
+			  SELECT 1 FROM non_serialized_transfers nst WHERE nst.stock_id = s.id
+		  )
+	`, releaseID)
 	if err != nil {
 		return fmt.Errorf("failed to clean zero-quantity stocks: %w", err)
 	}
 
-	// 7. Update release status
+	// 8. Update release status
 	now := time.Now()
 	_, err = tx.Update("releases").Set(goqu.Record{
 		"status":       "completed",

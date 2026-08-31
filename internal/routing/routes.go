@@ -76,5 +76,8 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 }
 
 func RegisterUtilityRoutes(router *gin.Engine) {
+	// Liveness: always 200 while the process is alive.
 	router.GET("/health", middleware.HealthCheckMiddleware())
+	// Readiness: 503 while the database is unreachable.
+	router.GET("/health/ready", middleware.ReadinessMiddleware())
 }

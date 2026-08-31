@@ -9,3 +9,5 @@ __debug_bin*
 # Google credentials
 configs/google-credentials.json
 pyrhouse-*.sql
+restore-wipe-public.sql
+staging-pyrhouse-2026-08-06_233419-restore.sql

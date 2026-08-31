@@ -37,6 +37,8 @@ type DatabaseConfig struct {
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
+	ConnectTimeout  time.Duration
+	ConnectRetries  int
 }
 
 type JWTConfig struct {
@@ -80,6 +82,8 @@ func Load() (*Config, error) {
 			MaxIdleConns:    getIntEnv("DB_MAX_IDLE_CONNS", 5),
 			ConnMaxLifetime: getDurationEnv("DB_CONN_MAX_LIFETIME_MINUTES", 5) * time.Minute,
 			ConnMaxIdleTime: getDurationEnv("DB_CONN_MAX_IDLE_TIME_MINUTES", 1) * time.Minute,
+			ConnectTimeout:  getDurationEnv("DB_CONNECT_TIMEOUT_SECONDS", 10) * time.Second,
+			ConnectRetries:  getIntEnv("DB_CONNECT_RETRIES", 5),
 		},
 		JWT: JWTConfig{
 			Secret:     os.Getenv("JWT_SECRET"),

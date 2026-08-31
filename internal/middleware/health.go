@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -12,14 +13,22 @@ import (
 // HealthStatus represents the application health status
 type HealthStatus struct {
 	Status      string    `json:"status"`
+	Database    string    `json:"database"`
 	LastChecked time.Time `json:"last_checked"`
 	Uptime      string    `json:"uptime"`
 	Version     string    `json:"version"`
 }
 
+const (
+	dbStatusOK            = "ok"
+	dbStatusUnreachable   = "unreachable"
+	dbStatusNotConfigured = "not configured"
+)
+
 var (
 	healthStatus = HealthStatus{
 		Status:      "ok",
+		Database:    dbStatusNotConfigured,
 		LastChecked: time.Now(),
 		Uptime:      "0s",
 		Version:     "1.0.0",
@@ -28,64 +37,124 @@ var (
 	startTime        = time.Now()
 	lastResponse     []byte
 	lastResponseTime time.Time
+	lastHealthy      bool
 	cacheDuration    = 5 * time.Second
+
+	dbCheck        func(ctx context.Context) error
+	dbCheckMutex   sync.RWMutex
+	dbCheckTimeout = 2 * time.Second
 )
 
-// HealthCheckMiddleware provides an application health check endpoint.
+// SetDatabaseChecker registers the probe both health endpoints use to report on
+// the database. Without it the endpoints answer "not configured" and stay green.
+func SetDatabaseChecker(check func(ctx context.Context) error) {
+	dbCheckMutex.Lock()
+	dbCheck = check
+	dbCheckMutex.Unlock()
+
+	invalidateCache()
+}
+
+// HealthCheckMiddleware is the liveness probe: it always answers 200 so a
+// transient database outage never triggers a restart loop, and reports the
+// database state in the payload.
 func HealthCheckMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		healthMutex.RLock()
-		if time.Since(lastResponseTime) < cacheDuration && lastResponse != nil {
-			cached := make([]byte, len(lastResponse))
-			copy(cached, lastResponse)
-			healthMutex.RUnlock()
-			c.Data(http.StatusOK, "application/json", cached)
-			return
-		}
-		healthMutex.RUnlock()
-
-		healthMutex.Lock()
-		// Double-check after acquiring write lock
-		if time.Since(lastResponseTime) < cacheDuration && lastResponse != nil {
-			cached := make([]byte, len(lastResponse))
-			copy(cached, lastResponse)
-			healthMutex.Unlock()
-			c.Data(http.StatusOK, "application/json", cached)
-			return
-		}
-
-		healthStatus.Uptime = time.Since(startTime).String()
-		healthStatus.LastChecked = time.Now()
-
-		response, err := json.Marshal(healthStatus)
-		if err != nil {
-			healthMutex.Unlock()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal health status"})
-			return
-		}
-		lastResponse = response
-		lastResponseTime = time.Now()
-		healthMutex.Unlock()
-
-		c.Data(http.StatusOK, "application/json", response)
+		payload, _ := healthPayload()
+		c.Data(http.StatusOK, "application/json", payload)
 	}
 }
 
-// UpdateHealthStatus updates the application health status
-func UpdateHealthStatus(status string) {
+// ReadinessMiddleware is the readiness probe: 503 while the database is
+// unreachable, so a load balancer or a deploy check can tell a half-working
+// instance from a healthy one.
+func ReadinessMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		payload, healthy := healthPayload()
+
+		status := http.StatusOK
+		if !healthy {
+			status = http.StatusServiceUnavailable
+		}
+
+		c.Data(status, "application/json", payload)
+	}
+}
+
+// healthPayload returns the cached response when it is still fresh, otherwise
+// probes the database and rebuilds it.
+func healthPayload() ([]byte, bool) {
+	healthMutex.RLock()
+	if time.Since(lastResponseTime) < cacheDuration && lastResponse != nil {
+		cached := make([]byte, len(lastResponse))
+		copy(cached, lastResponse)
+		healthy := lastHealthy
+		healthMutex.RUnlock()
+		return cached, healthy
+	}
+	healthMutex.RUnlock()
+
+	// Probe outside the lock - it does I/O and must not block concurrent readers.
+	dbStatus, healthy := probeDatabase()
+
 	healthMutex.Lock()
 	defer healthMutex.Unlock()
 
-	healthStatus.Status = status
+	healthStatus.Database = dbStatus
+	healthStatus.Status = "ok"
+	if !healthy {
+		healthStatus.Status = "degraded"
+	}
+	healthStatus.Uptime = time.Since(startTime).String()
 	healthStatus.LastChecked = time.Now()
-	lastResponse = nil // Invalidate cache
+
+	response, err := json.Marshal(healthStatus)
+	if err != nil {
+		return []byte(`{"status":"error","database":"unknown"}`), false
+	}
+
+	lastResponse = response
+	lastResponseTime = time.Now()
+	lastHealthy = healthy
+
+	cached := make([]byte, len(response))
+	copy(cached, response)
+
+	return cached, healthy
+}
+
+func probeDatabase() (string, bool) {
+	dbCheckMutex.RLock()
+	check := dbCheck
+	dbCheckMutex.RUnlock()
+
+	if check == nil {
+		return dbStatusNotConfigured, true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), dbCheckTimeout)
+	defer cancel()
+
+	if err := check(ctx); err != nil {
+		return dbStatusUnreachable, false
+	}
+
+	return dbStatusOK, true
 }
 
 // SetVersion sets the application version
 func SetVersion(version string) {
 	healthMutex.Lock()
+	healthStatus.Version = version
+	healthMutex.Unlock()
+
+	invalidateCache()
+}
+
+func invalidateCache() {
+	healthMutex.Lock()
 	defer healthMutex.Unlock()
 
-	healthStatus.Version = version
-	lastResponse = nil // Invalidate cache
+	lastResponse = nil
+	lastResponseTime = time.Time{}
 }

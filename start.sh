@@ -1,25 +1,21 @@
 #!/bin/bash
+set -u
 
-# Bez DATABASE_URL nie ma czego migrować - aplikacja wstanie w trybie degraded
-# (tylko /health), żeby platforma nie ubiła instancji. Po dodaniu DATABASE_URL
-# i redeployu migracje wykonają się normalnie.
-if [ -z "$DATABASE_URL" ]; then
-  echo "DATABASE_URL is not set - skipping migrations, starting application in degraded mode..."
-  exec ./main
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "DATABASE_URL is not set. Exiting."
+  exit 1
 fi
 
 # Uruchom migracje
 echo "Running database migrations..."
-./main -migrate -dir=./migrations
-
-# Sprawdź, czy migracje zakończyły się sukcesem
-if [ $? -eq 0 ]; then
-  echo "Migrations completed successfully."
-  
-  # Uruchom aplikację
-  echo "Starting application..."
-  exec ./main
-else
+if ! ./main -migrate -dir=./migrations; then
   echo "Migrations failed. Exiting."
   exit 1
 fi
+
+echo "Migrations completed successfully."
+
+# Uruchom aplikację - exec, żeby SIGTERM z platformy trafił do procesu Go
+# i zadziałało graceful shutdown zamiast twardego ubicia basha.
+echo "Starting application..."
+exec ./main
