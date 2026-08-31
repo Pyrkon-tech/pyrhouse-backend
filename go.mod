@@ -4,6 +4,8 @@ go 1.23.8
 
 require (
 	github.com/doug-martin/goqu/v9 v9.19.0
+	github.com/getsentry/sentry-go v0.42.0
+	github.com/getsentry/sentry-go/gin v0.42.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/golang-migrate/migrate/v4 v4.18.3

@@ -12,6 +12,7 @@ type Config struct {
 	Database         DatabaseConfig
 	JWT              JWTConfig
 	CORS             CORSConfig
+	Sentry           SentryConfig
 	Discord          DiscordConfig
 	Google           GoogleConfig
 	EquipmentRequest EquipmentRequestConfig
@@ -39,6 +40,12 @@ type DatabaseConfig struct {
 	ConnMaxIdleTime time.Duration
 	ConnectTimeout  time.Duration
 	ConnectRetries  int
+}
+
+type SentryConfig struct {
+	DSN              string
+	Environment      string
+	TracesSampleRate float64
 }
 
 type JWTConfig struct {
@@ -85,6 +92,13 @@ func Load() (*Config, error) {
 			ConnectTimeout:  getDurationEnv("DB_CONNECT_TIMEOUT_SECONDS", 10) * time.Second,
 			ConnectRetries:  getIntEnv("DB_CONNECT_RETRIES", 5),
 		},
+		Sentry: SentryConfig{
+			DSN:         os.Getenv("SENTRY_DSN"),
+			Environment: getEnv("APP_ENV", defaultEnvironment()),
+			// Errors only by default - tracing burns quota and is not what this
+			// deployment needs. Raise it (e.g. 0.1) to sample transactions.
+			TracesSampleRate: getFloatEnv("SENTRY_TRACES_SAMPLE_RATE", 0),
+		},
 		JWT: JWTConfig{
 			Secret:     os.Getenv("JWT_SECRET"),
 			Expiration: getDurationEnv("JWT_EXPIRATION_HOURS", 120) * time.Hour,
@@ -119,6 +133,24 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// defaultEnvironment derives the Sentry environment from the Gin mode, so a
+// production deploy is tagged correctly without adding another env var.
+func defaultEnvironment() string {
+	if os.Getenv("GIN_MODE") == "release" {
+		return "production"
+	}
+	return "development"
+}
+
+func getFloatEnv(key string, defaultValue float64) float64 {
+	if value := os.Getenv(key); value != "" {
+		if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+			return floatValue
+		}
+	}
+	return defaultValue
 }
 
 func parseDurationEnv(key string, defaultValue time.Duration) time.Duration {

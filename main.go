@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -38,10 +39,22 @@ func main() {
 		log.Fatalf("Error loading configuration: %v", err)
 	}
 
+	// Error reporting first, so failures below are reported and not just logged.
+	// A missing SENTRY_DSN simply leaves reporting off.
+	if err := middleware.InitSentry(middleware.SentryOptions{
+		DSN:              cfg.Sentry.DSN,
+		Environment:      cfg.Sentry.Environment,
+		Release:          cfg.Server.Version,
+		TracesSampleRate: cfg.Sentry.TracesSampleRate,
+	}); err != nil {
+		log.Printf("[WARN] Sentry initialization failed: %v", err)
+	}
+	defer middleware.FlushSentry()
+
 	// Validate required config. JWT_SECRET is checked later - migrations do not
 	// need it, and `main -migrate` runs before the app in start.sh and in CI.
 	if cfg.Database.URL == "" {
-		log.Fatal("DATABASE_URL environment variable is not set")
+		fatalf("DATABASE_URL environment variable is not set")
 	}
 
 	// Parse command line flags
@@ -53,7 +66,7 @@ func main() {
 	// moment a new instance boots.
 	db, err := database.ConnectWithRetry(cfg.Database)
 	if err != nil {
-		log.Fatalf("Error connecting to database: %v", err)
+		fatalf("Error connecting to database: %v", err)
 	}
 	defer db.Close()
 	log.Println("[DB]: Setup completed")
@@ -61,7 +74,7 @@ func main() {
 	// Run migrations if requested
 	if *migrateOnly {
 		if err := database.RunMigrations(db, *migrationsDir); err != nil {
-			log.Fatalf("Error running migrations: %v", err)
+			fatalf("Error running migrations: %v", err)
 		}
 		log.Println("[Migrations]: Completed successfully")
 		return
@@ -69,10 +82,10 @@ func main() {
 
 	// Initialize security module
 	if cfg.JWT.Secret == "" {
-		log.Fatal("JWT_SECRET environment variable is not set")
+		fatalf("JWT_SECRET environment variable is not set")
 	}
 	if err := security.Initialize(cfg.JWT); err != nil {
-		log.Fatalf("Error initializing security: %v", err)
+		fatalf("Error initializing security: %v", err)
 	}
 
 	// Setup server
@@ -96,7 +109,7 @@ func runServer(router http.Handler, cfg *config.Config) {
 	go func() {
 		log.Printf("Server starting on port %s", cfg.Server.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+			fatalf("Failed to start server: %v", err)
 		}
 	}()
 
@@ -112,7 +125,7 @@ func runServer(router http.Handler, cfg *config.Config) {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		fatalf("Server forced to shutdown: %v", err)
 	}
 
 	log.Println("Server exited gracefully")
@@ -122,6 +135,12 @@ func setupRouter(container *di.Container, cfg *config.Config) *gin.Engine {
 	router := gin.Default()
 
 	router.Use(middleware.RecoveryMiddleware())
+
+	// Registered after RecoveryMiddleware so a panic reported to Sentry is still
+	// turned into the standard JSON 500 by the recovery above.
+	for _, handler := range middleware.SentryHandlers() {
+		router.Use(handler)
+	}
 
 	if cfg.Server.RequestTimeout > 0 {
 		router.Use(middleware.TimeoutMiddleware(cfg.Server.RequestTimeout * time.Second))
@@ -142,4 +161,12 @@ func setupRouter(container *di.Container, cfg *config.Config) *gin.Engine {
 	log.Println("[Router]: Setup completed")
 
 	return router
+}
+
+// fatalf reports the failure to Sentry, flushes, and exits. A boot that never
+// finishes is the failure most worth seeing, and log.Fatal skips deferred work.
+func fatalf(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	middleware.CaptureFatal(msg)
+	log.Fatal(msg)
 }
