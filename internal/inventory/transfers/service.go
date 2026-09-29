@@ -84,6 +84,14 @@ func (s *TransferService) InitTransfer(req models.TransferRequest, transitStatus
 			return err
 		}
 
+		// Users are part of the transfer: assigned in the same transaction, so the caller never gets a
+		// transfer whose volunteers are missing (dispatch derives on_mission from transfer_users).
+		if len(req.Users) > 0 {
+			if err = s.tr.InsertTransferUsers(tx, transferID, req.Users); err != nil {
+				return fmt.Errorf("failed to assign users to transfer: %w", err)
+			}
+		}
+
 		return nil
 	})
 
@@ -91,28 +99,14 @@ func (s *TransferService) InitTransfer(req models.TransferRequest, transitStatus
 		return 0, err
 	}
 
-	// Asynchroniczne dodawanie użytkowników + audit log (po zapisie userów, żeby log ich widział)
-	if len(req.Users) > 0 {
-		go func(users []models.TransferUser) {
-			err := repository.WithTransaction(s.r.GoquDBWrapper, func(tx *goqu.TxDatabase) error {
-				if err := s.tr.InsertTransferUsers(tx, transferID, users); err != nil {
-					return err
-				}
-				for _, user := range users {
-					user := user
-					s.il.CreateTransferUserLogEntry("assigned_to_transfer", transferID, &user)
-				}
-				return nil
-			})
-			if err != nil {
-				log.Printf("Błąd podczas asynchronicznego dodawania użytkowników do transferu %d: %v", transferID, err)
-				return
-			}
-			s.createInventoryLog("in_transfer", transferID)
-		}(req.Users)
-	} else {
-		go s.createInventoryLog("in_transfer", transferID)
-	}
+	// Audit log only, after commit (so it sees the users).
+	go func(users []models.TransferUser) {
+		for _, user := range users {
+			user := user
+			s.il.CreateTransferUserLogEntry("assigned_to_transfer", transferID, &user)
+		}
+		s.createInventoryLog("in_transfer", transferID)
+	}(req.Users)
 
 	return transferID, nil
 }

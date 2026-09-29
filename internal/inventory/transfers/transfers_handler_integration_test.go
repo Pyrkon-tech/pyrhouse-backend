@@ -845,9 +845,7 @@ func TestTransfer_GetByUserAndStatus(t *testing.T) {
 		"stocks":           []map[string]any{{"id": fx.stockID, "quantity": 2}},
 		"users":            []map[string]any{{"id": fx.userID}},
 	})
-	// give goroutine time to insert the user
-	time.Sleep(50 * time.Millisecond)
-	_ = transfer
+	_ = transfer // users are assigned in the create transaction — no waiting needed
 
 	t.Run("get transfers by user and status", func(t *testing.T) {
 		w := httptest.NewRecorder()
