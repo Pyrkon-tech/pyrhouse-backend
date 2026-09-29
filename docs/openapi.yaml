@@ -1681,7 +1681,7 @@ paths:
                   example: 5
                 stock_items:
                   type: array
-                  description: Stock items to transfer (auto-resolved from quest categories if not provided)
+                  description: Stock items to transfer — the server never picks them; use transfer-preview for suggestions. At least one stock item or asset is required.
                   items:
                     type: object
                     required:
@@ -1739,9 +1739,9 @@ paths:
         "404":
           description: Quest not found
         "409":
-          description: Quest already linked to a transfer or not in pending status
+          description: Quest is completed or cancelled (a quest may have several transfers)
         "422":
-          description: Could not resolve destination location or stock items
+          description: No destination (no to_location_id and the quest has no location) or no stock items / assets in the request
 
   /equipment-requests/quests/{id}/transfer-preview:
     get:
@@ -3583,6 +3583,12 @@ components:
         type: integer
 
   responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     ShopError:
       description: Shop error with a stable `code`
       content:
@@ -3608,6 +3614,116 @@ components:
                 example: "Invalid token"
 
   schemas:
+    SlotWithVolunteers:
+      type: object
+      description: Schedule slot with the volunteers assigned to it (internal/scheduling SlotWithVolunteers)
+      properties:
+        id:
+          type: integer
+        schedule_id:
+          type: integer
+        type:
+          type: string
+          enum: [montage, festival, demontage]
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        credit_hours:
+          type: number
+        capacity:
+          type: integer
+        label:
+          type: string
+          nullable: true
+        volunteers:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                description: Assignment ID
+              volunteer_id:
+                type: integer
+              nickname:
+                type: string
+
+    VolunteerWithSlots:
+      type: object
+      description: Schedule volunteer with the IDs of the slots they are assigned to (internal/scheduling VolunteerWithSlots)
+      properties:
+        id:
+          type: integer
+        schedule_id:
+          type: integer
+        user_id:
+          type: integer
+          nullable: true
+        nickname:
+          type: string
+        city:
+          type: string
+          nullable: true
+        target_hours:
+          type: integer
+        available_from:
+          type: string
+          format: date-time
+        available_to:
+          type: string
+          format: date-time
+        notes:
+          type: string
+          nullable: true
+        assigned_hours:
+          type: number
+        discord_confirmed:
+          type: string
+          nullable: true
+        slots:
+          type: array
+          items:
+            type: integer
+
+    ValidationIssue:
+      type: object
+      properties:
+        type:
+          type: string
+        severity:
+          type: string
+        volunteer:
+          type: string
+        volunteer_id:
+          type: integer
+        slot:
+          type: string
+        slot_id:
+          type: integer
+        assigned:
+          type: integer
+        target:
+          type: integer
+        capacity:
+          type: integer
+        message:
+          type: string
+
+    ValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        issues:
+          type: array
+          description: May be null when there are no issues (Go nil slice)
+          nullable: true
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+
     ShopError:
       type: object
       properties:
