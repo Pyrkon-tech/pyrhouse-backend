@@ -274,8 +274,9 @@ volunteer import in scheduling, not quests.
 - `repository.go` - Database operations
 - `models.go` - Quest, QuestItem, Destination, transfer request/preview types
 
-**Database tables:** `equipment_request_quests`, `equipment_request_items` (items keep `category_match_type`
-and confidence columns from the sheet era), `quest_transfers` (quest ↔ transfer links).
+**Database tables:** `equipment_request_quests` (`source` = `sheet` | `shop`, required on insert; `return_date`),
+`equipment_request_items`, `quest_transfers` (quest ↔ transfer links). Sheet-era columns (sync timestamp,
+source rows, category match type/confidence) were dropped in migration 000050.
 
 ### API Endpoints
 

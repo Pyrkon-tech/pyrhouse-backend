@@ -160,8 +160,8 @@ func insertTestQuest(t *testing.T, db *sql.DB, locationID *int, status string) s
 	var id int
 	require.NoError(t, db.QueryRow(`
 		INSERT INTO equipment_request_quests
-			(quest_key, quest_id, destination_pavilion, destination_location, recipient, delivery_date, status, location_id, location_resolved)
-		VALUES ($1, $2, '__TEST__pav', '__TEST__loc', 'Test Recipient', '2099-01-01', $3, $4, $5)
+			(quest_key, quest_id, destination_pavilion, destination_location, recipient, delivery_date, status, location_id, location_resolved, source)
+		VALUES ($1, $2, '__TEST__pav', '__TEST__loc', 'Test Recipient', '2099-01-01', $3, $4, $5, 'sheet')
 		RETURNING id`,
 		key, questID, status, locArg, locationID != nil,
 	).Scan(&id))
@@ -172,8 +172,8 @@ func insertTestQuest(t *testing.T, db *sql.DB, locationID *int, status string) s
 func insertTestQuestItem(t *testing.T, db *sql.DB, questDBID int, categoryID int, itemName string, qty int) {
 	t.Helper()
 	_, err := db.Exec(`
-		INSERT INTO equipment_request_items (quest_id, item_name, quantity, category_id, category_match_type)
-		VALUES ($1, $2, $3, $4, 'exact')`,
+		INSERT INTO equipment_request_items (quest_id, item_name, quantity, category_id)
+		VALUES ($1, $2, $3, $4)`,
 		questDBID, itemName, qty, categoryID,
 	)
 	require.NoError(t, err)

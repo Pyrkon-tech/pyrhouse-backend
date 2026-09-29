@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"warehouse/internal/models"
 
@@ -227,11 +226,9 @@ func TestHandler_GetQuest(t *testing.T) {
 		Recipient:    "Jan Kowalski",
 		DeliveryDate: "2025-06-13",
 		Items: []QuestItem{
-			{Name: "Laptop", Quantity: intPtr(2), CategoryMatch: "exact"},
+			{Name: "Laptop", Quantity: intPtr(2)},
 		},
-		Status:     "pending",
-		SourceRows: []int{10},
-		LastSynced: time.Now(),
+		Status: "pending",
 	}
 	mockRepo.quests = append(mockRepo.quests, testQuest)
 
@@ -266,10 +263,8 @@ func TestHandler_ListQuests(t *testing.T) {
 			Destination:  Destination{Pavilion: "P1", Location: "L1"},
 			Recipient:    "User 1",
 			DeliveryDate: "2025-06-13",
-			Items:        []QuestItem{{Name: "Item 1", Quantity: intPtr(1), CategoryMatch: "none"}},
+			Items:        []QuestItem{{Name: "Item 1", Quantity: intPtr(1)}},
 			Status:       "pending",
-			SourceRows:   []int{1},
-			LastSynced:   time.Now(),
 		},
 		{
 			ID:           "quest-2",
@@ -277,10 +272,8 @@ func TestHandler_ListQuests(t *testing.T) {
 			Destination:  Destination{Pavilion: "P2", Location: "L2"},
 			Recipient:    "User 2",
 			DeliveryDate: "2025-06-14",
-			Items:        []QuestItem{{Name: "Item 2", Quantity: intPtr(1), CategoryMatch: "none"}},
+			Items:        []QuestItem{{Name: "Item 2", Quantity: intPtr(1)}},
 			Status:       "in_progress",
-			SourceRows:   []int{2},
-			LastSynced:   time.Now(),
 		},
 	}
 
@@ -375,9 +368,8 @@ func TestHandler_UpdateQuestStatus(t *testing.T) {
 
 			// Add test quest
 			mockRepo.quests = append(mockRepo.quests, Quest{
-				ID:         tt.questID,
-				Status:     "pending",
-				SourceRows: []int{1},
+				ID:     tt.questID,
+				Status: "pending",
 			})
 
 			// Create request
@@ -495,10 +487,9 @@ func TestHandler_UpdateQuestStatus_409_WhenQuestHasTransfer(t *testing.T) {
 	handler, mockRepo := setupTestHandler()
 
 	mockRepo.quests = append(mockRepo.quests, Quest{
-		ID:         "quest-linked",
-		Status:     "in_progress",
-		Transfers:  []QuestTransfer{{TransferID: 42, Status: "in_transit"}},
-		SourceRows: []int{1},
+		ID:        "quest-linked",
+		Status:    "in_progress",
+		Transfers: []QuestTransfer{{TransferID: 42, Status: "in_transit"}},
 	})
 
 	bodyBytes, _ := json.Marshal(map[string]string{"status": "completed"})
@@ -552,9 +543,8 @@ func TestHandler_CreateTransferFromQuest(t *testing.T) {
 			name:    "Quest completed returns 409",
 			questID: "quest-done",
 			quest: &Quest{
-				ID:         "quest-done",
-				Status:     "completed",
-				SourceRows: []int{1},
+				ID:     "quest-done",
+				Status: "completed",
 			},
 			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
 			expectedStatus: http.StatusConflict,
@@ -563,10 +553,9 @@ func TestHandler_CreateTransferFromQuest(t *testing.T) {
 			name:    "Quest in_progress allows second transfer",
 			questID: "quest-in-progress",
 			quest: &Quest{
-				ID:         "quest-in-progress",
-				Status:     "in_progress",
-				Transfers:  []QuestTransfer{{TransferID: 99, Status: "in_transit"}},
-				SourceRows: []int{1},
+				ID:        "quest-in-progress",
+				Status:    "in_progress",
+				Transfers: []QuestTransfer{{TransferID: 99, Status: "in_transit"}},
 			},
 			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
 			transferID:     200,
@@ -576,9 +565,8 @@ func TestHandler_CreateTransferFromQuest(t *testing.T) {
 			name:    "Missing from_location_id returns 400",
 			questID: "quest-ok",
 			quest: &Quest{
-				ID:         "quest-ok",
-				Status:     "pending",
-				SourceRows: []int{1},
+				ID:     "quest-ok",
+				Status: "pending",
 			},
 			body:           map[string]interface{}{},
 			expectedStatus: http.StatusBadRequest,
@@ -587,9 +575,8 @@ func TestHandler_CreateTransferFromQuest(t *testing.T) {
 			name:    "Success — explicit stock items and to_location_id",
 			questID: "quest-pending",
 			quest: &Quest{
-				ID:         "quest-pending",
-				Status:     "pending",
-				SourceRows: []int{1},
+				ID:     "quest-pending",
+				Status: "pending",
 			},
 			body:           map[string]interface{}{"from_location_id": 1, "to_location_id": toLocationID, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
 			transferID:     156,
@@ -664,7 +651,7 @@ func TestHandler_PreviewTransferFromQuest(t *testing.T) {
 			name:           "Missing from_location_id returns 400",
 			questID:        "quest-1",
 			fromLocationID: "",
-			quest:          &Quest{ID: "quest-1", Status: "pending", SourceRows: []int{1}},
+			quest:          &Quest{ID: "quest-1", Status: "pending"},
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
@@ -684,7 +671,6 @@ func TestHandler_PreviewTransferFromQuest(t *testing.T) {
 				Destination: Destination{Pavilion: "P1", Location: "L1"},
 				LocationID:  intPtr(7),
 				Items:       []QuestItem{{Name: "Laptop", Quantity: intPtr(2)}},
-				SourceRows:  []int{1},
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -741,7 +727,7 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 			name:      "completed with no remaining active transfers → quest completed",
 			newStatus: "completed",
 			initialQuests: []Quest{
-				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{{TransferID: transferID, Status: "completed"}}, SourceRows: []int{1}},
+				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{{TransferID: transferID, Status: "completed"}}},
 			},
 			checkResult: func(t *testing.T, repo *mockQuestRepository) {
 				assert.Equal(t, "completed", repo.quests[0].Status)
@@ -751,7 +737,7 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 			name:      "completed, no active transfers, requested items fully delivered → quest completed",
 			newStatus: "completed",
 			initialQuests: []Quest{
-				{ID: questID, Status: "in_progress", SourceRows: []int{1, 2},
+				{ID: questID, Status: "in_progress",
 					Items: []QuestItem{
 						{Name: "Chairs", CategoryID: catID(1), Quantity: qty(5)},
 						{Name: "Tables", CategoryID: catID(2), Quantity: qty(2)},
@@ -767,7 +753,7 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 			name:      "completed, no active transfers, but delivered quantity short → quest stays in_progress",
 			newStatus: "completed",
 			initialQuests: []Quest{
-				{ID: questID, Status: "in_progress", SourceRows: []int{1, 2},
+				{ID: questID, Status: "in_progress",
 					Items: []QuestItem{
 						{Name: "Chairs", CategoryID: catID(1), Quantity: qty(5)},
 						{Name: "Tables", CategoryID: catID(2), Quantity: qty(2)},
@@ -783,7 +769,7 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 			name:      "completed, no active transfers, item without category → quest stays in_progress",
 			newStatus: "completed",
 			initialQuests: []Quest{
-				{ID: questID, Status: "in_progress", SourceRows: []int{1},
+				{ID: questID, Status: "in_progress",
 					Items: []QuestItem{
 						{Name: "Mystery item", CategoryID: nil, Quantity: qty(1)},
 					},
@@ -800,7 +786,7 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{
 					{TransferID: transferID, Status: "completed"},
 					{TransferID: 99, Status: "in_transit"},
-				}, SourceRows: []int{1}},
+				}},
 			},
 			checkResult: func(t *testing.T, repo *mockQuestRepository) {
 				assert.Equal(t, "in_progress", repo.quests[0].Status)
@@ -810,7 +796,7 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 			name:      "cancelled → transfer removed, no active transfers left → quest pending",
 			newStatus: "cancelled",
 			initialQuests: []Quest{
-				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{{TransferID: transferID, Status: "in_transit"}}, SourceRows: []int{1}},
+				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{{TransferID: transferID, Status: "in_transit"}}},
 			},
 			checkResult: func(t *testing.T, repo *mockQuestRepository) {
 				assert.Equal(t, "pending", repo.quests[0].Status)
@@ -824,7 +810,7 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{
 					{TransferID: transferID, Status: "in_transit"},
 					{TransferID: 99, Status: "in_transit"},
-				}, SourceRows: []int{1}},
+				}},
 			},
 			checkResult: func(t *testing.T, repo *mockQuestRepository) {
 				assert.Equal(t, "in_progress", repo.quests[0].Status)
@@ -842,7 +828,7 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 			name:      "unknown status → no action taken",
 			newStatus: "unknown_status",
 			initialQuests: []Quest{
-				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{{TransferID: transferID, Status: "in_transit"}}, SourceRows: []int{1}},
+				{ID: questID, Status: "in_progress", Transfers: []QuestTransfer{{TransferID: transferID, Status: "in_transit"}}},
 			},
 			checkResult: func(t *testing.T, repo *mockQuestRepository) {
 				assert.Equal(t, "in_progress", repo.quests[0].Status)

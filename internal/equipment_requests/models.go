@@ -16,6 +16,12 @@ type QuestTransfer struct {
 	CreatedAt  time.Time `json:"created_at"  db:"created_at"`
 }
 
+// Quest source values (equipment_request_quests.source).
+const (
+	SourceSheet = "sheet" // historic Google Sheets import
+	SourceShop  = "shop"  // confirmed organizer shop order
+)
+
 // Quest represents an aggregated equipment release request
 type Quest struct {
 	ID                 string           `json:"id"` // quest-abc123 (used for all operations)
@@ -23,6 +29,8 @@ type Quest struct {
 	Destination        Destination      `json:"destination"`
 	Recipient          string           `json:"recipient"`
 	DeliveryDate       string           `json:"delivery_date"`
+	ReturnDate         *string          `json:"return_date"` // YYYY-MM-DD, null when unknown (sheet quests)
+	Source             string           `json:"source"`      // SourceSheet | SourceShop
 	PickupTime         string           `json:"pickup_time,omitempty"`
 	BudgetOwner        string           `json:"budget_owner"`
 	Items              []QuestItem      `json:"items"`
@@ -32,8 +40,6 @@ type Quest struct {
 	LocationName       *string          `json:"location_name,omitempty"`
 	LocationResolved   bool             `json:"location_resolved"`
 	AssignedVolunteers []QuestVolunteer `json:"assigned_volunteers"` // Aggregated across all transfers
-	SourceRows         []int            `json:"source_rows"`
-	LastSynced         time.Time        `json:"last_synced"`
 }
 
 // HasActiveTransfer returns true when the quest has at least one non-completed, non-cancelled transfer.
@@ -50,13 +56,12 @@ func (q *Quest) HasActiveTransfer() bool {
 // Quantity is a pointer because it may be unknown (historic sheet quests left it blank) — a nil
 // Quantity means "not specified yet" (serialised as JSON null) and blocks auto-dispatch until set.
 type QuestItem struct {
-	Name                    string  `json:"name"`
-	Quantity                *int    `json:"quantity"`
-	CategoryID              *int    `json:"category_id,omitempty"`
-	CategoryMatch           string  `json:"category_match"`                      // exact, fuzzy, manual, none
-	CategoryMatchConfidence float64 `json:"category_match_confidence,omitempty"` // 0.00-1.00 for fuzzy matches
-	BudgetOwner             string  `json:"budget_owner,omitempty"`              // Per-item budget owner (can differ from quest)
-	Notes                   string  `json:"notes,omitempty"`
+	Name         string  `json:"name"`
+	Quantity     *int    `json:"quantity"`
+	CategoryID   *int    `json:"category_id,omitempty"`   // nil only for historic sheet items that matched no category
+	CategoryName *string `json:"category_name,omitempty"` // read-only, joined from item_category.label
+	BudgetOwner  string  `json:"budget_owner,omitempty"`  // Per-item budget owner (can differ from quest)
+	Notes        string  `json:"notes,omitempty"`
 }
 
 // Destination represents where items should be delivered

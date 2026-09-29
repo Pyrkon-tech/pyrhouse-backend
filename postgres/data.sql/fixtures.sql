@@ -409,70 +409,70 @@ ALTER TABLE public.locations ENABLE TRIGGER ALL;
 
 ALTER TABLE public.equipment_request_quests DISABLE TRIGGER ALL;
 
-COPY public.equipment_request_quests (id, quest_key, quest_id, destination_pavilion, destination_location, recipient, delivery_date, pickup_time, budget_owner, status, last_synced_at, created_at, completed_at, location_id, location_resolved) FROM stdin;
-26	Pawilon 3|GIF|Ewa Piotrowski|2026-06-18|	quest-aeb9ae30df1e240f	Pawilon 3	GIF	Ewa Piotrowski	2026-06-18	\N	Budżet C8BA	completed	2026-06-13 23:57:38.705504	2026-06-13 23:57:38.705504	2026-06-17 15:45:42.828716	34	t
-95	Pawilon 7|Sala Kameralna|Michał Piotrowski|2026-06-19|12:00	quest-aa9de3c18964fbb7	Pawilon 7	Sala Kameralna	Michał Piotrowski	2026-06-19	12:00	Budżet 4650	completed	2026-06-18 10:26:13.654138	2026-06-18 10:26:13.654138	2026-06-19 10:20:37.155725	44	t
-27	Pawilon 3|GIF|Adam Wiśniewski|2026-06-18|	quest-6bc0b7ba43cba386	Pawilon 3	GIF	Adam Wiśniewski	2026-06-18	\N	Budżet 7C1D	completed	2026-06-13 23:57:38.711861	2026-06-13 23:57:38.711861	2026-06-17 15:47:16.866926	34	t
-2	Iglica|RPGralnia|Natalia Wójcik|2026-06-18|	quest-334ca5c72d8067c0	Iglica	RPGralnia	Natalia Wójcik	2026-06-18	\N	Budżet F09F	completed	2026-06-13 23:57:38.482058	2026-06-13 23:57:38.482058	2026-06-18 11:55:03.718097	21	t
-15	Plac Marka|Krewni Pyrkonu|Łukasz Wiśniewski|2026-06-18|	quest-996da99215e74b0c	Plac Marka	Krewni Pyrkonu	Łukasz Wiśniewski	2026-06-18	\N	Budżet B9F8	completed	2026-06-13 23:57:38.59566	2026-06-13 23:57:38.59566	2026-06-18 11:56:19.745854	28	t
-5	Pawilon 5|Strefa komiksowa|Kamil Krawczyk|2026-06-18|	quest-76f4c852354f1018	Pawilon 5	Strefa komiksowa	Kamil Krawczyk	2026-06-18	\N	Budżet 09DB	completed	2026-06-13 23:57:38.51051	2026-06-13 23:57:38.51051	2026-06-18 14:18:04.295643	45	t
-32	Pawilon 5|Aleja Artystów i Kolekcjonerów - Antresola|Julia Król|2026-06-19|	quest-8d10f413d9d3fbe6	Pawilon 5	Aleja Artystów i Kolekcjonerów - Antresola	Julia Król	2026-06-19	\N	Budżet 09DB	completed	2026-06-13 23:57:38.747445	2026-06-13 23:57:38.747445	2026-06-18 14:18:10.28602	48	t
-38	Pawilon 2|Oznakowanie|Kamil Mazur|2026-06-18|	quest-a33bf6882535a57c	Pawilon 2	Oznakowanie	Kamil Mazur	2026-06-18	\N	Budżet DB72	completed	2026-06-13 23:57:38.791303	2026-06-13 23:57:38.791303	2026-06-17 13:58:49.630108	51	t
-16	Wejście wschodnie|Akredytacja|Maria Grabowski|2026-06-17|	quest-945bccac0e1f562c	Wejście wschodnie	Akredytacja	Maria Grabowski	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.60367	2026-06-13 23:57:38.60367	2026-06-18 08:01:07.902998	30	t
-11	Wejście północne|Akredytacja|Wojciech Dąbrowski|2026-06-18|	quest-82dd100e9a49933f	Wejście północne	Akredytacja	Wojciech Dąbrowski	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.559897	2026-06-13 23:57:38.559897	2026-06-18 08:01:08.668638	30	t
-9	PCC|RedPoint PCC|Tomasz Nowakowski|2026-06-18|	quest-d6b576b204cf65ba	PCC	RedPoint PCC	Tomasz Nowakowski	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.5427	2026-06-13 23:57:38.5427	2026-06-18 15:23:19.734868	16	t
-10	Pawilon 2|Gżdaczroom|Joanna Lewandowski|2026-06-18|	quest-e2acfdd55cc905b5	Pawilon 2	Gżdaczroom	Joanna Lewandowski	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.551007	2026-06-13 23:57:38.551007	2026-06-18 09:00:00.273088	17	t
-31	Pawilon 10||Tomasz Nowakowski|2026-06-16|	quest-dd264c46a8148ea8	Pawilon 10		Tomasz Nowakowski	2026-06-16	\N	Budżet D1AB	completed	2026-06-13 23:57:38.73957	2026-06-13 23:57:38.73957	2026-06-16 14:54:35.499446	6	t
-8	Wejście zachodnie|Akredytacja|Maria Grabowski|2026-06-17|	quest-89897f90580d4fd2	Wejście zachodnie	Akredytacja	Maria Grabowski	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.535801	2026-06-13 23:57:38.535801	2026-06-17 11:06:55.085065	14	t
-21	Pawilon 10|RedRoom|Tomasz Nowakowski|2026-06-17|	quest-5fcd84b32e964c86	Pawilon 10	RedRoom	Tomasz Nowakowski	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.65471	2026-06-13 23:57:38.65471	2026-06-17 14:19:48.796936	4	t
-48	Pawilon 3a|Strefa Puzzlowa - Antresola|Łukasz Kamiński|2026-06-19|	quest-a1c284b19792cf09	Pawilon 3a	Strefa Puzzlowa - Antresola	Łukasz Kamiński	2026-06-19	\N	Budżet 09DB	completed	2026-06-13 23:57:38.87316	2026-06-13 23:57:38.87316	2026-06-18 18:08:30.616326	47	t
-67	Pawilon 3|GIF|Adam Wiśniewski|2026-06-18|10:00	quest-173deb2712ce5d96	Pawilon 3	GIF	Adam Wiśniewski	2026-06-18	10:00	Budżet 7C1D	completed	2026-06-14 10:48:49.943599	2026-06-14 10:48:49.943599	2026-06-17 15:45:37.782691	34	t
-66	PWK|Scena Plenerowa|Aleksandra Pawłowski|2026-06-18|12:00	quest-ce6f205d2aa09181	PWK	Scena Plenerowa	Aleksandra Pawłowski	2026-06-18	12:00	Budżet 7C1D	completed	2026-06-14 10:48:49.930165	2026-06-14 10:48:49.930165	2026-06-18 11:56:48.05199	8	t
-42	Pawilon 3a|Integracja|Joanna Kwiatkowski|2026-06-17|	quest-b2e7db8422bd567a	Pawilon 3a	Integracja	Joanna Kwiatkowski	2026-06-17	\N	Budżet 4650	completed	2026-06-13 23:57:38.825875	2026-06-13 23:57:38.825875	2026-06-18 12:22:44.139167	22	t
-41	Iglica|RPGralnia|Agnieszka Grabowski|2026-06-18|	quest-44710e23103e07c9	Iglica	RPGralnia	Agnieszka Grabowski	2026-06-18	\N	Budżet 9FFA	completed	2026-06-13 23:57:38.81791	2026-06-13 23:57:38.81791	2026-06-18 12:25:49.532472	21	t
-57	Iglica|RPGralnia|Agnieszka Grabowski|2026-06-19|	quest-40d82d647bfe2be1	Iglica	RPGralnia	Agnieszka Grabowski	2026-06-19	\N	Budżet 9FFA	completed	2026-06-13 23:57:38.95181	2026-06-13 23:57:38.95181	2026-06-18 12:26:07.852794	21	t
-69	Pawilon 10|Biuro Festiwalowe|Natalia Krawczyk|2026-06-18|10:00	quest-01c6b04cf4a555af	Pawilon 10	Biuro Festiwalowe	Natalia Krawczyk	2026-06-18	10:00	Budżet 9ABE	completed	2026-06-14 10:48:49.971703	2026-06-14 10:48:49.971703	2026-06-18 12:26:58.970032	6	t
-39	Wejście północne|Weryfikacja|Łukasz Nowak|2026-06-18|	quest-56f37912118a5ce8	Wejście północne	Weryfikacja	Łukasz Nowak	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.799428	2026-06-13 23:57:38.799428	2026-06-18 08:00:29.605639	49	t
-45	Wejście północne|Kamilek|Piotr Król|2026-06-17|	quest-2abd9ee775a27361	Wejście północne	Kamilek	Piotr Król	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.85129	2026-06-13 23:57:38.85129	2026-06-18 08:00:34.117861	49	t
-36	Wejście północne|Akredytacja|Maria Grabowski|2026-06-17|	quest-43591853569cdf1e	Wejście północne	Akredytacja	Maria Grabowski	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.775249	2026-06-13 23:57:38.775249	2026-06-18 08:00:38.309024	30	t
-47	Wejście wschodnie|Szatnia|Magdalena Kamiński|2026-06-18|	quest-ba4820493933d314	Wejście wschodnie	Szatnia	Magdalena Kamiński	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.864201	2026-06-13 23:57:38.864201	2026-06-19 09:19:25.24991	37	t
-40	Wejście północne|Szatnia|Magdalena Kamiński|2026-06-18|	quest-581eb51d0e9beae2	Wejście północne	Szatnia	Magdalena Kamiński	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.806623	2026-06-13 23:57:38.806623	2026-06-18 08:00:54.143373	38	t
-60	PCC|Szatnia|Magdalena Kamiński|2026-06-18|	quest-a096f98deb5fda12	PCC	Szatnia	Magdalena Kamiński	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.974617	2026-06-13 23:57:38.974617	2026-06-19 09:19:39.603541	42	t
-50	Pawilon 3|Wioski Fantastyczne|Julia Woźniak|2026-06-18|	quest-565300dc65df1dea	Pawilon 3	Wioski Fantastyczne	Julia Woźniak	2026-06-18	\N	Budżet 34D4	completed	2026-06-13 23:57:38.889091	2026-06-13 23:57:38.889091	2026-06-18 13:31:51.927805	24	t
-54	Wejście zachodnie|Szatnia|Magdalena Kamiński|2026-06-18|	quest-74ca9cd8f26284ed	Wejście zachodnie	Szatnia	Magdalena Kamiński	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.92555	2026-06-13 23:57:38.92555	2026-06-19 09:19:55.880159	35	t
-71	PCC|Szatnia|Magdalena Kamiński|2026-06-18|17:00	quest-ff1d0cfab1cca422	PCC	Szatnia	Magdalena Kamiński	2026-06-18	17:00	Budżet D1AB	cancelled	2026-06-14 10:48:49.98658	2026-06-14 10:48:49.98658	\N	42	t
-63	PCC|Strefa Dziecięca|Joanna Nowak|2026-06-18|16:00	quest-0fe368e15274ca5d	PCC	Strefa Dziecięca	Joanna Nowak	2026-06-18	16:00	Budżet 4650	completed	2026-06-14 10:48:49.909839	2026-06-14 10:48:49.909839	2026-06-18 13:49:21.23927	11	t
-62	Wejście zachodnie|Akredytacja|Bartosz Wójcik|2026-06-18|	quest-d0bd40e11ac83abb	Wejście zachodnie	Akredytacja	Bartosz Wójcik	2026-06-18	\N	Budżet D1AB	completed	2026-06-14 10:48:49.902819	2026-06-14 10:48:49.902819	2026-06-18 08:14:36.013199	14	t
-70	Pawilon 8a|Strefa Autografów i Foto|Paweł Kamiński|2026-06-18|16:00	quest-3240059b94ea3e00	Pawilon 8a	Strefa Autografów i Foto	Paweł Kamiński	2026-06-18	16:00	Budżet 9FFA	completed	2026-06-14 10:48:49.979591	2026-06-14 10:48:49.979591	2026-06-18 14:44:49.589122	43	t
-49	Pawilon 5|POW|Anna Szymański|2026-06-19|	quest-26775d59ad043647	Pawilon 5	POW	Anna Szymański	2026-06-19	\N	Budżet 50C7	completed	2026-06-13 23:57:38.881195	2026-06-13 23:57:38.881195	2026-06-17 13:25:06.206839	3	t
-37	Pawilon 8a|Strefa Autografów i Foto|Paweł Kamiński|2026-06-18|	quest-7455e685bc8ab485	Pawilon 8a	Strefa Autografów i Foto	Paweł Kamiński	2026-06-18	\N	Budżet 9FFA	completed	2026-06-13 23:57:38.782519	2026-06-13 23:57:38.782519	2026-06-18 14:45:08.493508	43	t
-59	Wejście północne|Akredytacja|Maria Grabowski|2026-06-11|	quest-537322d885cce98c	Wejście północne	Akredytacja	Maria Grabowski	2026-06-11	\N	Budżet D1AB	completed	2026-06-13 23:57:38.967658	2026-06-13 23:57:38.967658	2026-06-17 14:09:36.269591	30	t
-65	Plac Marka|Scena Plenerowa|Aleksandra Pawłowski|2026-06-18|12:00	quest-0010dc4164e3b93a	Plac Marka	Scena Plenerowa	Aleksandra Pawłowski	2026-06-18	12:00	Budżet 7C1D	completed	2026-06-14 10:48:49.9236	2026-06-14 10:48:49.9236	2026-06-18 10:03:50.416241	8	t
-64	PCC|Biuro Prasowe|Bartosz Kwiatkowski|2026-06-18|17:00	quest-4765cb79955b0dea	PCC	Biuro Prasowe	Bartosz Kwiatkowski	2026-06-18	17:00	Budżet 9ABE	completed	2026-06-14 10:48:49.917292	2026-06-14 10:48:49.917292	2026-06-18 15:23:10.852774	20	t
-68	Pawilon 3a|Integracja|Joanna Kwiatkowski|2026-06-18|16:00	quest-cee9764bfa535831	Pawilon 3a	Integracja	Joanna Kwiatkowski	2026-06-18	16:00	Budżet 7C1D	completed	2026-06-14 10:48:49.953762	2026-06-14 10:48:49.953762	2026-06-18 10:25:44.61946	22	t
-61	Pawilon 8|Strefa Fanów Klocków LEGO|Jan Krawczyk|2026-06-18|14:00	quest-8ec4c33a58571329	Pawilon 8	Strefa Fanów Klocków LEGO	Jan Krawczyk	2026-06-18	14:00	Budżet 4650	completed	2026-06-14 10:48:49.875453	2026-06-14 10:48:49.875453	2026-06-18 16:24:43.178006	46	t
-92	Pawilon 2|Magazyn|Michał Szymański|2026-06-18|12:00	quest-df25a356d916ca48	Pawilon 2	Magazyn	Michał Szymański	2026-06-18	12:00	Budżet A30D	completed	2026-06-14 10:48:50.213685	2026-06-14 10:48:50.213685	2026-06-18 19:17:15.887896	33	t
-94	Pawilon 6b|Gamesroom|Michał Piotrowski|2026-06-18|12:00	quest-dcab40819162e2b6	Pawilon 6b	Gamesroom	Michał Piotrowski	2026-06-18	12:00	Budżet 4650	completed	2026-06-14 10:48:50.231653	2026-06-14 10:48:50.231653	2026-06-18 11:57:21.858629	9	t
-80	PCC|Biuro Prasowe|Zofia Lewandowski|2026-06-19|12:00	quest-6d05bd76bbbff90b	PCC	Biuro Prasowe	Zofia Lewandowski	2026-06-19	12:00	Budżet 3563	completed	2026-06-14 10:48:50.098954	2026-06-14 10:48:50.098954	2026-06-18 19:18:05.488631	20	t
-73	Pawilon 7|Strefa Mangi i Anime|Zofia Lewandowski|2026-06-19|10:00	quest-fdb79a8ccd294c07	Pawilon 7	Strefa Mangi i Anime	Zofia Lewandowski	2026-06-19	10:00	Budżet 7C1D	completed	2026-06-14 10:48:50.012719	2026-06-14 10:48:50.012719	2026-06-19 06:42:54.602127	23	t
-90	Pawilon 10|Biuro Festiwalowe|Paweł Jankowski|2026-06-18|10:00	quest-d1ff2d073d0946a5	Pawilon 10	Biuro Festiwalowe	Paweł Jankowski	2026-06-18	10:00	Budżet 9ABE	completed	2026-06-14 10:48:50.192725	2026-06-14 10:48:50.192725	2026-06-18 13:40:30.767424	6	t
-78	PCC|Sala Warsztatowa|Katarzyna Król|2026-06-18|16:00	quest-ea3ddb20b8134840	PCC	Sala Warsztatowa	Katarzyna Król	2026-06-18	16:00	Budżet 9FFA	completed	2026-06-14 10:48:50.08216	2026-06-14 10:48:50.08216	2026-06-19 13:09:47.87091	26	t
-88	PCC|Maskarada|Ewa Mazur|2026-06-19|10:00	quest-00ae0dc918b16c6f	PCC	Maskarada	Ewa Mazur	2026-06-19	10:00	Budżet 2595	completed	2026-06-14 10:48:50.172732	2026-06-14 10:48:50.172732	2026-06-19 14:59:12.272565	25	t
-82	Pawilon 2|Magazyn Techniczny|Zofia Zieliński|2026-06-17|16:00	quest-c35ab70d67ad7688	Pawilon 2	Magazyn Techniczny	Zofia Zieliński	2026-06-17	16:00	Budżet D1AB	cancelled	2026-06-14 10:48:50.115688	2026-06-14 10:48:50.115688	\N	1	t
-77	Pawilon 5|Strefa komiksowa|Joanna Nowak|2026-06-17|10:00	quest-422eae9ff39e977c	Pawilon 5	Strefa komiksowa	Joanna Nowak	2026-06-17	10:00	Budżet 4650	completed	2026-06-14 10:48:50.069421	2026-06-14 10:48:50.069421	2026-06-17 16:06:07.156302	45	t
-83	Pawilon 5|Strefa komiksowa|Kamil Krawczyk|2026-06-19|12:00	quest-d77d641aadf22dcf	Pawilon 5	Strefa komiksowa	Kamil Krawczyk	2026-06-19	12:00	Budżet 09DB	completed	2026-06-14 10:48:50.121447	2026-06-14 10:48:50.121447	2026-06-18 14:17:59.910359	45	t
-86	Pawilon 5|POW|Kamil Krawczyk|2026-06-16|09:00	quest-f1f5fa761ea39cb5	Pawilon 5	POW	Kamil Krawczyk	2026-06-16	09:00	Budżet 50C7	completed	2026-06-14 10:48:50.151506	2026-06-14 10:48:50.151506	2026-06-17 13:24:33.419162	3	t
-87	Pawilon 7|Strefa Mangi i Anime|Magdalena Woźniak|2026-06-18|16:00	quest-05d113267d475d32	Pawilon 7	Strefa Mangi i Anime	Magdalena Woźniak	2026-06-18	16:00	Budżet 4650	completed	2026-06-14 10:48:50.166293	2026-06-14 10:48:50.166293	2026-06-18 14:24:12.760354	23	t
-93	Pawilon 5|POW|Kamil Krawczyk|2026-06-17|12:00	quest-7a7217652b90e45f	Pawilon 5	POW	Kamil Krawczyk	2026-06-17	12:00	Budżet 50C7	completed	2026-06-14 10:48:50.223442	2026-06-14 10:48:50.223442	2026-06-17 13:24:54.755709	3	t
-89	Pawilon 7|Sala Warsztatowa|Marcin Jankowski|2026-06-18|16:00	quest-f424c0a43ac11537	Pawilon 7	Sala Warsztatowa	Marcin Jankowski	2026-06-18	16:00	Budżet 9FFA	completed	2026-06-14 10:48:50.185186	2026-06-14 10:48:50.185186	2026-06-18 14:24:35.495862	27	t
-75	Pawilon 7a|Strefa Cosplay|Ewa Mazur|2026-06-18|14:00	quest-6ad1d4815d784c36	Pawilon 7a	Strefa Cosplay	Ewa Mazur	2026-06-18	14:00	Budżet 2595	completed	2026-06-14 10:48:50.039408	2026-06-14 10:48:50.039408	2026-06-17 19:17:25.411705	7	t
-79	Pawilon 8|Strefa Fanów Klocków LEGO|Jan Krawczyk|2026-06-18|12:00	quest-2a88469f39ea8692	Pawilon 8	Strefa Fanów Klocków LEGO	Jan Krawczyk	2026-06-18	12:00	Budżet 4650	completed	2026-06-14 10:48:50.089688	2026-06-14 10:48:50.089688	2026-06-18 14:44:08.747162	46	t
-81	Pawilon 8|Strefa Fanów Klocków LEGO|Jan Krawczyk|2026-06-18|17:00	quest-871913dafd5ec84e	Pawilon 8	Strefa Fanów Klocków LEGO	Jan Krawczyk	2026-06-18	17:00	Budżet 4650	completed	2026-06-14 10:48:50.108264	2026-06-14 10:48:50.108264	2026-06-18 14:44:27.095102	46	t
-84	Wejście północne|Akredytacja|Bartosz Wójcik|2026-06-18|	quest-db39299c4c9bcef0	Wejście północne	Akredytacja	Bartosz Wójcik	2026-06-18	\N	Budżet D1AB	completed	2026-06-14 10:48:50.135315	2026-06-14 10:48:50.135315	2026-06-18 08:00:45.862462	30	t
-91	Wejście wschodnie|Akredytacja|Bartosz Wójcik|2026-06-18|	quest-69085d87018356ed	Wejście wschodnie	Akredytacja	Bartosz Wójcik	2026-06-18	\N	Budżet D1AB	completed	2026-06-14 10:48:50.20514	2026-06-14 10:48:50.20514	2026-06-18 08:01:16.639559	30	t
-85	Pawilon 10|HQ|Adam Zieliński|2026-06-17|16:00	quest-458151fb13775fb8	Pawilon 10	HQ	Adam Zieliński	2026-06-17	16:00	Budżet A30D	completed	2026-06-14 10:48:50.143017	2026-06-14 10:48:50.143017	2026-06-18 08:39:37.54639	2	t
-74	Pawilon 6a|Wypożyczalnia|Aleksandra Jankowski|2026-06-18|10:00	quest-2be911325aa96e09	Pawilon 6a	Wypożyczalnia	Aleksandra Jankowski	2026-06-18	10:00	Budżet 4650	completed	2026-06-14 10:48:50.024588	2026-06-14 10:48:50.024588	2026-06-18 08:44:55.121838	12	t
-72	Pawilon 3|Antresola|Agnieszka Szymański|2026-06-18|15:00	quest-f003bc89b0fab413	Pawilon 3	Antresola	Agnieszka Szymański	2026-06-18	15:00	Budżet 7C1D	completed	2026-06-14 10:48:49.996506	2026-06-14 10:48:49.996506	2026-06-18 10:03:10.421764	22	t
+COPY public.equipment_request_quests (id, quest_key, quest_id, destination_pavilion, destination_location, recipient, delivery_date, pickup_time, budget_owner, status, created_at, completed_at, location_id, location_resolved, source) FROM stdin;
+26	Pawilon 3|GIF|Ewa Piotrowski|2026-06-18|	quest-aeb9ae30df1e240f	Pawilon 3	GIF	Ewa Piotrowski	2026-06-18	\N	Budżet C8BA	completed	2026-06-13 23:57:38.705504	2026-06-17 15:45:42.828716	34	t	sheet
+95	Pawilon 7|Sala Kameralna|Michał Piotrowski|2026-06-19|12:00	quest-aa9de3c18964fbb7	Pawilon 7	Sala Kameralna	Michał Piotrowski	2026-06-19	12:00	Budżet 4650	completed	2026-06-18 10:26:13.654138	2026-06-19 10:20:37.155725	44	t	sheet
+27	Pawilon 3|GIF|Adam Wiśniewski|2026-06-18|	quest-6bc0b7ba43cba386	Pawilon 3	GIF	Adam Wiśniewski	2026-06-18	\N	Budżet 7C1D	completed	2026-06-13 23:57:38.711861	2026-06-17 15:47:16.866926	34	t	sheet
+2	Iglica|RPGralnia|Natalia Wójcik|2026-06-18|	quest-334ca5c72d8067c0	Iglica	RPGralnia	Natalia Wójcik	2026-06-18	\N	Budżet F09F	completed	2026-06-13 23:57:38.482058	2026-06-18 11:55:03.718097	21	t	sheet
+15	Plac Marka|Krewni Pyrkonu|Łukasz Wiśniewski|2026-06-18|	quest-996da99215e74b0c	Plac Marka	Krewni Pyrkonu	Łukasz Wiśniewski	2026-06-18	\N	Budżet B9F8	completed	2026-06-13 23:57:38.59566	2026-06-18 11:56:19.745854	28	t	sheet
+5	Pawilon 5|Strefa komiksowa|Kamil Krawczyk|2026-06-18|	quest-76f4c852354f1018	Pawilon 5	Strefa komiksowa	Kamil Krawczyk	2026-06-18	\N	Budżet 09DB	completed	2026-06-13 23:57:38.51051	2026-06-18 14:18:04.295643	45	t	sheet
+32	Pawilon 5|Aleja Artystów i Kolekcjonerów - Antresola|Julia Król|2026-06-19|	quest-8d10f413d9d3fbe6	Pawilon 5	Aleja Artystów i Kolekcjonerów - Antresola	Julia Król	2026-06-19	\N	Budżet 09DB	completed	2026-06-13 23:57:38.747445	2026-06-18 14:18:10.28602	48	t	sheet
+38	Pawilon 2|Oznakowanie|Kamil Mazur|2026-06-18|	quest-a33bf6882535a57c	Pawilon 2	Oznakowanie	Kamil Mazur	2026-06-18	\N	Budżet DB72	completed	2026-06-13 23:57:38.791303	2026-06-17 13:58:49.630108	51	t	sheet
+16	Wejście wschodnie|Akredytacja|Maria Grabowski|2026-06-17|	quest-945bccac0e1f562c	Wejście wschodnie	Akredytacja	Maria Grabowski	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.60367	2026-06-18 08:01:07.902998	30	t	sheet
+11	Wejście północne|Akredytacja|Wojciech Dąbrowski|2026-06-18|	quest-82dd100e9a49933f	Wejście północne	Akredytacja	Wojciech Dąbrowski	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.559897	2026-06-18 08:01:08.668638	30	t	sheet
+9	PCC|RedPoint PCC|Tomasz Nowakowski|2026-06-18|	quest-d6b576b204cf65ba	PCC	RedPoint PCC	Tomasz Nowakowski	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.5427	2026-06-18 15:23:19.734868	16	t	sheet
+10	Pawilon 2|Gżdaczroom|Joanna Lewandowski|2026-06-18|	quest-e2acfdd55cc905b5	Pawilon 2	Gżdaczroom	Joanna Lewandowski	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.551007	2026-06-18 09:00:00.273088	17	t	sheet
+31	Pawilon 10||Tomasz Nowakowski|2026-06-16|	quest-dd264c46a8148ea8	Pawilon 10		Tomasz Nowakowski	2026-06-16	\N	Budżet D1AB	completed	2026-06-13 23:57:38.73957	2026-06-16 14:54:35.499446	6	t	sheet
+8	Wejście zachodnie|Akredytacja|Maria Grabowski|2026-06-17|	quest-89897f90580d4fd2	Wejście zachodnie	Akredytacja	Maria Grabowski	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.535801	2026-06-17 11:06:55.085065	14	t	sheet
+21	Pawilon 10|RedRoom|Tomasz Nowakowski|2026-06-17|	quest-5fcd84b32e964c86	Pawilon 10	RedRoom	Tomasz Nowakowski	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.65471	2026-06-17 14:19:48.796936	4	t	sheet
+48	Pawilon 3a|Strefa Puzzlowa - Antresola|Łukasz Kamiński|2026-06-19|	quest-a1c284b19792cf09	Pawilon 3a	Strefa Puzzlowa - Antresola	Łukasz Kamiński	2026-06-19	\N	Budżet 09DB	completed	2026-06-13 23:57:38.87316	2026-06-18 18:08:30.616326	47	t	sheet
+67	Pawilon 3|GIF|Adam Wiśniewski|2026-06-18|10:00	quest-173deb2712ce5d96	Pawilon 3	GIF	Adam Wiśniewski	2026-06-18	10:00	Budżet 7C1D	completed	2026-06-14 10:48:49.943599	2026-06-17 15:45:37.782691	34	t	sheet
+66	PWK|Scena Plenerowa|Aleksandra Pawłowski|2026-06-18|12:00	quest-ce6f205d2aa09181	PWK	Scena Plenerowa	Aleksandra Pawłowski	2026-06-18	12:00	Budżet 7C1D	completed	2026-06-14 10:48:49.930165	2026-06-18 11:56:48.05199	8	t	sheet
+42	Pawilon 3a|Integracja|Joanna Kwiatkowski|2026-06-17|	quest-b2e7db8422bd567a	Pawilon 3a	Integracja	Joanna Kwiatkowski	2026-06-17	\N	Budżet 4650	completed	2026-06-13 23:57:38.825875	2026-06-18 12:22:44.139167	22	t	sheet
+41	Iglica|RPGralnia|Agnieszka Grabowski|2026-06-18|	quest-44710e23103e07c9	Iglica	RPGralnia	Agnieszka Grabowski	2026-06-18	\N	Budżet 9FFA	completed	2026-06-13 23:57:38.81791	2026-06-18 12:25:49.532472	21	t	sheet
+57	Iglica|RPGralnia|Agnieszka Grabowski|2026-06-19|	quest-40d82d647bfe2be1	Iglica	RPGralnia	Agnieszka Grabowski	2026-06-19	\N	Budżet 9FFA	completed	2026-06-13 23:57:38.95181	2026-06-18 12:26:07.852794	21	t	sheet
+69	Pawilon 10|Biuro Festiwalowe|Natalia Krawczyk|2026-06-18|10:00	quest-01c6b04cf4a555af	Pawilon 10	Biuro Festiwalowe	Natalia Krawczyk	2026-06-18	10:00	Budżet 9ABE	completed	2026-06-14 10:48:49.971703	2026-06-18 12:26:58.970032	6	t	sheet
+39	Wejście północne|Weryfikacja|Łukasz Nowak|2026-06-18|	quest-56f37912118a5ce8	Wejście północne	Weryfikacja	Łukasz Nowak	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.799428	2026-06-18 08:00:29.605639	49	t	sheet
+45	Wejście północne|Kamilek|Piotr Król|2026-06-17|	quest-2abd9ee775a27361	Wejście północne	Kamilek	Piotr Król	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.85129	2026-06-18 08:00:34.117861	49	t	sheet
+36	Wejście północne|Akredytacja|Maria Grabowski|2026-06-17|	quest-43591853569cdf1e	Wejście północne	Akredytacja	Maria Grabowski	2026-06-17	\N	Budżet D1AB	completed	2026-06-13 23:57:38.775249	2026-06-18 08:00:38.309024	30	t	sheet
+47	Wejście wschodnie|Szatnia|Magdalena Kamiński|2026-06-18|	quest-ba4820493933d314	Wejście wschodnie	Szatnia	Magdalena Kamiński	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.864201	2026-06-19 09:19:25.24991	37	t	sheet
+40	Wejście północne|Szatnia|Magdalena Kamiński|2026-06-18|	quest-581eb51d0e9beae2	Wejście północne	Szatnia	Magdalena Kamiński	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.806623	2026-06-18 08:00:54.143373	38	t	sheet
+60	PCC|Szatnia|Magdalena Kamiński|2026-06-18|	quest-a096f98deb5fda12	PCC	Szatnia	Magdalena Kamiński	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.974617	2026-06-19 09:19:39.603541	42	t	sheet
+50	Pawilon 3|Wioski Fantastyczne|Julia Woźniak|2026-06-18|	quest-565300dc65df1dea	Pawilon 3	Wioski Fantastyczne	Julia Woźniak	2026-06-18	\N	Budżet 34D4	completed	2026-06-13 23:57:38.889091	2026-06-18 13:31:51.927805	24	t	sheet
+54	Wejście zachodnie|Szatnia|Magdalena Kamiński|2026-06-18|	quest-74ca9cd8f26284ed	Wejście zachodnie	Szatnia	Magdalena Kamiński	2026-06-18	\N	Budżet D1AB	completed	2026-06-13 23:57:38.92555	2026-06-19 09:19:55.880159	35	t	sheet
+71	PCC|Szatnia|Magdalena Kamiński|2026-06-18|17:00	quest-ff1d0cfab1cca422	PCC	Szatnia	Magdalena Kamiński	2026-06-18	17:00	Budżet D1AB	cancelled	2026-06-14 10:48:49.98658	\N	42	t	sheet
+63	PCC|Strefa Dziecięca|Joanna Nowak|2026-06-18|16:00	quest-0fe368e15274ca5d	PCC	Strefa Dziecięca	Joanna Nowak	2026-06-18	16:00	Budżet 4650	completed	2026-06-14 10:48:49.909839	2026-06-18 13:49:21.23927	11	t	sheet
+62	Wejście zachodnie|Akredytacja|Bartosz Wójcik|2026-06-18|	quest-d0bd40e11ac83abb	Wejście zachodnie	Akredytacja	Bartosz Wójcik	2026-06-18	\N	Budżet D1AB	completed	2026-06-14 10:48:49.902819	2026-06-18 08:14:36.013199	14	t	sheet
+70	Pawilon 8a|Strefa Autografów i Foto|Paweł Kamiński|2026-06-18|16:00	quest-3240059b94ea3e00	Pawilon 8a	Strefa Autografów i Foto	Paweł Kamiński	2026-06-18	16:00	Budżet 9FFA	completed	2026-06-14 10:48:49.979591	2026-06-18 14:44:49.589122	43	t	sheet
+49	Pawilon 5|POW|Anna Szymański|2026-06-19|	quest-26775d59ad043647	Pawilon 5	POW	Anna Szymański	2026-06-19	\N	Budżet 50C7	completed	2026-06-13 23:57:38.881195	2026-06-17 13:25:06.206839	3	t	sheet
+37	Pawilon 8a|Strefa Autografów i Foto|Paweł Kamiński|2026-06-18|	quest-7455e685bc8ab485	Pawilon 8a	Strefa Autografów i Foto	Paweł Kamiński	2026-06-18	\N	Budżet 9FFA	completed	2026-06-13 23:57:38.782519	2026-06-18 14:45:08.493508	43	t	sheet
+59	Wejście północne|Akredytacja|Maria Grabowski|2026-06-11|	quest-537322d885cce98c	Wejście północne	Akredytacja	Maria Grabowski	2026-06-11	\N	Budżet D1AB	completed	2026-06-13 23:57:38.967658	2026-06-17 14:09:36.269591	30	t	sheet
+65	Plac Marka|Scena Plenerowa|Aleksandra Pawłowski|2026-06-18|12:00	quest-0010dc4164e3b93a	Plac Marka	Scena Plenerowa	Aleksandra Pawłowski	2026-06-18	12:00	Budżet 7C1D	completed	2026-06-14 10:48:49.9236	2026-06-18 10:03:50.416241	8	t	sheet
+64	PCC|Biuro Prasowe|Bartosz Kwiatkowski|2026-06-18|17:00	quest-4765cb79955b0dea	PCC	Biuro Prasowe	Bartosz Kwiatkowski	2026-06-18	17:00	Budżet 9ABE	completed	2026-06-14 10:48:49.917292	2026-06-18 15:23:10.852774	20	t	sheet
+68	Pawilon 3a|Integracja|Joanna Kwiatkowski|2026-06-18|16:00	quest-cee9764bfa535831	Pawilon 3a	Integracja	Joanna Kwiatkowski	2026-06-18	16:00	Budżet 7C1D	completed	2026-06-14 10:48:49.953762	2026-06-18 10:25:44.61946	22	t	sheet
+61	Pawilon 8|Strefa Fanów Klocków LEGO|Jan Krawczyk|2026-06-18|14:00	quest-8ec4c33a58571329	Pawilon 8	Strefa Fanów Klocków LEGO	Jan Krawczyk	2026-06-18	14:00	Budżet 4650	completed	2026-06-14 10:48:49.875453	2026-06-18 16:24:43.178006	46	t	sheet
+92	Pawilon 2|Magazyn|Michał Szymański|2026-06-18|12:00	quest-df25a356d916ca48	Pawilon 2	Magazyn	Michał Szymański	2026-06-18	12:00	Budżet A30D	completed	2026-06-14 10:48:50.213685	2026-06-18 19:17:15.887896	33	t	sheet
+94	Pawilon 6b|Gamesroom|Michał Piotrowski|2026-06-18|12:00	quest-dcab40819162e2b6	Pawilon 6b	Gamesroom	Michał Piotrowski	2026-06-18	12:00	Budżet 4650	completed	2026-06-14 10:48:50.231653	2026-06-18 11:57:21.858629	9	t	sheet
+80	PCC|Biuro Prasowe|Zofia Lewandowski|2026-06-19|12:00	quest-6d05bd76bbbff90b	PCC	Biuro Prasowe	Zofia Lewandowski	2026-06-19	12:00	Budżet 3563	completed	2026-06-14 10:48:50.098954	2026-06-18 19:18:05.488631	20	t	sheet
+73	Pawilon 7|Strefa Mangi i Anime|Zofia Lewandowski|2026-06-19|10:00	quest-fdb79a8ccd294c07	Pawilon 7	Strefa Mangi i Anime	Zofia Lewandowski	2026-06-19	10:00	Budżet 7C1D	completed	2026-06-14 10:48:50.012719	2026-06-19 06:42:54.602127	23	t	sheet
+90	Pawilon 10|Biuro Festiwalowe|Paweł Jankowski|2026-06-18|10:00	quest-d1ff2d073d0946a5	Pawilon 10	Biuro Festiwalowe	Paweł Jankowski	2026-06-18	10:00	Budżet 9ABE	completed	2026-06-14 10:48:50.192725	2026-06-18 13:40:30.767424	6	t	sheet
+78	PCC|Sala Warsztatowa|Katarzyna Król|2026-06-18|16:00	quest-ea3ddb20b8134840	PCC	Sala Warsztatowa	Katarzyna Król	2026-06-18	16:00	Budżet 9FFA	completed	2026-06-14 10:48:50.08216	2026-06-19 13:09:47.87091	26	t	sheet
+88	PCC|Maskarada|Ewa Mazur|2026-06-19|10:00	quest-00ae0dc918b16c6f	PCC	Maskarada	Ewa Mazur	2026-06-19	10:00	Budżet 2595	completed	2026-06-14 10:48:50.172732	2026-06-19 14:59:12.272565	25	t	sheet
+82	Pawilon 2|Magazyn Techniczny|Zofia Zieliński|2026-06-17|16:00	quest-c35ab70d67ad7688	Pawilon 2	Magazyn Techniczny	Zofia Zieliński	2026-06-17	16:00	Budżet D1AB	cancelled	2026-06-14 10:48:50.115688	\N	1	t	sheet
+77	Pawilon 5|Strefa komiksowa|Joanna Nowak|2026-06-17|10:00	quest-422eae9ff39e977c	Pawilon 5	Strefa komiksowa	Joanna Nowak	2026-06-17	10:00	Budżet 4650	completed	2026-06-14 10:48:50.069421	2026-06-17 16:06:07.156302	45	t	sheet
+83	Pawilon 5|Strefa komiksowa|Kamil Krawczyk|2026-06-19|12:00	quest-d77d641aadf22dcf	Pawilon 5	Strefa komiksowa	Kamil Krawczyk	2026-06-19	12:00	Budżet 09DB	completed	2026-06-14 10:48:50.121447	2026-06-18 14:17:59.910359	45	t	sheet
+86	Pawilon 5|POW|Kamil Krawczyk|2026-06-16|09:00	quest-f1f5fa761ea39cb5	Pawilon 5	POW	Kamil Krawczyk	2026-06-16	09:00	Budżet 50C7	completed	2026-06-14 10:48:50.151506	2026-06-17 13:24:33.419162	3	t	sheet
+87	Pawilon 7|Strefa Mangi i Anime|Magdalena Woźniak|2026-06-18|16:00	quest-05d113267d475d32	Pawilon 7	Strefa Mangi i Anime	Magdalena Woźniak	2026-06-18	16:00	Budżet 4650	completed	2026-06-14 10:48:50.166293	2026-06-18 14:24:12.760354	23	t	sheet
+93	Pawilon 5|POW|Kamil Krawczyk|2026-06-17|12:00	quest-7a7217652b90e45f	Pawilon 5	POW	Kamil Krawczyk	2026-06-17	12:00	Budżet 50C7	completed	2026-06-14 10:48:50.223442	2026-06-17 13:24:54.755709	3	t	sheet
+89	Pawilon 7|Sala Warsztatowa|Marcin Jankowski|2026-06-18|16:00	quest-f424c0a43ac11537	Pawilon 7	Sala Warsztatowa	Marcin Jankowski	2026-06-18	16:00	Budżet 9FFA	completed	2026-06-14 10:48:50.185186	2026-06-18 14:24:35.495862	27	t	sheet
+75	Pawilon 7a|Strefa Cosplay|Ewa Mazur|2026-06-18|14:00	quest-6ad1d4815d784c36	Pawilon 7a	Strefa Cosplay	Ewa Mazur	2026-06-18	14:00	Budżet 2595	completed	2026-06-14 10:48:50.039408	2026-06-17 19:17:25.411705	7	t	sheet
+79	Pawilon 8|Strefa Fanów Klocków LEGO|Jan Krawczyk|2026-06-18|12:00	quest-2a88469f39ea8692	Pawilon 8	Strefa Fanów Klocków LEGO	Jan Krawczyk	2026-06-18	12:00	Budżet 4650	completed	2026-06-14 10:48:50.089688	2026-06-18 14:44:08.747162	46	t	sheet
+81	Pawilon 8|Strefa Fanów Klocków LEGO|Jan Krawczyk|2026-06-18|17:00	quest-871913dafd5ec84e	Pawilon 8	Strefa Fanów Klocków LEGO	Jan Krawczyk	2026-06-18	17:00	Budżet 4650	completed	2026-06-14 10:48:50.108264	2026-06-18 14:44:27.095102	46	t	sheet
+84	Wejście północne|Akredytacja|Bartosz Wójcik|2026-06-18|	quest-db39299c4c9bcef0	Wejście północne	Akredytacja	Bartosz Wójcik	2026-06-18	\N	Budżet D1AB	completed	2026-06-14 10:48:50.135315	2026-06-18 08:00:45.862462	30	t	sheet
+91	Wejście wschodnie|Akredytacja|Bartosz Wójcik|2026-06-18|	quest-69085d87018356ed	Wejście wschodnie	Akredytacja	Bartosz Wójcik	2026-06-18	\N	Budżet D1AB	completed	2026-06-14 10:48:50.20514	2026-06-18 08:01:16.639559	30	t	sheet
+85	Pawilon 10|HQ|Adam Zieliński|2026-06-17|16:00	quest-458151fb13775fb8	Pawilon 10	HQ	Adam Zieliński	2026-06-17	16:00	Budżet A30D	completed	2026-06-14 10:48:50.143017	2026-06-18 08:39:37.54639	2	t	sheet
+74	Pawilon 6a|Wypożyczalnia|Aleksandra Jankowski|2026-06-18|10:00	quest-2be911325aa96e09	Pawilon 6a	Wypożyczalnia	Aleksandra Jankowski	2026-06-18	10:00	Budżet 4650	completed	2026-06-14 10:48:50.024588	2026-06-18 08:44:55.121838	12	t	sheet
+72	Pawilon 3|Antresola|Agnieszka Szymański|2026-06-18|15:00	quest-f003bc89b0fab413	Pawilon 3	Antresola	Agnieszka Szymański	2026-06-18	15:00	Budżet 7C1D	completed	2026-06-14 10:48:49.996506	2026-06-18 10:03:10.421764	22	t	sheet
 \.
 
 
@@ -484,167 +484,167 @@ ALTER TABLE public.equipment_request_quests ENABLE TRIGGER ALL;
 
 ALTER TABLE public.equipment_request_items DISABLE TRIGGER ALL;
 
-COPY public.equipment_request_items (id, quest_id, item_name, quantity, category_id, category_match_type, category_match_confidence, budget_owner, notes, source_row_number, created_at) FROM stdin;
-250	95	Głośniki (Duże)	1	4	exact	\N	\N	\N	43	2026-06-18 10:26:13.654138
-2	2	Drukarka A4	2	2	exact	\N	\N	\N	82	2026-06-13 23:57:38.482058
-3	2	Laptop	4	1	exact	\N	\N	\N	83	2026-06-13 23:57:38.482058
-4	2	Przedłużacz	15	8	exact	\N	\N	\N	84	2026-06-13 23:57:38.482058
-5	2	Tablet	3	6	exact	\N	\N	\N	85	2026-06-13 23:57:38.482058
-6	2	Telefon	1	18	exact	\N	\N	\N	86	2026-06-13 23:57:38.482058
-7	2	Router	1	9	exact	\N	\N	\N	154	2026-06-13 23:57:38.482058
-251	95	Laptop	1	1	exact	\N	\N	Uwagi do pozycji 251	44	2026-06-18 10:26:13.654138
-252	95	Mikrofon	1	20	exact	\N	\N	\N	45	2026-06-18 10:26:13.654138
-253	95	Przedłużacz	4	8	exact	\N	\N	\N	46	2026-06-18 10:26:13.654138
-254	95	TV 55'	1	17	fuzzy	\N	\N	Uwagi do pozycji 254	47	2026-06-18 10:26:13.654138
-12	5	Przedłużacz	3	8	exact	\N	\N	Uwagi do pozycji 12	114	2026-06-13 23:57:38.51051
-13	5	Telefon	1	18	exact	\N	\N	Uwagi do pozycji 13	115	2026-06-13 23:57:38.51051
-20	8	Drukarka A4	2	2	exact	\N	\N	\N	80	2026-06-13 23:57:38.535801
-21	9	Przedłużacz	3	8	exact	\N	\N	\N	92	2026-06-13 23:57:38.5427
-22	9	Drukarka A4	1	2	exact	\N	\N	\N	93	2026-06-13 23:57:38.5427
-23	9	Laptop	1	1	exact	\N	\N	\N	94	2026-06-13 23:57:38.5427
-24	10	Drukarka A4	1	2	exact	\N	\N	Uwagi do pozycji 24	102	2026-06-13 23:57:38.551007
-25	10	Cartridge do drukarki	1	\N	none	\N	\N	Uwagi do pozycji 25	103	2026-06-13 23:57:38.551007
-26	10	Głośniki (male)	1	5	fuzzy	\N	\N	\N	104	2026-06-13 23:57:38.551007
-27	10	Laptop	4	1	exact	\N	\N	Uwagi do pozycji 27	105	2026-06-13 23:57:38.551007
-28	10	Przedłużacz	15	8	exact	\N	\N	Uwagi do pozycji 28	106	2026-06-13 23:57:38.551007
-29	10	Telefon	3	18	exact	\N	\N	Uwagi do pozycji 29	107	2026-06-13 23:57:38.551007
-30	10	TV 55'	1	17	fuzzy	\N	\N	Uwagi do pozycji 30	108	2026-06-13 23:57:38.551007
-31	11	Telefon	4	18	exact	\N	\N	Uwagi do pozycji 31	113	2026-06-13 23:57:38.559897
-36	15	Przedłużacz	5	8	exact	\N	\N	Uwagi do pozycji 36	112	2026-06-13 23:57:38.59566
-37	16	Router	1	9	exact	\N	\N	\N	77	2026-06-13 23:57:38.60367
-38	16	Przedłużacz	4	8	exact	\N	\N	\N	78	2026-06-13 23:57:38.60367
-59	21	Drukarka A3	1	3	exact	\N	\N	Uwagi do pozycji 59	88	2026-06-13 23:57:38.65471
-60	21	Drukarka A4	1	2	exact	\N	\N	Uwagi do pozycji 60	89	2026-06-13 23:57:38.65471
-61	21	Laptop	2	1	exact	\N	\N	\N	90	2026-06-13 23:57:38.65471
-62	21	Przedłużacz	5	8	exact	\N	\N	Uwagi do pozycji 62	91	2026-06-13 23:57:38.65471
-75	26	Drukarka A4	1	2	exact	\N	\N	\N	150	2026-06-13 23:57:38.705504
-76	26	Głośniki (Duże)	1	4	exact	\N	\N	Uwagi do pozycji 76	151	2026-06-13 23:57:38.705504
-77	26	Laptop	2	1	exact	\N	\N	\N	152	2026-06-13 23:57:38.705504
-78	26	Przedłużacz	6	8	exact	\N	\N	\N	153	2026-06-13 23:57:38.705504
-79	27	TV 70'	1	16	fuzzy	\N	\N	Uwagi do pozycji 79	159	2026-06-13 23:57:38.711861
-80	27	TV 45'	1	17	fuzzy	\N	\N	\N	160	2026-06-13 23:57:38.711861
-81	27	TV 55'	4	17	fuzzy	\N	\N	\N	161	2026-06-13 23:57:38.711861
-85	31	Projektor z Ekranem	1	\N	none	\N	\N	Uwagi do pozycji 85	95	2026-06-13 23:57:38.73957
-86	32	Przedłużacz	10	8	exact	\N	\N	\N	130	2026-06-13 23:57:38.747445
-96	36	Router	1	9	exact	\N	\N	\N	76	2026-06-13 23:57:38.775249
-97	36	Telefon	1	18	exact	\N	\N	\N	79	2026-06-13 23:57:38.775249
-98	37	Router	1	9	exact	\N	\N	\N	116	2026-06-13 23:57:38.782519
-99	38	Przedłużacz	1	8	exact	\N	\N	\N	109	2026-06-13 23:57:38.791303
-100	38	Drukarka A3	1	3	exact	\N	\N	Uwagi do pozycji 100	110	2026-06-13 23:57:38.791303
-101	39	Przedłużacz	3	8	exact	\N	\N	\N	145	2026-06-13 23:57:38.799428
-102	39	Drukarka A4	1	2	exact	\N	\N	Uwagi do pozycji 102	146	2026-06-13 23:57:38.799428
-103	40	Przedłużacz	1	8	exact	\N	\N	Uwagi do pozycji 103	120	2026-06-13 23:57:38.806623
-104	40	Przedłużacz	1	8	exact	\N	\N	Uwagi do pozycji 104	124	2026-06-13 23:57:38.806623
-105	41	Laptop	3	1	exact	\N	\N	Uwagi do pozycji 105	131	2026-06-13 23:57:38.81791
-106	41	Przedłużacz	2	8	exact	\N	\N	Uwagi do pozycji 106	132	2026-06-13 23:57:38.81791
-107	41	Głośniki (Duże)	1	4	exact	\N	\N	Uwagi do pozycji 107	133	2026-06-13 23:57:38.81791
-108	42	TV 70'	1	16	fuzzy	\N	\N	Uwagi do pozycji 108	70	2026-06-13 23:57:38.825875
-109	42	Laptop	1	1	exact	\N	\N	Uwagi do pozycji 109	71	2026-06-13 23:57:38.825875
-110	42	Przedłużacz	40	8	exact	\N	\N	\N	72	2026-06-13 23:57:38.825875
-111	42	Kabel jack 3.5 mm	1	\N	none	\N	\N	\N	73	2026-06-13 23:57:38.825875
-112	42	Cartridge do drukarki	3	\N	none	\N	\N	Uwagi do pozycji 112	74	2026-06-13 23:57:38.825875
-120	45	Monitor	1	21	exact	\N	\N	\N	81	2026-06-13 23:57:38.85129
-122	47	Przedłużacz	2	8	exact	\N	\N	Uwagi do pozycji 122	117	2026-06-13 23:57:38.864201
-123	47	Laptop	1	1	exact	\N	\N	Uwagi do pozycji 123	122	2026-06-13 23:57:38.864201
-124	48	Przedłużacz	2	8	exact	\N	\N	Uwagi do pozycji 124	125	2026-06-13 23:57:38.87316
-125	48	Router	1	9	exact	\N	\N	Uwagi do pozycji 125	126	2026-06-13 23:57:38.87316
-126	49	Przedłużacz	5	8	exact	\N	\N	\N	129	2026-06-13 23:57:38.881195
-127	50	Przedłużacz	30	8	exact	\N	\N	Uwagi do pozycji 127	147	2026-06-13 23:57:38.889091
-128	50	TV 55'	3	17	fuzzy	\N	\N	Uwagi do pozycji 128	148	2026-06-13 23:57:38.889091
-129	50	Laptop	1	1	exact	\N	\N	Uwagi do pozycji 129	149	2026-06-13 23:57:38.889091
-141	54	Przedłużacz	2	8	exact	\N	\N	Uwagi do pozycji 141	118	2026-06-13 23:57:38.92555
-142	54	Laptop	2	1	exact	\N	\N	Uwagi do pozycji 142	121	2026-06-13 23:57:38.92555
-153	57	Projektor / TV	1	\N	none	\N	\N	Uwagi do pozycji 153	134	2026-06-13 23:57:38.95181
-155	59	Laptop	11	1	exact	\N	\N	\N	75	2026-06-13 23:57:38.967658
-156	60	Przedłużacz	2	8	exact	\N	\N	Uwagi do pozycji 156	119	2026-06-13 23:57:38.974617
-157	60	Laptop	1	1	exact	\N	\N	Uwagi do pozycji 157	123	2026-06-13 23:57:38.974617
-158	61	TV 55'	2	17	fuzzy	\N	\N	Uwagi do pozycji 158	96	2026-06-14 10:48:49.875453
-159	61	TV 45'	2	17	fuzzy	\N	\N	Uwagi do pozycji 159	97	2026-06-14 10:48:49.875453
-160	61	Monitor	3	21	exact	\N	\N	\N	100	2026-06-14 10:48:49.875453
-161	62	Laptop	\N	1	exact	\N	\N	Uwagi do pozycji 161	136	2026-06-14 10:48:49.902819
-162	63	Laptop	5	1	exact	\N	\N	Uwagi do pozycji 162	6	2026-06-14 10:48:49.909839
-163	63	Drukarka A4	1	2	exact	\N	\N	\N	7	2026-06-14 10:48:49.909839
-164	63	Przedłużacz	4	8	exact	\N	\N	\N	8	2026-06-14 10:48:49.909839
-165	63	Głośniki (male)	1	5	fuzzy	\N	\N	\N	9	2026-06-14 10:48:49.909839
-166	63	Telefon	1	18	exact	\N	\N	\N	10	2026-06-14 10:48:49.909839
-167	63	TV 55'	1	17	fuzzy	\N	\N	Uwagi do pozycji 167	11	2026-06-14 10:48:49.909839
-168	64	Drukarka A4	1	2	exact	\N	\N	\N	29	2026-06-14 10:48:49.917292
-169	64	Przedłużacz	30	8	exact	\N	\N	Uwagi do pozycji 169	30	2026-06-14 10:48:49.917292
-170	64	Router	2	9	exact	\N	\N	\N	31	2026-06-14 10:48:49.917292
-171	65	Przedłużacz	18	8	exact	\N	\N	Uwagi do pozycji 171	32	2026-06-14 10:48:49.9236
-172	66	Przedłużacz	10	8	exact	\N	\N	Uwagi do pozycji 172	33	2026-06-14 10:48:49.930165
-173	67	Router	1	9	exact	\N	\N	\N	155	2026-06-14 10:48:49.943599
-174	67	Przedłużacz	2	8	exact	\N	\N	Uwagi do pozycji 174	156	2026-06-14 10:48:49.943599
-175	67	Przedłużacz	23	8	exact	\N	\N	Uwagi do pozycji 175	157	2026-06-14 10:48:49.943599
-176	67	Przedłużacz	2	8	exact	\N	\N	Uwagi do pozycji 176	158	2026-06-14 10:48:49.943599
-177	68	TV 45'	1	17	fuzzy	\N	\N	Uwagi do pozycji 177	34	2026-06-14 10:48:49.953762
-178	68	TV 55'	2	17	fuzzy	\N	\N	\N	35	2026-06-14 10:48:49.953762
-179	69	inne	3	\N	none	\N	\N	Uwagi do pozycji 179	127	2026-06-14 10:48:49.971703
-180	69	Telefon	1	18	exact	\N	\N	Uwagi do pozycji 180	128	2026-06-14 10:48:49.971703
-181	70	Przedłużacz	15	8	exact	\N	\N	\N	57	2026-06-14 10:48:49.979591
-182	70	Laptop	1	1	exact	\N	\N	\N	87	2026-06-14 10:48:49.979591
-183	71	Telefon	1	18	exact	\N	\N	Uwagi do pozycji 183	101	2026-06-14 10:48:49.98658
-184	72	Monitor	2	21	exact	\N	\N	Uwagi do pozycji 184	111	2026-06-14 10:48:49.996506
-185	73	Przedłużacz	50	8	exact	\N	\N	\N	138	2026-06-14 10:48:50.012719
-186	73	TV 55'	6	17	fuzzy	\N	\N	\N	139	2026-06-14 10:48:50.012719
-187	73	Monitor	13	21	exact	\N	\N	\N	140	2026-06-14 10:48:50.012719
-188	73	Projektor z Ekranem	1	\N	none	\N	\N	\N	141	2026-06-14 10:48:50.012719
-189	73	Głośniki (male)	1	5	fuzzy	\N	\N	\N	142	2026-06-14 10:48:50.012719
-190	73	TV 45'	1	17	fuzzy	\N	\N	\N	143	2026-06-14 10:48:50.012719
-191	73	Laptop	1	1	exact	\N	\N	Uwagi do pozycji 191	144	2026-06-14 10:48:50.012719
-192	74	Laptop	10	1	exact	\N	\N	\N	58	2026-06-14 10:48:50.024588
-193	74	Przedłużacz	15	8	exact	\N	\N	\N	59	2026-06-14 10:48:50.024588
-194	74	Router	1	9	exact	\N	\N	\N	60	2026-06-14 10:48:50.024588
-195	74	Skaner Kodów	12	19	exact	\N	\N	\N	61	2026-06-14 10:48:50.024588
-196	75	Drukarka A4	1	2	exact	\N	\N	Uwagi do pozycji 196	50	2026-06-14 10:48:50.039408
-197	75	Przedłużacz	30	8	exact	\N	\N	Uwagi do pozycji 197	51	2026-06-14 10:48:50.039408
-203	77	Router	1	9	exact	\N	\N	\N	62	2026-06-14 10:48:50.069421
-204	78	Laptop	6	1	exact	\N	\N	Uwagi do pozycji 204	17	2026-06-14 10:48:50.08216
-205	78	Drukarka A4	1	2	exact	\N	\N	\N	19	2026-06-14 10:48:50.08216
-206	78	Przedłużacz	10	8	exact	\N	\N	Uwagi do pozycji 206	20	2026-06-14 10:48:50.08216
-207	78	TV 55'	6	17	fuzzy	\N	\N	\N	22	2026-06-14 10:48:50.08216
-208	79	Przedłużacz	60	8	exact	\N	\N	\N	98	2026-06-14 10:48:50.089688
-209	80	Tablet	8	6	exact	\N	\N	Uwagi do pozycji 209	27	2026-06-14 10:48:50.098954
-210	81	Telefon	2	18	exact	\N	\N	\N	99	2026-06-14 10:48:50.108264
-211	82	Monitor	4	21	exact	\N	\N	Uwagi do pozycji 211	2	2026-06-14 10:48:50.115688
-212	82	TV 70'	1	16	fuzzy	\N	\N	\N	3	2026-06-14 10:48:50.115688
-213	82	Drukarka A4	1	2	exact	\N	\N	\N	4	2026-06-14 10:48:50.115688
-214	82	Router	1	9	exact	\N	\N	Uwagi do pozycji 214	5	2026-06-14 10:48:50.115688
-215	83	Laptop	1	1	exact	\N	\N	Uwagi do pozycji 215	24	2026-06-14 10:48:50.121447
-216	84	Laptop	\N	1	exact	\N	\N	Uwagi do pozycji 216	137	2026-06-14 10:48:50.135315
-217	85	Drukarka A4	1	2	exact	\N	\N	Uwagi do pozycji 217	12	2026-06-14 10:48:50.143017
-218	85	Laptop	3	1	exact	\N	\N	\N	13	2026-06-14 10:48:50.143017
-219	85	Przedłużacz	10	8	exact	\N	\N	Uwagi do pozycji 219	14	2026-06-14 10:48:50.143017
-220	85	Tablet	2	6	exact	\N	\N	Uwagi do pozycji 220	15	2026-06-14 10:48:50.143017
-221	85	Telefon	5	18	exact	\N	\N	Uwagi do pozycji 221	16	2026-06-14 10:48:50.143017
-222	86	Router	1	9	exact	\N	\N	\N	26	2026-06-14 10:48:50.151506
-223	87	Przedłużacz	1	8	exact	\N	\N	Uwagi do pozycji 223	28	2026-06-14 10:48:50.166293
-224	88	Laptop	3	1	exact	\N	\N	Uwagi do pozycji 224	49	2026-06-14 10:48:50.172732
-225	89	Laptop	2	1	exact	\N	\N	Uwagi do pozycji 225	18	2026-06-14 10:48:50.185186
-226	89	Przedłużacz	2	8	exact	\N	\N	Uwagi do pozycji 226	21	2026-06-14 10:48:50.185186
-227	89	TV 55'	2	17	fuzzy	\N	\N	\N	23	2026-06-14 10:48:50.185186
-228	90	Laptop	11	1	exact	\N	\N	Uwagi do pozycji 228	63	2026-06-14 10:48:50.192725
-229	90	Drukarka A4	2	2	exact	\N	\N	Uwagi do pozycji 229	64	2026-06-14 10:48:50.192725
-230	90	Router	1	9	exact	\N	\N	Uwagi do pozycji 230	65	2026-06-14 10:48:50.192725
-231	90	Tablet	3	6	exact	\N	\N	Uwagi do pozycji 231	66	2026-06-14 10:48:50.192725
-232	90	Przedłużacz	20	8	exact	\N	\N	Uwagi do pozycji 232	67	2026-06-14 10:48:50.192725
-233	90	Przedłużacz	6	8	exact	\N	\N	Uwagi do pozycji 233	68	2026-06-14 10:48:50.192725
-234	90	Telefon	6	18	exact	\N	\N	Uwagi do pozycji 234	69	2026-06-14 10:48:50.192725
-235	91	Laptop	\N	1	exact	\N	\N	Uwagi do pozycji 235	135	2026-06-14 10:48:50.20514
-236	92	Laptop	2	1	exact	\N	\N	\N	52	2026-06-14 10:48:50.213685
-237	92	Drukarka A4	1	2	exact	\N	\N	\N	53	2026-06-14 10:48:50.213685
-238	92	Telefon	1	18	exact	\N	\N	\N	54	2026-06-14 10:48:50.213685
-239	92	TV 70'	1	16	fuzzy	\N	\N	Uwagi do pozycji 239	55	2026-06-14 10:48:50.213685
-240	92	Przedłużacz	3	8	exact	\N	\N	\N	56	2026-06-14 10:48:50.213685
-241	93	Drukarka A4	1	2	exact	\N	\N	\N	25	2026-06-14 10:48:50.223442
-242	94	Drukarka A4	2	2	exact	\N	\N	Uwagi do pozycji 242	36	2026-06-14 10:48:50.231653
-243	94	Głośniki (Duże)	2	4	exact	\N	\N	\N	37	2026-06-14 10:48:50.231653
-244	94	Laptop	4	1	exact	\N	\N	Uwagi do pozycji 244	38	2026-06-14 10:48:50.231653
-245	94	Mikrofon	2	20	exact	\N	\N	\N	39	2026-06-14 10:48:50.231653
-246	94	Przedłużacz	40	8	exact	\N	\N	\N	40	2026-06-14 10:48:50.231653
-247	94	TV 55'	7	17	fuzzy	\N	\N	Uwagi do pozycji 247	41	2026-06-14 10:48:50.231653
-248	94	TV 70'	1	16	fuzzy	\N	\N	Uwagi do pozycji 248	42	2026-06-14 10:48:50.231653
-249	94	kamerka	1	32	fuzzy	\N	\N	Uwagi do pozycji 249	48	2026-06-14 10:48:50.231653
+COPY public.equipment_request_items (id, quest_id, item_name, quantity, category_id, budget_owner, notes, created_at) FROM stdin;
+250	95	Głośniki (Duże)	1	4	\N	\N	2026-06-18 10:26:13.654138
+2	2	Drukarka A4	2	2	\N	\N	2026-06-13 23:57:38.482058
+3	2	Laptop	4	1	\N	\N	2026-06-13 23:57:38.482058
+4	2	Przedłużacz	15	8	\N	\N	2026-06-13 23:57:38.482058
+5	2	Tablet	3	6	\N	\N	2026-06-13 23:57:38.482058
+6	2	Telefon	1	18	\N	\N	2026-06-13 23:57:38.482058
+7	2	Router	1	9	\N	\N	2026-06-13 23:57:38.482058
+251	95	Laptop	1	1	\N	Uwagi do pozycji 251	2026-06-18 10:26:13.654138
+252	95	Mikrofon	1	20	\N	\N	2026-06-18 10:26:13.654138
+253	95	Przedłużacz	4	8	\N	\N	2026-06-18 10:26:13.654138
+254	95	TV 55'	1	17	\N	Uwagi do pozycji 254	2026-06-18 10:26:13.654138
+12	5	Przedłużacz	3	8	\N	Uwagi do pozycji 12	2026-06-13 23:57:38.51051
+13	5	Telefon	1	18	\N	Uwagi do pozycji 13	2026-06-13 23:57:38.51051
+20	8	Drukarka A4	2	2	\N	\N	2026-06-13 23:57:38.535801
+21	9	Przedłużacz	3	8	\N	\N	2026-06-13 23:57:38.5427
+22	9	Drukarka A4	1	2	\N	\N	2026-06-13 23:57:38.5427
+23	9	Laptop	1	1	\N	\N	2026-06-13 23:57:38.5427
+24	10	Drukarka A4	1	2	\N	Uwagi do pozycji 24	2026-06-13 23:57:38.551007
+25	10	Cartridge do drukarki	1	\N	\N	Uwagi do pozycji 25	2026-06-13 23:57:38.551007
+26	10	Głośniki (male)	1	5	\N	\N	2026-06-13 23:57:38.551007
+27	10	Laptop	4	1	\N	Uwagi do pozycji 27	2026-06-13 23:57:38.551007
+28	10	Przedłużacz	15	8	\N	Uwagi do pozycji 28	2026-06-13 23:57:38.551007
+29	10	Telefon	3	18	\N	Uwagi do pozycji 29	2026-06-13 23:57:38.551007
+30	10	TV 55'	1	17	\N	Uwagi do pozycji 30	2026-06-13 23:57:38.551007
+31	11	Telefon	4	18	\N	Uwagi do pozycji 31	2026-06-13 23:57:38.559897
+36	15	Przedłużacz	5	8	\N	Uwagi do pozycji 36	2026-06-13 23:57:38.59566
+37	16	Router	1	9	\N	\N	2026-06-13 23:57:38.60367
+38	16	Przedłużacz	4	8	\N	\N	2026-06-13 23:57:38.60367
+59	21	Drukarka A3	1	3	\N	Uwagi do pozycji 59	2026-06-13 23:57:38.65471
+60	21	Drukarka A4	1	2	\N	Uwagi do pozycji 60	2026-06-13 23:57:38.65471
+61	21	Laptop	2	1	\N	\N	2026-06-13 23:57:38.65471
+62	21	Przedłużacz	5	8	\N	Uwagi do pozycji 62	2026-06-13 23:57:38.65471
+75	26	Drukarka A4	1	2	\N	\N	2026-06-13 23:57:38.705504
+76	26	Głośniki (Duże)	1	4	\N	Uwagi do pozycji 76	2026-06-13 23:57:38.705504
+77	26	Laptop	2	1	\N	\N	2026-06-13 23:57:38.705504
+78	26	Przedłużacz	6	8	\N	\N	2026-06-13 23:57:38.705504
+79	27	TV 70'	1	16	\N	Uwagi do pozycji 79	2026-06-13 23:57:38.711861
+80	27	TV 45'	1	17	\N	\N	2026-06-13 23:57:38.711861
+81	27	TV 55'	4	17	\N	\N	2026-06-13 23:57:38.711861
+85	31	Projektor z Ekranem	1	\N	\N	Uwagi do pozycji 85	2026-06-13 23:57:38.73957
+86	32	Przedłużacz	10	8	\N	\N	2026-06-13 23:57:38.747445
+96	36	Router	1	9	\N	\N	2026-06-13 23:57:38.775249
+97	36	Telefon	1	18	\N	\N	2026-06-13 23:57:38.775249
+98	37	Router	1	9	\N	\N	2026-06-13 23:57:38.782519
+99	38	Przedłużacz	1	8	\N	\N	2026-06-13 23:57:38.791303
+100	38	Drukarka A3	1	3	\N	Uwagi do pozycji 100	2026-06-13 23:57:38.791303
+101	39	Przedłużacz	3	8	\N	\N	2026-06-13 23:57:38.799428
+102	39	Drukarka A4	1	2	\N	Uwagi do pozycji 102	2026-06-13 23:57:38.799428
+103	40	Przedłużacz	1	8	\N	Uwagi do pozycji 103	2026-06-13 23:57:38.806623
+104	40	Przedłużacz	1	8	\N	Uwagi do pozycji 104	2026-06-13 23:57:38.806623
+105	41	Laptop	3	1	\N	Uwagi do pozycji 105	2026-06-13 23:57:38.81791
+106	41	Przedłużacz	2	8	\N	Uwagi do pozycji 106	2026-06-13 23:57:38.81791
+107	41	Głośniki (Duże)	1	4	\N	Uwagi do pozycji 107	2026-06-13 23:57:38.81791
+108	42	TV 70'	1	16	\N	Uwagi do pozycji 108	2026-06-13 23:57:38.825875
+109	42	Laptop	1	1	\N	Uwagi do pozycji 109	2026-06-13 23:57:38.825875
+110	42	Przedłużacz	40	8	\N	\N	2026-06-13 23:57:38.825875
+111	42	Kabel jack 3.5 mm	1	\N	\N	\N	2026-06-13 23:57:38.825875
+112	42	Cartridge do drukarki	3	\N	\N	Uwagi do pozycji 112	2026-06-13 23:57:38.825875
+120	45	Monitor	1	21	\N	\N	2026-06-13 23:57:38.85129
+122	47	Przedłużacz	2	8	\N	Uwagi do pozycji 122	2026-06-13 23:57:38.864201
+123	47	Laptop	1	1	\N	Uwagi do pozycji 123	2026-06-13 23:57:38.864201
+124	48	Przedłużacz	2	8	\N	Uwagi do pozycji 124	2026-06-13 23:57:38.87316
+125	48	Router	1	9	\N	Uwagi do pozycji 125	2026-06-13 23:57:38.87316
+126	49	Przedłużacz	5	8	\N	\N	2026-06-13 23:57:38.881195
+127	50	Przedłużacz	30	8	\N	Uwagi do pozycji 127	2026-06-13 23:57:38.889091
+128	50	TV 55'	3	17	\N	Uwagi do pozycji 128	2026-06-13 23:57:38.889091
+129	50	Laptop	1	1	\N	Uwagi do pozycji 129	2026-06-13 23:57:38.889091
+141	54	Przedłużacz	2	8	\N	Uwagi do pozycji 141	2026-06-13 23:57:38.92555
+142	54	Laptop	2	1	\N	Uwagi do pozycji 142	2026-06-13 23:57:38.92555
+153	57	Projektor / TV	1	\N	\N	Uwagi do pozycji 153	2026-06-13 23:57:38.95181
+155	59	Laptop	11	1	\N	\N	2026-06-13 23:57:38.967658
+156	60	Przedłużacz	2	8	\N	Uwagi do pozycji 156	2026-06-13 23:57:38.974617
+157	60	Laptop	1	1	\N	Uwagi do pozycji 157	2026-06-13 23:57:38.974617
+158	61	TV 55'	2	17	\N	Uwagi do pozycji 158	2026-06-14 10:48:49.875453
+159	61	TV 45'	2	17	\N	Uwagi do pozycji 159	2026-06-14 10:48:49.875453
+160	61	Monitor	3	21	\N	\N	2026-06-14 10:48:49.875453
+161	62	Laptop	\N	1	\N	Uwagi do pozycji 161	2026-06-14 10:48:49.902819
+162	63	Laptop	5	1	\N	Uwagi do pozycji 162	2026-06-14 10:48:49.909839
+163	63	Drukarka A4	1	2	\N	\N	2026-06-14 10:48:49.909839
+164	63	Przedłużacz	4	8	\N	\N	2026-06-14 10:48:49.909839
+165	63	Głośniki (male)	1	5	\N	\N	2026-06-14 10:48:49.909839
+166	63	Telefon	1	18	\N	\N	2026-06-14 10:48:49.909839
+167	63	TV 55'	1	17	\N	Uwagi do pozycji 167	2026-06-14 10:48:49.909839
+168	64	Drukarka A4	1	2	\N	\N	2026-06-14 10:48:49.917292
+169	64	Przedłużacz	30	8	\N	Uwagi do pozycji 169	2026-06-14 10:48:49.917292
+170	64	Router	2	9	\N	\N	2026-06-14 10:48:49.917292
+171	65	Przedłużacz	18	8	\N	Uwagi do pozycji 171	2026-06-14 10:48:49.9236
+172	66	Przedłużacz	10	8	\N	Uwagi do pozycji 172	2026-06-14 10:48:49.930165
+173	67	Router	1	9	\N	\N	2026-06-14 10:48:49.943599
+174	67	Przedłużacz	2	8	\N	Uwagi do pozycji 174	2026-06-14 10:48:49.943599
+175	67	Przedłużacz	23	8	\N	Uwagi do pozycji 175	2026-06-14 10:48:49.943599
+176	67	Przedłużacz	2	8	\N	Uwagi do pozycji 176	2026-06-14 10:48:49.943599
+177	68	TV 45'	1	17	\N	Uwagi do pozycji 177	2026-06-14 10:48:49.953762
+178	68	TV 55'	2	17	\N	\N	2026-06-14 10:48:49.953762
+179	69	inne	3	\N	\N	Uwagi do pozycji 179	2026-06-14 10:48:49.971703
+180	69	Telefon	1	18	\N	Uwagi do pozycji 180	2026-06-14 10:48:49.971703
+181	70	Przedłużacz	15	8	\N	\N	2026-06-14 10:48:49.979591
+182	70	Laptop	1	1	\N	\N	2026-06-14 10:48:49.979591
+183	71	Telefon	1	18	\N	Uwagi do pozycji 183	2026-06-14 10:48:49.98658
+184	72	Monitor	2	21	\N	Uwagi do pozycji 184	2026-06-14 10:48:49.996506
+185	73	Przedłużacz	50	8	\N	\N	2026-06-14 10:48:50.012719
+186	73	TV 55'	6	17	\N	\N	2026-06-14 10:48:50.012719
+187	73	Monitor	13	21	\N	\N	2026-06-14 10:48:50.012719
+188	73	Projektor z Ekranem	1	\N	\N	\N	2026-06-14 10:48:50.012719
+189	73	Głośniki (male)	1	5	\N	\N	2026-06-14 10:48:50.012719
+190	73	TV 45'	1	17	\N	\N	2026-06-14 10:48:50.012719
+191	73	Laptop	1	1	\N	Uwagi do pozycji 191	2026-06-14 10:48:50.012719
+192	74	Laptop	10	1	\N	\N	2026-06-14 10:48:50.024588
+193	74	Przedłużacz	15	8	\N	\N	2026-06-14 10:48:50.024588
+194	74	Router	1	9	\N	\N	2026-06-14 10:48:50.024588
+195	74	Skaner Kodów	12	19	\N	\N	2026-06-14 10:48:50.024588
+196	75	Drukarka A4	1	2	\N	Uwagi do pozycji 196	2026-06-14 10:48:50.039408
+197	75	Przedłużacz	30	8	\N	Uwagi do pozycji 197	2026-06-14 10:48:50.039408
+203	77	Router	1	9	\N	\N	2026-06-14 10:48:50.069421
+204	78	Laptop	6	1	\N	Uwagi do pozycji 204	2026-06-14 10:48:50.08216
+205	78	Drukarka A4	1	2	\N	\N	2026-06-14 10:48:50.08216
+206	78	Przedłużacz	10	8	\N	Uwagi do pozycji 206	2026-06-14 10:48:50.08216
+207	78	TV 55'	6	17	\N	\N	2026-06-14 10:48:50.08216
+208	79	Przedłużacz	60	8	\N	\N	2026-06-14 10:48:50.089688
+209	80	Tablet	8	6	\N	Uwagi do pozycji 209	2026-06-14 10:48:50.098954
+210	81	Telefon	2	18	\N	\N	2026-06-14 10:48:50.108264
+211	82	Monitor	4	21	\N	Uwagi do pozycji 211	2026-06-14 10:48:50.115688
+212	82	TV 70'	1	16	\N	\N	2026-06-14 10:48:50.115688
+213	82	Drukarka A4	1	2	\N	\N	2026-06-14 10:48:50.115688
+214	82	Router	1	9	\N	Uwagi do pozycji 214	2026-06-14 10:48:50.115688
+215	83	Laptop	1	1	\N	Uwagi do pozycji 215	2026-06-14 10:48:50.121447
+216	84	Laptop	\N	1	\N	Uwagi do pozycji 216	2026-06-14 10:48:50.135315
+217	85	Drukarka A4	1	2	\N	Uwagi do pozycji 217	2026-06-14 10:48:50.143017
+218	85	Laptop	3	1	\N	\N	2026-06-14 10:48:50.143017
+219	85	Przedłużacz	10	8	\N	Uwagi do pozycji 219	2026-06-14 10:48:50.143017
+220	85	Tablet	2	6	\N	Uwagi do pozycji 220	2026-06-14 10:48:50.143017
+221	85	Telefon	5	18	\N	Uwagi do pozycji 221	2026-06-14 10:48:50.143017
+222	86	Router	1	9	\N	\N	2026-06-14 10:48:50.151506
+223	87	Przedłużacz	1	8	\N	Uwagi do pozycji 223	2026-06-14 10:48:50.166293
+224	88	Laptop	3	1	\N	Uwagi do pozycji 224	2026-06-14 10:48:50.172732
+225	89	Laptop	2	1	\N	Uwagi do pozycji 225	2026-06-14 10:48:50.185186
+226	89	Przedłużacz	2	8	\N	Uwagi do pozycji 226	2026-06-14 10:48:50.185186
+227	89	TV 55'	2	17	\N	\N	2026-06-14 10:48:50.185186
+228	90	Laptop	11	1	\N	Uwagi do pozycji 228	2026-06-14 10:48:50.192725
+229	90	Drukarka A4	2	2	\N	Uwagi do pozycji 229	2026-06-14 10:48:50.192725
+230	90	Router	1	9	\N	Uwagi do pozycji 230	2026-06-14 10:48:50.192725
+231	90	Tablet	3	6	\N	Uwagi do pozycji 231	2026-06-14 10:48:50.192725
+232	90	Przedłużacz	20	8	\N	Uwagi do pozycji 232	2026-06-14 10:48:50.192725
+233	90	Przedłużacz	6	8	\N	Uwagi do pozycji 233	2026-06-14 10:48:50.192725
+234	90	Telefon	6	18	\N	Uwagi do pozycji 234	2026-06-14 10:48:50.192725
+235	91	Laptop	\N	1	\N	Uwagi do pozycji 235	2026-06-14 10:48:50.20514
+236	92	Laptop	2	1	\N	\N	2026-06-14 10:48:50.213685
+237	92	Drukarka A4	1	2	\N	\N	2026-06-14 10:48:50.213685
+238	92	Telefon	1	18	\N	\N	2026-06-14 10:48:50.213685
+239	92	TV 70'	1	16	\N	Uwagi do pozycji 239	2026-06-14 10:48:50.213685
+240	92	Przedłużacz	3	8	\N	\N	2026-06-14 10:48:50.213685
+241	93	Drukarka A4	1	2	\N	\N	2026-06-14 10:48:50.223442
+242	94	Drukarka A4	2	2	\N	Uwagi do pozycji 242	2026-06-14 10:48:50.231653
+243	94	Głośniki (Duże)	2	4	\N	\N	2026-06-14 10:48:50.231653
+244	94	Laptop	4	1	\N	Uwagi do pozycji 244	2026-06-14 10:48:50.231653
+245	94	Mikrofon	2	20	\N	\N	2026-06-14 10:48:50.231653
+246	94	Przedłużacz	40	8	\N	\N	2026-06-14 10:48:50.231653
+247	94	TV 55'	7	17	\N	Uwagi do pozycji 247	2026-06-14 10:48:50.231653
+248	94	TV 70'	1	16	\N	Uwagi do pozycji 248	2026-06-14 10:48:50.231653
+249	94	kamerka	1	32	\N	Uwagi do pozycji 249	2026-06-14 10:48:50.231653
 \.
 
 

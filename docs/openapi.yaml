@@ -3066,6 +3066,12 @@ components:
           format: date
           description: When equipment should be delivered
           example: "2025-06-13"
+        return_date:
+          type: string
+          format: date
+          nullable: true
+          description: When the equipment comes back (null for sheet quests)
+          example: "2025-06-16"
         pickup_time:
           type: string
           nullable: true
@@ -3113,17 +3119,13 @@ components:
           description: Whether the destination location was successfully resolved
           default: false
           example: true
-        source_rows:
-          type: array
-          description: Source spreadsheet row numbers for debugging
-          items:
-            type: integer
-          example: [115, 116]
-        last_synced:
+        source:
           type: string
-          format: date-time
-          description: When this quest was last synced from sheet
-          example: "2026-02-15T23:40:24Z"
+          description: Where the quest came from — `sheet` (historic Google Sheets import) or `shop` (confirmed organizer shop order)
+          enum:
+            - sheet
+            - shop
+          example: "shop"
 
     QuestDestination:
       type: object
@@ -3144,36 +3146,24 @@ components:
       properties:
         name:
           type: string
-          description: Item name from spreadsheet
+          description: Item name as ordered
           example: "Laptop"
         quantity:
           type: integer
           minimum: 1
           nullable: true
-          description: Quantity requested. Null when the source sheet left it blank — the dispatcher must supply a quantity before a transfer can be created.
+          description: Quantity requested. Null when unknown (historic sheet items left it blank) — the dispatcher must supply a quantity before a transfer can be created.
           example: 4
         category_id:
           type: integer
           nullable: true
-          description: Matched item category ID (if found)
+          description: Item category ID (null only for historic sheet items that matched no category)
           example: 123
-        category_match:
+        category_name:
           type: string
-          description: How the category was matched
-          enum:
-            - exact
-            - fuzzy
-            - manual
-            - none
-          example: "exact"
-        category_match_confidence:
-          type: number
-          format: float
-          minimum: 0
-          maximum: 1
           nullable: true
-          description: Confidence score for fuzzy matches (0.00-1.00)
-          example: 0.85
+          description: Category label (read-only)
+          example: "Laptop"
         budget_owner:
           type: string
           nullable: true

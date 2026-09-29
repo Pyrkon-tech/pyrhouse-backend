@@ -72,24 +72,23 @@ type QuestDB struct {
 	LocationID          *int       `db:"location_id"`
 	LocationName        *string    `db:"location_name"`
 	LocationResolved    bool       `db:"location_resolved"`
-	LastSyncedAt        time.Time  `db:"last_synced_at"`
+	Source              string     `db:"source"`
+	ReturnDate          *time.Time `db:"return_date"`
 	CreatedAt           time.Time  `db:"created_at"`
 	CompletedAt         *time.Time `db:"completed_at"`
 }
 
 // ItemDB represents item as stored in database
 type ItemDB struct {
-	ID                      int       `db:"id"`
-	QuestID                 int       `db:"quest_id"`
-	ItemName                string    `db:"item_name"`
-	Quantity                *int      `db:"quantity"`
-	CategoryID              *int      `db:"category_id"`
-	CategoryMatchType       string    `db:"category_match_type"`
-	CategoryMatchConfidence *float64  `db:"category_match_confidence"`
-	BudgetOwner             *string   `db:"budget_owner"`
-	Notes                   *string   `db:"notes"`
-	SourceRowNumber         *int      `db:"source_row_number"`
-	CreatedAt               time.Time `db:"created_at"`
+	ID           int       `db:"id"`
+	QuestID      int       `db:"quest_id"`
+	ItemName     string    `db:"item_name"`
+	Quantity     *int      `db:"quantity"`
+	CategoryID   *int      `db:"category_id"`
+	CategoryName *string   `db:"category_name"`
+	BudgetOwner  *string   `db:"budget_owner"`
+	Notes        *string   `db:"notes"`
+	CreatedAt    time.Time `db:"created_at"`
 }
 
 // CreateQuest creates a new quest with its items in a transaction
@@ -111,7 +110,7 @@ func (r *Repository) CreateQuest(ctx context.Context, quest *Quest) error {
 		if len(quest.Items) > 0 {
 			itemRecords := make([]interface{}, 0, len(quest.Items))
 			for i := range quest.Items {
-				itemRecord := r.itemToRecord(questDBID, &quest.Items[i], quest.SourceRows[i])
+				itemRecord := r.itemToRecord(questDBID, &quest.Items[i])
 				itemRecords = append(itemRecords, itemRecord)
 			}
 
@@ -140,7 +139,6 @@ func (r *Repository) UpdateQuest(ctx context.Context, questID string, quest *Que
 
 		// 1. Update quest
 		questRecord := r.questToRecord(quest)
-		questRecord["last_synced_at"] = time.Now()
 
 		if _, err := tx.Update("equipment_request_quests").
 			Set(questRecord).
@@ -160,7 +158,7 @@ func (r *Repository) UpdateQuest(ctx context.Context, questID string, quest *Que
 		if len(quest.Items) > 0 {
 			itemRecords := make([]interface{}, 0, len(quest.Items))
 			for i := range quest.Items {
-				itemRecord := r.itemToRecord(questDBID, &quest.Items[i], quest.SourceRows[i])
+				itemRecord := r.itemToRecord(questDBID, &quest.Items[i])
 				itemRecords = append(itemRecords, itemRecord)
 			}
 
@@ -432,10 +430,11 @@ func (r *Repository) getItemsByQuestDBID(ctx context.Context, questDBID int) ([]
 	var items []ItemDB
 
 	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_items").
-		Where(goqu.Ex{"quest_id": questDBID}).
-		Order(goqu.I("id").Asc())
+		Select(goqu.I("i.*"), goqu.I("ic.label").As("category_name")).
+		From(goqu.T("equipment_request_items").As("i")).
+		LeftJoin(goqu.T("item_category").As("ic"), goqu.On(goqu.I("ic.id").Eq(goqu.I("i.category_id")))).
+		Where(goqu.Ex{"i.quest_id": questDBID}).
+		Order(goqu.I("i.id").Asc())
 
 	if err := query.Executor().ScanStructs(&items); err != nil {
 		return nil, fmt.Errorf("failed to fetch quest items: %w", err)
@@ -454,6 +453,11 @@ func (r *Repository) questToRecord(quest *Quest) goqu.Record {
 		"recipient":            quest.Recipient,
 		"status":               quest.Status,
 		"location_resolved":    quest.LocationResolved,
+		"source":               quest.Source,
+		"return_date":          nil,
+	}
+	if quest.ReturnDate != nil {
+		record["return_date"] = *quest.ReturnDate
 	}
 	if quest.DeliveryDate != "" {
 		record["delivery_date"] = quest.DeliveryDate
@@ -476,18 +480,16 @@ func (r *Repository) questToRecord(quest *Quest) goqu.Record {
 
 // Helper: Convert QuestItem to database record.
 // All columns must be present for batch insert — goqu requires identical keys across rows.
-func (r *Repository) itemToRecord(questDBID int, item *QuestItem, sourceRow int) goqu.Record {
+func (r *Repository) itemToRecord(questDBID int, item *QuestItem) goqu.Record {
 	var qty interface{}
 	if item.Quantity != nil {
 		qty = *item.Quantity
 	}
 
 	record := goqu.Record{
-		"quest_id":            questDBID,
-		"item_name":           item.Name,
-		"quantity":            qty,
-		"category_match_type": item.CategoryMatch,
-		"source_row_number":   sourceRow,
+		"quest_id":  questDBID,
+		"item_name": item.Name,
+		"quantity":  qty,
 	}
 
 	var catID interface{}
@@ -495,12 +497,6 @@ func (r *Repository) itemToRecord(questDBID int, item *QuestItem, sourceRow int)
 		catID = *item.CategoryID
 	}
 	record["category_id"] = catID
-
-	var conf interface{}
-	if item.CategoryMatchConfidence != 0.0 {
-		conf = item.CategoryMatchConfidence
-	}
-	record["category_match_confidence"] = conf
 
 	var notes interface{}
 	if item.Notes != "" {
@@ -764,9 +760,8 @@ func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 		LocationID:         questDB.LocationID,
 		LocationName:       questDB.LocationName,
 		LocationResolved:   questDB.LocationResolved,
-		LastSynced:         questDB.LastSyncedAt,
+		Source:             questDB.Source,
 		Items:              make([]QuestItem, len(itemsDB)),
-		SourceRows:         make([]int, len(itemsDB)),
 		Transfers:          []QuestTransfer{},
 		AssignedVolunteers: []QuestVolunteer{},
 	}
@@ -777,27 +772,25 @@ func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 	if questDB.BudgetOwner != nil {
 		quest.BudgetOwner = *questDB.BudgetOwner
 	}
+	if questDB.ReturnDate != nil {
+		d := questDB.ReturnDate.Format("2006-01-02")
+		quest.ReturnDate = &d
+	}
 
 	// Convert items
 	for i, itemDB := range itemsDB {
 		quest.Items[i] = QuestItem{
-			Name:          itemDB.ItemName,
-			Quantity:      itemDB.Quantity,
-			CategoryID:    itemDB.CategoryID,
-			CategoryMatch: itemDB.CategoryMatchType,
+			Name:         itemDB.ItemName,
+			Quantity:     itemDB.Quantity,
+			CategoryID:   itemDB.CategoryID,
+			CategoryName: itemDB.CategoryName,
 		}
 
-		if itemDB.CategoryMatchConfidence != nil {
-			quest.Items[i].CategoryMatchConfidence = *itemDB.CategoryMatchConfidence
-		}
 		if itemDB.Notes != nil {
 			quest.Items[i].Notes = *itemDB.Notes
 		}
 		if itemDB.BudgetOwner != nil {
 			quest.Items[i].BudgetOwner = *itemDB.BudgetOwner
-		}
-		if itemDB.SourceRowNumber != nil {
-			quest.SourceRows[i] = *itemDB.SourceRowNumber
 		}
 	}
 
