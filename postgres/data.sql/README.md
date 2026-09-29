@@ -1,124 +1,44 @@
 # Fixtures dla systemu magazynowego
 
-## Opis
+`fixtures.sql` to dane testowe zbudowane ze zrzutu bazy staging i zanonimizowane — do środowiska deweloperskiego,
+podglądu i testów e2e.
 
-Plik `fixtures.sql` zawiera dane testowe dla systemu magazynowego Pyrkon. Dane zostały pobrane z produkcji i zanonimizowane w celu bezpiecznego użycia w środowisku deweloperskim.
+## Jak użyć
 
-## Zawartość
+Na zmigrowanej bazie (plik zaczyna się od `TRUNCATE` wszystkich tabel poza `schema_migrations`, więc zastępuje ich
+zawartość):
 
-Plik zawiera następujące dane:
-
-### Kategorie przedmiotów (item_category)
-- 37 różnych kategorii przedmiotów
-- Podział na typy: `asset` (przedmioty seryjne) i `stock` (przedmioty nieseryjne)
-- Przykłady: laptopy, drukarki, telewizory, kable, przedłużacze
-
-### Lokalizacje (locations)
-- 41 różnych lokalizacji na terenie festiwalu
-- Zawiera informacje o pawilonach i szczegółach lokalizacji
-- Przykłady: Magazyn Techniczny, HQ, RedRoom, Biuro Akredytacji
-
-### Użytkownicy (users)
-- 31 użytkowników z różnymi rolami
-- Role: admin, moderator, user
-- Hasła są zanonimizowane (hash bcrypt)
-
-### Przedmioty seryjne (items)
-- 120 przedmiotów seryjnych (assets)
-- Różne statusy: located, available
-- Przykłady: laptopy, drukarki, telewizory, tablety, telefony
-
-### Przedmioty nieseryjne (non_serialized_items)
-- 27 pozycji magazynowych (stock items)
-- Różne ilości i lokalizacje
-- Przykłady: przedłużacze, kable, skanery kodów
-
-## Użycie
-
-### Import do bazy danych
-
-```bash
-# Po uruchomieniu migracji
-psql -d warehouse -f postgres/data.sql/fixtures.sql
+```sh
+docker exec -i go-test-db-postgres-1 psql -U postgres -d <baza> < postgres/data.sql/fixtures.sql
 ```
 
-### W Docker Compose
+Hasło każdego konta: `pyrhouse`. Pierwszy aktywny admin nazywa się `admin`, pozostali `user<id>`.
 
-```yaml
-# W docker-compose.yml
-services:
-  postgres:
-    volumes:
-      - ./postgres/data.sql/fixtures.sql:/docker-entrypoint-initdb.d/02-fixtures.sql
+## Jak przebudować
+
+Z nowszego zrzutu (plik `.sql` z `pg_dump`, trzymany poza repo — jest w `.gitignore`):
+
+```sh
+sh postgres/build-fixtures.sh staging-pyrhouse-<data>-restore.sql
 ```
 
-### W kodzie Go
+Skrypt odtwarza zrzut w tymczasowej bazie w Postgresie z docker-compose, anonimizuje go (`postgres/anonymize.sql`),
+migruje do bieżącego schematu, zrzuca same dane do `fixtures.sql` i usuwa tymczasową bazę. Niczego ze zrzutu nie
+wypisuje.
 
-```go
-// W main.go lub setup
-db.Exec("\\i postgres/data.sql/fixtures.sql")
-```
+## Co jest anonimizowane
 
-## Struktura danych
+- użytkownicy: login, imię i nazwisko, hasło, Discord (id, nazwa), Google (id, e-mail), avatar;
+- odbiorcy transferów i zapotrzebowań (także w kluczu `quest_key`), właściciele budżetów, geolokalizacja dostaw
+  (przesunięta na teren MTP);
+- wolontariusze: nick, miasto, notatki, potwierdzenie Discord (to pole trzyma nazwę użytkownika Discorda);
+- wolny tekst: zgłoszenia i komentarze Service Desk, notatki wydań i pozycji zapotrzebowań;
+- identyfikatory arkuszy Google w ustawieniach i logach synchronizacji; `audit_logs.data` wyczyszczone, logi przycięte.
 
-### Kategorie przedmiotów
-- `id` - unikalny identyfikator
-- `item_category` - nazwa kategorii (unique)
-- `label` - etykieta wyświetlana
-- `pyr_id` - kod PYR (4 znaki)
-- `category_type` - typ: 'asset' lub 'stock'
+Zamiana jest deterministyczna: ta sama oryginalna wartość dostaje zawsze to samo zastępcze imię i nazwisko, więc
+jeden odbiorca pozostaje jedną osobą w wielu transferach.
 
-### Lokalizacje
-- `id` - unikalny identyfikator
-- `name` - nazwa lokalizacji
-- `details` - szczegóły (opcjonalne)
-- `pavilion` - numer pawilonu (opcjonalne)
+Nie są zmieniane: kategorie, lokalizacje, sprzęt (numery seryjne, kody PYR), stany magazynowe, grafik (sloty,
+przypisania), cennik i dostawcy.
 
-### Użytkownicy
-- `id` - unikalny identyfikator
-- `username` - nazwa użytkownika (unique)
-- `fullname` - pełne imię i nazwisko
-- `password_hash` - hash hasła (bcrypt)
-- `role` - rola: admin, moderator, user
-- `points` - punkty użytkownika
-- `active` - czy konto aktywne
-
-### Przedmioty seryjne
-- `id` - unikalny identyfikator
-- `item_serial` - numer seryjny (opcjonalny)
-- `status` - status: located, available, in_transfer, delivered
-- `location_id` - ID lokalizacji
-- `item_category_id` - ID kategorii
-- `pyr_code` - kod PYR (unique)
-- `origin` - źródło: probis, netland, druga-era, oki-event, other-mortis
-
-### Przedmioty nieseryjne
-- `id` - unikalny identyfikator
-- `item_category_id` - ID kategorii
-- `location_id` - ID lokalizacji
-- `quantity` - ilość
-- `origin` - źródło
-- `status` - status (opcjonalny)
-
-## Uwagi
-
-1. **Sekwencje** - Plik automatycznie resetuje sekwencje po wstawieniu danych
-2. **Klucze obce** - Wszystkie klucze obce są poprawnie skonfigurowane
-3. **Unikalność** - Kody PYR są unikalne dla przedmiotów seryjnych
-4. **Anonimizacja** - Dane zostały zanonimizowane, ale zachowują strukturę produkcyjną
-
-## Aktualizacja
-
-Aby zaktualizować fixture z nowymi danymi z produkcji:
-
-1. Eksportuj dane z produkcji
-2. Zanonimizuj wrażliwe dane
-3. Zaktualizuj plik `fixtures.sql`
-4. Przetestuj import w środowisku deweloperskim
-
-## Bezpieczeństwo
-
-- Hasła są zahashowane za pomocą bcrypt
-- Dane osobowe zostały zanonimizowane
-- Nie zawiera wrażliwych informacji biznesowych
-- Może być bezpiecznie używany w środowisku deweloperskim 
+**Przy nowej kolumnie z danymi osobowymi dopisz ją do `anonymize.sql`.**
