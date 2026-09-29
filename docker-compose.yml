@@ -1,3 +1,5 @@
+name: go-test-db
+
 version: '3.8'
 
 services:
