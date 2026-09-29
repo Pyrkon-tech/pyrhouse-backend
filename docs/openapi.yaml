@@ -2759,10 +2759,10 @@ paths:
         Exchanges a Google authorization code for a shop token. `redirect_uri` must be exactly
         `SHOP_URL + /auth/google/callback`. Access is decided by a policy chain: existing account →
         allowlisted e-mail → invite (`invite_token`) → Google Workspace domain (`hd` claim, configured
-        in shop settings). Rate limited per IP (10 attempts / 5 min).
+        in shop settings). Rate limited per IP (30 attempts / 5 min). Requires PKCE (`code_verifier`, RFC 7636) — the frontend creates the verifier and sends its S256 `code_challenge` to Google.
 
         Error `code` values: `invalid_redirect_uri`, `google_exchange_failed`, `email_not_verified`,
-        `account_inactive`, `invite_invalid`, `access_denied`, `rate_limited`, `shop_login_unavailable`.
+        `account_inactive`, `invite_invalid`, `access_denied`, `login_in_progress` (409), `rate_limited`, `shop_login_unavailable`.
       security: []
       requestBody:
         required: true
@@ -2770,13 +2770,18 @@ paths:
           application/json:
             schema:
               type: object
-              required: [code, redirect_uri]
+              required: [code, redirect_uri, code_verifier]
               properties:
                 code:
                   type: string
                 redirect_uri:
                   type: string
                   example: "https://shop.pyrhouse.space/auth/google/callback"
+                code_verifier:
+                  type: string
+                  minLength: 43
+                  maxLength: 128
+                  description: PKCE verifier whose S256 challenge started the Google login
                 invite_token:
                   type: string
                   description: Plaintext token from an invite link (`/invite/<token>`)
@@ -2796,6 +2801,8 @@ paths:
         "400":
           $ref: "#/components/responses/ShopError"
         "403":
+          $ref: "#/components/responses/ShopError"
+        "409":
           $ref: "#/components/responses/ShopError"
         "429":
           $ref: "#/components/responses/ShopError"

@@ -14,6 +14,7 @@ import (
 
 	"warehouse/internal/config"
 	"warehouse/internal/oauth"
+	"warehouse/internal/rate_limiter"
 	"warehouse/internal/security"
 
 	"github.com/gin-gonic/gin"
@@ -25,13 +26,16 @@ import (
 // Every row these tests create carries a marker (emails "shoptest-…", names/labels "__TEST__…")
 // because all packages share the pyrhouse_test database and run in parallel.
 
-const testShopURL = "https://shop.test.invalid"
+const (
+	testShopURL  = "https://shop.test.invalid"
+	testVerifier = "0123456789abcdef0123456789abcdef0123456789abcdef" // PKCE code_verifier, 48 chars
+)
 
 type fakeGoogle struct {
 	users map[string]oauth.GoogleUser // by authorization code
 }
 
-func (f *fakeGoogle) ExchangeCodeWithURI(code, _ string) (*oauth.GoogleTokenResponse, error) {
+func (f *fakeGoogle) ExchangeCodeWithPKCE(code, _, _ string) (*oauth.GoogleTokenResponse, error) {
 	if _, ok := f.users[code]; !ok {
 		return nil, fmt.Errorf("bad code")
 	}
@@ -136,6 +140,7 @@ func setupShop(t *testing.T) *shopEnv {
 	repo := NewRepository(db)
 	svc := NewService(repo)
 	h := NewHandler(svc, NewAuthService(repo, env.google, testShopURL), repo, testShopURL)
+	h.loginLimiter = rate_limiter.NewRateLimiter(1000, time.Minute)
 	r := gin.New()
 	h.RegisterShopRoutes(r)
 	protected := r.Group("")
@@ -186,6 +191,7 @@ func (e *shopEnv) login(u oauth.GoogleUser, invite string) resp {
 	e.google.users[code] = u
 	return e.do(http.MethodPost, "/shop/auth/google/exchange", "", map[string]any{
 		"code": code, "redirect_uri": testShopURL + "/auth/google/callback", "invite_token": invite,
+		"code_verifier": testVerifier,
 	})
 }
 
@@ -213,9 +219,43 @@ func TestShop_LoginPolicies(t *testing.T) {
 
 	t.Run("wrong redirect_uri", func(t *testing.T) {
 		e.google.users["c1"] = oauth.GoogleUser{Sub: "s1", Email: "shoptest-a@pyrkon.pl", EmailVerified: true, HD: "pyrkon.pl"}
-		r := e.do(http.MethodPost, "/shop/auth/google/exchange", "", map[string]any{"code": "c1", "redirect_uri": "https://evil.example/cb"})
+		r := e.do(http.MethodPost, "/shop/auth/google/exchange", "", map[string]any{"code": "c1", "redirect_uri": "https://evil.example/cb", "code_verifier": testVerifier})
 		assert.Equal(t, http.StatusBadRequest, r.Code)
 		assert.Equal(t, "invalid_redirect_uri", r.Body["code"])
+	})
+
+	t.Run("PKCE code_verifier is required", func(t *testing.T) {
+		e.google.users["c2"] = oauth.GoogleUser{Sub: "s2", Email: "shoptest-b@pyrkon.pl", EmailVerified: true, HD: "pyrkon.pl"}
+		r := e.do(http.MethodPost, "/shop/auth/google/exchange", "", map[string]any{"code": "c2", "redirect_uri": testShopURL + "/auth/google/callback"})
+		assert.Equal(t, http.StatusBadRequest, r.Code)
+	})
+
+	t.Run("unverified e-mail", func(t *testing.T) {
+		r := e.login(oauth.GoogleUser{Sub: "sub-unv", Email: "shoptest-unv@pyrkon.pl", EmailVerified: false, HD: "pyrkon.pl"}, "")
+		assert.Equal(t, "email_not_verified", r.Body["code"])
+	})
+
+	t.Run("domain address without hd (consumer account)", func(t *testing.T) {
+		r := e.login(oauth.GoogleUser{Sub: "sub-nohd", Email: "shoptest-nohd@pyrkon.pl", EmailVerified: true}, "")
+		assert.Equal(t, "access_denied", r.Body["code"])
+	})
+
+	t.Run("expired and revoked invites", func(t *testing.T) {
+		expired := e.do(http.MethodPost, "/admin/shop/invites", e.modToken, map[string]any{"label": "__TEST__expired"})
+		require.Equal(t, http.StatusCreated, expired.Code)
+		_, err := e.db.Exec(`UPDATE shop_invites SET expires_at = now() - interval '1 minute' WHERE id = $1`,
+			num(expired.Body["invite"].(map[string]any)["id"]))
+		require.NoError(t, err)
+		r := e.login(oauth.GoogleUser{Sub: "sub-exp", Email: "shoptest-exp@gmail.com", EmailVerified: true}, expired.Body["token"].(string))
+		assert.Equal(t, "invite_invalid", r.Body["code"])
+
+		revoked := e.do(http.MethodPost, "/admin/shop/invites", e.modToken, map[string]any{"label": "__TEST__revoked"})
+		require.Equal(t, http.StatusCreated, revoked.Code)
+		id := num(revoked.Body["invite"].(map[string]any)["id"])
+		require.Equal(t, http.StatusNoContent, e.do(http.MethodDelete, fmt.Sprintf("/admin/shop/invites/%d", id), e.modToken, nil).Code)
+		assert.Equal(t, http.StatusConflict, e.do(http.MethodDelete, fmt.Sprintf("/admin/shop/invites/%d", id), e.modToken, nil).Code)
+		r = e.login(oauth.GoogleUser{Sub: "sub-rev", Email: "shoptest-rev@gmail.com", EmailVerified: true}, revoked.Body["token"].(string))
+		assert.Equal(t, "invite_invalid", r.Body["code"])
 	})
 
 	t.Run("workspace domain gets in", func(t *testing.T) {
@@ -322,6 +362,10 @@ func TestShop_OrderLifecycle(t *testing.T) {
 	path := fmt.Sprintf("/shop/orders/%d", orderID)
 	assert.Equal(t, http.StatusNotFound, e.do(http.MethodGet, path, other, nil).Code, "someone else's order")
 	assert.Equal(t, http.StatusNotFound, e.do(http.MethodPut, path, other, merge(e.orderBody(), "version", 1)).Code)
+	assert.Equal(t, http.StatusNotFound, e.do(http.MethodPost, path+"/cancel", other, map[string]any{"version": 1}).Code)
+
+	tooLong := e.do(http.MethodPost, "/shop/orders", token, merge(e.orderBody(), "contact_phone", "123456789012345678901234567890123456789012345678901"))
+	assert.Equal(t, http.StatusBadRequest, tooLong.Code)
 
 	// Validation
 	over := e.do(http.MethodPost, "/shop/orders", token, e.orderBody(map[string]any{"product_id": e.products[0], "quantity": 6}))
@@ -344,6 +388,13 @@ func TestShop_OrderLifecycle(t *testing.T) {
 	assert.Nil(t, hidden.Body["items"].([]any)[0].(map[string]any)["unit_price"])
 	catalog := e.do(http.MethodGet, "/shop/catalog", token, nil)
 	assert.NotContains(t, string(catalog.Raw), `"price":150`)
+	list := e.do(http.MethodGet, "/shop/orders", token, nil)
+	assert.NotContains(t, string(list.Raw), `"unit_price":150`)
+	assert.NotContains(t, string(list.Raw), `"total":`+"1")
+	hiddenSubmit := e.do(http.MethodPost, "/shop/orders", token, e.orderBody())
+	require.Equal(t, http.StatusCreated, hiddenSubmit.Code, string(hiddenSubmit.Raw))
+	assert.Nil(t, hiddenSubmit.Body["total"])
+	assert.NotContains(t, string(hiddenSubmit.Raw), `"unit_price":150`)
 	e.setSettings(map[string]string{settingShowPrices: "true"})
 
 	// Confirm → quest

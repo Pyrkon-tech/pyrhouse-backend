@@ -81,6 +81,36 @@ func (g *GoogleOAuth) ExchangeCodeWithURI(code, redirectURI string) (*GoogleToke
 	return &token, nil
 }
 
+// ExchangeCodeWithPKCE is ExchangeCodeWithURI plus the PKCE code_verifier: Google then only
+// accepts the code from whoever started the login with the matching code_challenge.
+func (g *GoogleOAuth) ExchangeCodeWithPKCE(code, redirectURI, codeVerifier string) (*GoogleTokenResponse, error) {
+	data := url.Values{
+		"client_id":     {g.config.ClientID},
+		"client_secret": {g.config.ClientSecret},
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {redirectURI},
+		"code_verifier": {codeVerifier},
+	}
+
+	resp, err := http.Post(googleTokenURL, "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("google token error: %s", body)
+	}
+
+	var token GoogleTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
 func (g *GoogleOAuth) GetUser(accessToken string) (*GoogleUser, error) {
 	req, err := http.NewRequest("GET", googleUserInfoURL, nil)
 	if err != nil {

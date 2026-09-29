@@ -30,18 +30,20 @@ type Handler struct {
 
 func NewHandler(service *Service, auth *AuthService, repo *Repository, shopURL string) *Handler {
 	return &Handler{
-		service:      service,
-		auth:         auth,
-		repo:         repo,
-		shopURL:      strings.TrimRight(shopURL, "/"),
-		loginLimiter: rate_limiter.NewRateLimiter(10, 5*time.Minute),
+		service: service,
+		auth:    auth,
+		repo:    repo,
+		shopURL: strings.TrimRight(shopURL, "/"),
+		// Generous per IP: organizers share the event Wi-Fi NAT. Codes are single-use and
+		// invites carry 256 bits, so the limit only curbs noise and Google API quota.
+		loginLimiter: rate_limiter.NewRateLimiter(30, 5*time.Minute),
 	}
 }
 
 // RegisterShopRoutes registers the organizer API. It must not sit behind JWTMiddleware:
 // /shop/* accepts shop tokens only (ShopAuth), warehouse tokens are rejected.
 func (h *Handler) RegisterShopRoutes(router *gin.Engine) {
-	g := router.Group("/shop")
+	g := router.Group("/shop", limitBody(1<<20))
 	g.POST("/auth/google/exchange", h.login)
 
 	a := g.Group("", ShopAuth(h.repo))
@@ -100,6 +102,14 @@ func abort(c *gin.Context, err error) {
 	}
 	log.Printf("[shop] %s %s: %v", c.Request.Method, c.FullPath(), err)
 	c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Wewnętrzny błąd serwera", "code": "internal"})
+}
+
+// limitBody caps request bodies; oversized ones fail to bind with 400.
+func limitBody(max int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, max)
+		c.Next()
+	}
 }
 
 func bind(c *gin.Context, dst any) bool {
@@ -562,7 +572,7 @@ func (h *Handler) allowlistAccount(c *gin.Context) {
 		return
 	}
 	var in struct {
-		Email string `json:"email" binding:"required,email"`
+		Email string `json:"email" binding:"required,email,max=255"`
 	}
 	if !bind(c, &in) {
 		return
@@ -610,7 +620,7 @@ func (h *Handler) createInvite(c *gin.Context) {
 		return
 	}
 	var in struct {
-		Label string `json:"label" binding:"required"`
+		Label string `json:"label" binding:"required,max=255"`
 	}
 	if !bind(c, &in) {
 		return

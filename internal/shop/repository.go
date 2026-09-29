@@ -243,10 +243,13 @@ func (s accessStore) CreateAccount(email, sub string, source access.Source) (*ac
 		INSERT INTO shop_accounts (email, google_sub, access_source) VALUES ($1, $2, $3) RETURNING id`,
 		email, sub, string(source)).Scan(&a.ID)
 	if isUniqueViolation(err) {
-		return nil, access.ErrDenied
+		// A parallel first login (double click, retried callback) created the account first.
+		return nil, errLoginRace
 	}
 	return &a, err
 }
+
+var errLoginRace = errors.New("concurrent first login")
 
 // ============================================================================
 // Invites
@@ -367,10 +370,10 @@ func (r *Repository) productsByID(ctx context.Context, q querier, ids []int) (ma
 }
 
 type productInput struct {
-	Name        string   `json:"name" binding:"required"`
-	Description *string  `json:"description"`
-	ImageURL    *string  `json:"image_url"`
-	Section     string   `json:"section"`
+	Name        string   `json:"name" binding:"required,max=255"`
+	Description *string  `json:"description" binding:"omitempty,max=4000"`
+	ImageURL    *string  `json:"image_url" binding:"omitempty,max=2048"`
+	Section     string   `json:"section" binding:"max=100"`
 	SortOrder   int      `json:"sort_order"`
 	CategoryID  int      `json:"category_id" binding:"required"`
 	Price       *float64 `json:"price"`
@@ -452,7 +455,7 @@ type windowInput struct {
 	Kind     string    `json:"kind" binding:"required,oneof=delivery return"`
 	StartsAt time.Time `json:"starts_at" binding:"required"`
 	EndsAt   time.Time `json:"ends_at" binding:"required"`
-	Label    string    `json:"label"`
+	Label    string    `json:"label" binding:"max=255"`
 	Active   *bool     `json:"active"`
 }
 

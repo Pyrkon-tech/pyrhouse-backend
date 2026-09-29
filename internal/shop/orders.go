@@ -62,15 +62,15 @@ type itemInput struct {
 
 type orderInput struct {
 	LocationID       int         `json:"location_id" binding:"required"`
-	LocationNote     *string     `json:"location_note"`
-	ContactName      string      `json:"contact_name" binding:"required"`
-	ContactPhone     *string     `json:"contact_phone"`
-	BudgetOwner      *string     `json:"budget_owner"`
+	LocationNote     *string     `json:"location_note" binding:"omitempty,max=1000"`
+	ContactName      string      `json:"contact_name" binding:"required,max=255"`
+	ContactPhone     *string     `json:"contact_phone" binding:"omitempty,max=50"`
+	BudgetOwner      *string     `json:"budget_owner" binding:"omitempty,max=255"`
 	DeliveryWindowID int         `json:"delivery_window_id" binding:"required"`
 	ReturnWindowID   int         `json:"return_window_id" binding:"required"`
 	ReturnDate       *string     `json:"return_date"` // YYYY-MM-DD, optional, within the return window
-	Notes            *string     `json:"notes"`
-	Items            []itemInput `json:"items" binding:"required,min=1,dive"`
+	Notes            *string     `json:"notes" binding:"omitempty,max=4000"`
+	Items            []itemInput `json:"items" binding:"required,min=1,max=200,dive"`
 	Version          int         `json:"version"` // required when editing
 }
 
@@ -444,8 +444,8 @@ func (s *Service) RejectOrder(ctx context.Context, userID, orderID, version int,
 type adminPatchInput struct {
 	Version      int          `json:"version" binding:"required"`
 	LocationID   *int         `json:"location_id"`
-	LocationNote *string      `json:"location_note"`
-	Items        *[]itemInput `json:"items" binding:"omitempty,dive"`
+	LocationNote *string      `json:"location_note" binding:"omitempty,max=1000"`
+	Items        *[]itemInput `json:"items" binding:"omitempty,max=200,dive"`
 }
 
 // PatchOrder lets the warehouse correct an order: items while it is submitted, the location

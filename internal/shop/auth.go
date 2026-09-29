@@ -17,7 +17,7 @@ import (
 
 // GoogleAuth is the part of oauth.GoogleOAuth the shop login needs (fakeable in tests).
 type GoogleAuth interface {
-	ExchangeCodeWithURI(code, redirectURI string) (*oauth.GoogleTokenResponse, error)
+	ExchangeCodeWithPKCE(code, redirectURI, codeVerifier string) (*oauth.GoogleTokenResponse, error)
 	GetUser(accessToken string) (*oauth.GoogleUser, error)
 }
 
@@ -34,10 +34,13 @@ func NewAuthService(repo *Repository, google GoogleAuth, shopURL string) *AuthSe
 	return &AuthService{repo: repo, google: google, shopURL: strings.TrimRight(shopURL, "/")}
 }
 
+// loginInput requires PKCE: without it an attacker could make a victim's browser exchange the
+// attacker's code together with the victim's invite and take the invite over (login CSRF).
 type loginInput struct {
-	Code        string `json:"code" binding:"required"`
-	RedirectURI string `json:"redirect_uri" binding:"required"`
-	InviteToken string `json:"invite_token"`
+	Code         string `json:"code" binding:"required,max=2048"`
+	RedirectURI  string `json:"redirect_uri" binding:"required,max=512"`
+	CodeVerifier string `json:"code_verifier" binding:"required,min=43,max=128"` // RFC 7636
+	InviteToken  string `json:"invite_token" binding:"max=128"`
 }
 
 // Login exchanges a Google authorization code for a shop token, running the access policy chain.
@@ -50,7 +53,7 @@ func (s *AuthService) Login(ctx context.Context, in loginInput) (string, *Accoun
 		return "", nil, badRequest("invalid_redirect_uri", "Niedozwolony redirect_uri")
 	}
 
-	token, err := s.google.ExchangeCodeWithURI(in.Code, in.RedirectURI)
+	token, err := s.google.ExchangeCodeWithPKCE(in.Code, in.RedirectURI, in.CodeVerifier)
 	if err != nil {
 		return "", nil, newErr(http.StatusBadRequest, "google_exchange_failed", "Nie udało się zalogować przez Google")
 	}
@@ -85,7 +88,7 @@ func (s *AuthService) Login(ctx context.Context, in loginInput) (string, *Accoun
 	})
 	if err != nil {
 		if mapped := mapAccessError(err); mapped != nil {
-			log.Printf("[shop] login refused for %s: %v", access.NormalizeEmail(gu.Email), err)
+			log.Printf("[shop] login refused (domain %s): %v", emailDomain(gu.Email), err)
 			return "", nil, mapped
 		}
 		return "", nil, err
@@ -103,8 +106,17 @@ func (s *AuthService) Login(ctx context.Context, in loginInput) (string, *Accoun
 	return jwt, acc, nil
 }
 
+func emailDomain(email string) string {
+	if i := strings.LastIndex(email, "@"); i >= 0 {
+		return strings.ToLower(email[i+1:])
+	}
+	return "?"
+}
+
 func mapAccessError(err error) *Error {
 	switch {
+	case errors.Is(err, errLoginRace):
+		return newErr(http.StatusConflict, "login_in_progress", "Logowanie już trwa w innej karcie — spróbuj ponownie")
 	case errors.Is(err, access.ErrEmailNotVerified):
 		return newErr(http.StatusForbidden, "email_not_verified", "Adres e-mail konta Google nie jest zweryfikowany")
 	case errors.Is(err, access.ErrInactive):
