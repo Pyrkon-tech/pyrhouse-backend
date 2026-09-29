@@ -134,6 +134,15 @@ func runServer(router http.Handler, cfg *config.Config) {
 func setupRouter(container *di.Container, cfg *config.Config) *gin.Engine {
 	router := gin.Default()
 
+	if cfg.Server.ClientIPHeader != "" {
+		// Client IP from the platform's header only; proxies' X-Forwarded-For is not trusted.
+		router.TrustedPlatform = cfg.Server.ClientIPHeader
+		if err := router.SetTrustedProxies(nil); err != nil {
+			fatalf("Failed to configure trusted proxies: %v", err)
+		}
+		log.Printf("[Server]: client IP from header %s", cfg.Server.ClientIPHeader)
+	}
+
 	router.Use(middleware.RecoveryMiddleware())
 
 	// Registered after RecoveryMiddleware so a panic reported to Sentry is still

@@ -29,6 +29,10 @@ type ServerConfig struct {
 	Port           string
 	RequestTimeout time.Duration
 	Version        string
+	// ClientIPHeader is the header the hosting platform puts the real client IP in (DigitalOcean App
+	// Platform: "do-connecting-ip"). When set, X-Forwarded-For is no longer trusted, so per-IP rate
+	// limits cannot be bypassed by forging it. Empty keeps Gin's default (trust X-Forwarded-For).
+	ClientIPHeader string
 }
 
 type DatabaseConfig struct {
@@ -82,6 +86,7 @@ func Load() (*Config, error) {
 			Port:           getEnv("APP_PORT", getEnv("PORT", "8080")),
 			RequestTimeout: getDurationEnv("REQUEST_TIMEOUT_SECONDS", 0),
 			Version:        getEnv("APP_VERSION", "1.0.0"),
+			ClientIPHeader: os.Getenv("CLIENT_IP_HEADER"),
 		},
 		Database: DatabaseConfig{
 			URL:             os.Getenv("DATABASE_URL"),

@@ -214,6 +214,7 @@ Fields: `id`, `name` (auto-normalized), `label`, `pyr_id` (3-char auto-generated
 | `DISCORD_CLIENT_SECRET` | — | Discord OAuth secret |
 | `DISCORD_REDIRECT_URI` | — | Backend callback URL |
 | `FRONTEND_URL` | — | Frontend URL for OAuth redirects |
+| `CLIENT_IP_HEADER` | — | Header with the real client IP set by the platform (DigitalOcean: `do-connecting-ip`); when set, `X-Forwarded-For` is ignored |
 | `SHOP_URL` | — | Organizer shop origin (e.g. `https://shop.pyrhouse.space`); added to CORS origins automatically |
 | `SHOP_JWT_EXPIRATION_HOURS` | `24` | Organizer shop token lifetime |
 
