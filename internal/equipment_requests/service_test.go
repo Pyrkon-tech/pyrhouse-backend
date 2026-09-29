@@ -448,7 +448,6 @@ func TestService_matchCategoryWithFuzzy(t *testing.T) {
 			// Note: matchCategoryWithFuzzy is not exposed, so we're testing through the aggregation flow
 			// For direct testing, we would need to export the method or use a test helper
 			row := SheetRow{Item: tt.itemName}
-			service.categories = service.categories // Ensure categories are loaded
 
 			// For now, test the Levenshtein distance function directly
 			if tt.expectedMatchType == "exact" {
