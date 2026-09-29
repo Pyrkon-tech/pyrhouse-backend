@@ -97,6 +97,10 @@ func (h *Handler) importVolunteers(c *gin.Context) {
 func (h *Handler) getVolunteers(c *gin.Context) {
 	volunteers, err := h.service.GetVolunteers()
 	if err != nil {
+		if errors.Is(err, ErrNoActiveSchedule) {
+			c.JSON(http.StatusNotFound, errorResp("not_found", "Brak aktywnego harmonogramu", nil))
+			return
+		}
 		c.JSON(http.StatusInternalServerError, errorResp("fetch_failed", "Nie udało się pobrać wolontariuszy", err.Error()))
 		return
 	}
