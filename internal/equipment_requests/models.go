@@ -29,8 +29,9 @@ type Quest struct {
 	Destination        Destination      `json:"destination"`
 	Recipient          string           `json:"recipient"`
 	DeliveryDate       string           `json:"delivery_date"`
-	ReturnDate         *string          `json:"return_date"` // YYYY-MM-DD, null when unknown (sheet quests)
-	Source             string           `json:"source"`      // SourceSheet | SourceShop
+	ReturnDate         *string          `json:"return_date"`   // YYYY-MM-DD, null when unknown (sheet quests)
+	Source             string           `json:"source"`        // SourceSheet | SourceShop
+	ShopOrderID        *int             `json:"shop_order_id"` // set when Source is SourceShop
 	PickupTime         string           `json:"pickup_time,omitempty"`
 	BudgetOwner        string           `json:"budget_owner"`
 	Items              []QuestItem      `json:"items"`

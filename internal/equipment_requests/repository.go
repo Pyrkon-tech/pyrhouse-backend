@@ -74,6 +74,7 @@ type QuestDB struct {
 	LocationResolved    bool       `db:"location_resolved"`
 	Source              string     `db:"source"`
 	ReturnDate          *time.Time `db:"return_date"`
+	ShopOrderID         *int       `db:"shop_order_id"`
 	CreatedAt           time.Time  `db:"created_at"`
 	CompletedAt         *time.Time `db:"completed_at"`
 }
@@ -761,6 +762,7 @@ func (r *Repository) recordToQuest(questDB *QuestDB, itemsDB []ItemDB) *Quest {
 		LocationName:       questDB.LocationName,
 		LocationResolved:   questDB.LocationResolved,
 		Source:             questDB.Source,
+		ShopOrderID:        questDB.ShopOrderID,
 		Items:              make([]QuestItem, len(itemsDB)),
 		Transfers:          []QuestTransfer{},
 		AssignedVolunteers: []QuestVolunteer{},
