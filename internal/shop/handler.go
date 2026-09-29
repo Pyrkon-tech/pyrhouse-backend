@@ -229,6 +229,9 @@ func (h *Handler) upcomingWindows(c *gin.Context) {
 		abort(c, err)
 		return
 	}
+	for i := range windows {
+		windows[i].OrdersCount = 0 // other organizers' volume is not theirs to see
+	}
 	c.JSON(http.StatusOK, windows)
 }
 
@@ -253,6 +256,7 @@ func (h *Handler) myOrders(c *gin.Context) {
 	}
 	for i := range orders {
 		present(&orders[i], show)
+		forOrganizer(&orders[i])
 	}
 	c.JSON(http.StatusOK, orders)
 }
@@ -263,7 +267,15 @@ func (h *Handler) respondOrder(c *gin.Context, status int, o *Order) {
 		return
 	}
 	present(o, show)
+	forOrganizer(o)
 	c.JSON(status, o)
+}
+
+// forOrganizer drops warehouse-side detail from an organizer's view of their order.
+func forOrganizer(o *Order) {
+	for i := range o.Items {
+		o.Items[i].CategoryName = nil
+	}
 }
 
 func (h *Handler) myOrder(c *gin.Context) {
@@ -559,7 +571,7 @@ func (h *Handler) summary(c *gin.Context) {
 		abort(c, badRequest("invalid_group", "group musi być product, day albo location"))
 		return
 	}
-	rows, err := h.repo.summary(c.Request.Context(), group)
+	rows, err := h.repo.summary(c.Request.Context(), group, c.Query("status") == "confirmed")
 	if err != nil {
 		abort(c, err)
 		return

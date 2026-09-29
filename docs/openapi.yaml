@@ -3237,6 +3237,12 @@ paths:
             type: string
             enum: [product, day, location]
             default: product
+        - in: query
+          name: status
+          description: "`confirmed` = confirmed orders only; default = submitted and confirmed"
+          schema:
+            type: string
+            enum: [confirmed]
       responses:
         "200":
           description: Rows grouped by the key and product
@@ -3643,6 +3649,8 @@ components:
           type: string
           format: date-time
           nullable: true
+        orders_count:
+          type: integer
 
     ShopProduct:
       type: object
@@ -3732,6 +3740,9 @@ components:
           example: "czw 15.07 16–20"
         active:
           type: boolean
+        orders_count:
+          type: integer
+          description: Panel only — submitted and confirmed orders using this window
 
     ShopWindowInput:
       type: object
@@ -3823,6 +3834,9 @@ components:
           description: Snapshot taken when the order was submitted or edited
         category_id:
           type: integer
+        category_name:
+          type: string
+          description: Panel only
         quantity:
           type: integer
         unit_price:
@@ -3842,6 +3856,9 @@ components:
           type: integer
         account_email:
           type: string
+        account_name:
+          type: string
+          description: Organizer's Google name, when known
         location:
           $ref: "#/components/schemas/ShopLocation"
         location_note:

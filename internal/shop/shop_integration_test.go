@@ -451,6 +451,13 @@ func TestShop_OrderLifecycle(t *testing.T) {
 
 	detail := e.do(http.MethodGet, adminPath, e.modToken, nil)
 	require.Equal(t, http.StatusOK, detail.Code)
+	assert.Equal(t, "__TEST__ShopCat", detail.Body["items"].([]any)[0].(map[string]any)["category_name"], "panel sees categories")
+	assert.NotContains(t, string(e.do(http.MethodGet, path, token, nil).Raw), "category_name", "organizers do not")
+	accounts := e.do(http.MethodGet, "/admin/shop/accounts", e.modToken, nil)
+	assert.Contains(t, string(accounts.Raw), `"orders_count":`)
+	confirmedOnly := e.do(http.MethodGet, "/admin/shop/orders/summary?group=product&status=confirmed", e.modToken, nil)
+	require.Equal(t, http.StatusOK, confirmedOnly.Code)
+	assert.Contains(t, string(confirmedOnly.Raw), "__TEST__Laptop")
 	types := []string{}
 	for _, ev := range detail.Body["events"].([]any) {
 		types = append(types, ev.(map[string]any)["type"].(string))

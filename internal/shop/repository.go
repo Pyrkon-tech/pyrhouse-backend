@@ -126,11 +126,12 @@ func (r *Repository) saveSettings(ctx context.Context, s Settings) error {
 // Accounts
 // ============================================================================
 
-const accountColumns = `id, email, display_name, avatar_url, active, access_source, google_sub IS NOT NULL, created_at, last_login_at`
+const accountColumns = `id, email, display_name, avatar_url, active, access_source, google_sub IS NOT NULL, created_at, last_login_at,
+	(SELECT count(*) FROM shop_orders so WHERE so.account_id = shop_accounts.id)::int`
 
 func scanAccount(row interface{ Scan(...any) error }) (*Account, error) {
 	var a Account
-	if err := row.Scan(&a.ID, &a.Email, &a.DisplayName, &a.AvatarURL, &a.Active, &a.AccessSource, &a.LoggedIn, &a.CreatedAt, &a.LastLoginAt); err != nil {
+	if err := row.Scan(&a.ID, &a.Email, &a.DisplayName, &a.AvatarURL, &a.Active, &a.AccessSource, &a.LoggedIn, &a.CreatedAt, &a.LastLoginAt, &a.OrdersCount); err != nil {
 		return nil, err
 	}
 	return &a, nil
@@ -413,11 +414,14 @@ func (r *Repository) saveProduct(ctx context.Context, id int, in productInput, u
 	return p, err
 }
 
-const windowColumns = `id, kind, starts_at, ends_at, label, active`
+const windowColumns = `id, kind, starts_at, ends_at, label, active,
+	(SELECT count(*) FROM shop_orders so
+	 WHERE (so.delivery_window_id = shop_delivery_windows.id OR so.return_window_id = shop_delivery_windows.id)
+	   AND so.status IN ('submitted', 'confirmed'))::int`
 
 func scanWindow(row interface{ Scan(...any) error }) (*Window, error) {
 	var w Window
-	err := row.Scan(&w.ID, &w.Kind, &w.StartsAt, &w.EndsAt, &w.Label, &w.Active)
+	err := row.Scan(&w.ID, &w.Kind, &w.StartsAt, &w.EndsAt, &w.Label, &w.Active, &w.OrdersCount)
 	return &w, err
 }
 
@@ -528,7 +532,7 @@ func (r *Repository) locationByID(ctx context.Context, q querier, id int) (*Loca
 // ============================================================================
 
 const orderSelect = `
-	SELECT o.id, o.number, o.account_id, a.email,
+	SELECT o.id, o.number, o.account_id, a.email, a.display_name,
 	       l.id, COALESCE(l.name, ''), l.pavilion, o.location_note,
 	       o.contact_name, o.budget_owner,
 	       dw.id, dw.kind, dw.starts_at, dw.ends_at, dw.label, dw.active,
@@ -544,7 +548,7 @@ const orderSelect = `
 
 func scanOrder(row interface{ Scan(...any) error }) (*Order, error) {
 	var o Order
-	err := row.Scan(&o.ID, &o.Number, &o.AccountID, &o.AccountEmail,
+	err := row.Scan(&o.ID, &o.Number, &o.AccountID, &o.AccountEmail, &o.AccountName,
 		&o.Location.ID, &o.Location.Name, &o.Location.Pavilion, &o.LocationNote,
 		&o.ContactName, &o.BudgetOwner,
 		&o.Delivery.ID, &o.Delivery.Kind, &o.Delivery.StartsAt, &o.Delivery.EndsAt, &o.Delivery.Label, &o.Delivery.Active,
@@ -643,8 +647,9 @@ func (r *Repository) orderItems(ctx context.Context, q querier, orderIDs []int) 
 		return out, nil
 	}
 	rows, err := q.QueryContext(ctx, `
-		SELECT order_id, product_id, product_name, category_id, quantity, unit_price::float8
-		FROM shop_order_items WHERE order_id = ANY($1) ORDER BY id`, intArray(orderIDs))
+		SELECT i.order_id, i.product_id, i.product_name, i.category_id, c.label, i.quantity, i.unit_price::float8
+		FROM shop_order_items i LEFT JOIN item_category c ON c.id = i.category_id
+		WHERE i.order_id = ANY($1) ORDER BY i.id`, intArray(orderIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -652,7 +657,7 @@ func (r *Repository) orderItems(ctx context.Context, q querier, orderIDs []int) 
 	for rows.Next() {
 		var orderID int
 		var it OrderItem
-		if err := rows.Scan(&orderID, &it.ProductID, &it.ProductName, &it.CategoryID, &it.Quantity, &it.UnitPrice); err != nil {
+		if err := rows.Scan(&orderID, &it.ProductID, &it.ProductName, &it.CategoryID, &it.CategoryName, &it.Quantity, &it.UnitPrice); err != nil {
 			return nil, err
 		}
 		out[orderID] = append(out[orderID], it)
@@ -872,7 +877,11 @@ type SummaryRow struct {
 }
 
 // summary aggregates submitted and confirmed orders (what the warehouse has to prepare).
-func (r *Repository) summary(ctx context.Context, group string) ([]SummaryRow, error) {
+func (r *Repository) summary(ctx context.Context, group string, confirmedOnly bool) ([]SummaryRow, error) {
+	statuses := `('submitted', 'confirmed')`
+	if confirmedOnly {
+		statuses = `('confirmed')`
+	}
 	var keyExpr, labelExpr string
 	switch group {
 	case "day":
@@ -892,7 +901,7 @@ func (r *Repository) summary(ctx context.Context, group string) ([]SummaryRow, e
 		JOIN shop_orders o ON o.id = i.order_id
 		JOIN shop_delivery_windows dw ON dw.id = o.delivery_window_id
 		JOIN locations l ON l.id = o.location_id
-		WHERE o.status IN ('submitted', 'confirmed')
+		WHERE o.status IN `+statuses+`
 		GROUP BY 1, 2, 3, 4
 		ORDER BY 1, 4`)
 	if err != nil {

@@ -50,6 +50,7 @@ type Account struct {
 	LoggedIn     bool       `json:"logged_in"` // false = allowlist entry that has not logged in yet
 	CreatedAt    time.Time  `json:"created_at"`
 	LastLoginAt  *time.Time `json:"last_login_at"`
+	OrdersCount  int        `json:"orders_count"`
 }
 
 type Invite struct {
@@ -87,6 +88,8 @@ type Window struct {
 	EndsAt   time.Time `json:"ends_at"`
 	Label    string    `json:"label"`
 	Active   bool      `json:"active"`
+	// OrdersCount counts submitted and confirmed orders using the window (panel only).
+	OrdersCount int `json:"orders_count,omitempty"`
 }
 
 type Location struct {
@@ -96,11 +99,12 @@ type Location struct {
 }
 
 type OrderItem struct {
-	ProductID   int      `json:"product_id"`
-	ProductName string   `json:"product_name"`
-	CategoryID  int      `json:"category_id"`
-	Quantity    int      `json:"quantity"`
-	UnitPrice   *float64 `json:"unit_price"` // snapshot; nil when the product had no price or prices are hidden
+	ProductID    int      `json:"product_id"`
+	ProductName  string   `json:"product_name"`
+	CategoryID   int      `json:"category_id"`
+	CategoryName *string  `json:"category_name,omitempty"` // panel only
+	Quantity     int      `json:"quantity"`
+	UnitPrice    *float64 `json:"unit_price"` // snapshot; nil when the product had no price or prices are hidden
 }
 
 type Order struct {
@@ -108,6 +112,7 @@ type Order struct {
 	Number        string      `json:"number"`
 	AccountID     int         `json:"account_id"`
 	AccountEmail  string      `json:"account_email,omitempty"`
+	AccountName   *string     `json:"account_name,omitempty"`
 	Location      Location    `json:"location"`
 	LocationNote  *string     `json:"location_note"`
 	ContactName   string      `json:"contact_name"`
