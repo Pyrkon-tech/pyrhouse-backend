@@ -14,6 +14,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Token audiences. The shop (shop.pyrhouse.space) signs with the same secret, so the
+// warehouse must reject tokens issued for any other audience.
+const (
+	AudienceWarehouse = "pyrhouse-warehouse"
+	AudienceShop      = "pyrhouse-shop"
+)
+
 var (
 	jwtSecret     []byte
 	jwtExpiration time.Duration
@@ -61,6 +68,7 @@ func GenerateJWT(userID string, role string, username string) (string, error) {
 		"userID":   userID,
 		"role":     role,
 		"username": username,
+		"aud":      AudienceWarehouse,
 		"exp":      time.Now().Add(jwtExpiration).Unix(),
 	}
 

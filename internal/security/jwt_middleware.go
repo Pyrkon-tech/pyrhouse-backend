@@ -36,8 +36,16 @@ func JWTMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		c.Set("userID", claims["userID"])
-		c.Set("role", claims["role"])
+		// Routes without Authorize still type-assert these, so reject tokens that lack them.
+		userID, _ := claims["userID"].(string)
+		role, _ := claims["role"].(string)
+		if userID == "" || role == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
+			c.Abort()
+			return
+		}
+		c.Set("userID", userID)
+		c.Set("role", role)
 		c.Set("username", claims["username"])
 		c.Next()
 	}
@@ -152,11 +160,44 @@ func getTokenFromContext(c *gin.Context) (*jwt.Token, error) {
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method")
-		}
 		return jwtSecret, nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
+	if err != nil {
+		return nil, err
+	}
 
-	return token, err
+	if err := checkWarehouseAudience(token); err != nil {
+		return nil, err
+	}
+
+	return token, nil
+}
+
+// checkWarehouseAudience accepts tokens issued for the warehouse and legacy tokens
+// without an aud claim (issued before audiences existed, valid until they expire).
+// Any other audience, notably the shop's, is rejected.
+func checkWarehouseAudience(token *jwt.Token) error {
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return fmt.Errorf("unexpected claims type")
+	}
+	if _, present := claims["aud"]; !present {
+		return nil
+	}
+
+	// GetAudience silently maps unsupported types (e.g. a number) to an empty list,
+	// so a present claim must yield at least one audience.
+	aud, err := claims.GetAudience()
+	if err != nil {
+		return fmt.Errorf("invalid aud claim: %w", err)
+	}
+	if len(aud) == 0 {
+		return fmt.Errorf("invalid aud claim")
+	}
+	for _, a := range aud {
+		if a != AudienceWarehouse {
+			return fmt.Errorf("token audience %q is not allowed", a)
+		}
+	}
+	return nil
 }
