@@ -63,8 +63,7 @@ type itemInput struct {
 type orderInput struct {
 	LocationID       int         `json:"location_id" binding:"required"`
 	LocationNote     *string     `json:"location_note" binding:"omitempty,max=1000"`
-	ContactName      string      `json:"contact_name" binding:"required,max=255"`
-	ContactPhone     *string     `json:"contact_phone" binding:"omitempty,max=50"`
+	ContactName      string      `json:"contact_name" binding:"max=255"` // empty = the account's Google name
 	BudgetOwner      *string     `json:"budget_owner" binding:"omitempty,max=255"`
 	DeliveryWindowID int         `json:"delivery_window_id" binding:"required"`
 	ReturnWindowID   int         `json:"return_window_id" binding:"required"`
@@ -161,15 +160,26 @@ func blankToNil(s *string) *string {
 // Service
 // ============================================================================
 
+// Notifier is told about decisions on an order after they are committed. MVP: nothing is sent
+// (moderators see the pending counter, organizers check the shop). A mailer plugs in here.
+type Notifier interface {
+	OrderDecided(ctx context.Context, o *Order)
+}
+
+type noopNotifier struct{}
+
+func (noopNotifier) OrderDecided(context.Context, *Order) {}
+
 type Service struct {
-	repo *Repository
-	now  func() time.Time
+	repo     *Repository
+	now      func() time.Time
+	Notifier Notifier
 	// OnQuestsChanged is called after a quest is created or moved (quest board SSE refresh).
 	OnQuestsChanged func()
 }
 
 func NewService(repo *Repository) *Service {
-	return &Service{repo: repo, now: time.Now}
+	return &Service{repo: repo, now: time.Now, Notifier: noopNotifier{}}
 }
 
 func (s *Service) questsChanged() {
@@ -183,7 +193,7 @@ func (s *Service) Settings(ctx context.Context) (Settings, error) {
 }
 
 // validateOrganizerOrder runs every organizer-side rule and returns what to store.
-func (s *Service) validateOrganizerOrder(ctx context.Context, tx *sql.Tx, in orderInput) (orderFields, []OrderItem, error) {
+func (s *Service) validateOrganizerOrder(ctx context.Context, tx *sql.Tx, accountID int, in orderInput) (orderFields, []OrderItem, error) {
 	settings, err := s.repo.loadSettings(ctx, tx)
 	if err != nil {
 		return orderFields{}, nil, err
@@ -197,7 +207,6 @@ func (s *Service) validateOrganizerOrder(ctx context.Context, tx *sql.Tx, in ord
 		LocationID:       in.LocationID,
 		LocationNote:     blankToNil(in.LocationNote),
 		ContactName:      strings.TrimSpace(in.ContactName),
-		ContactPhone:     blankToNil(in.ContactPhone),
 		BudgetOwner:      blankToNil(in.BudgetOwner),
 		DeliveryWindowID: in.DeliveryWindowID,
 		ReturnWindowID:   in.ReturnWindowID,
@@ -205,7 +214,9 @@ func (s *Service) validateOrganizerOrder(ctx context.Context, tx *sql.Tx, in ord
 		Notes:            blankToNil(in.Notes),
 	}
 	if f.ContactName == "" {
-		return f, nil, badRequest("contact_required", "Podaj osobę kontaktową")
+		if f.ContactName, err = s.repo.accountContactName(ctx, tx, accountID); err != nil {
+			return f, nil, err
+		}
 	}
 
 	loc, err := s.repo.locationByID(ctx, tx, f.LocationID)
@@ -262,7 +273,7 @@ func (s *Service) SubmitOrder(ctx context.Context, accountID int, in orderInput,
 
 	var orderID int
 	err := s.repo.inTx(ctx, func(tx *sql.Tx) error {
-		f, items, err := s.validateOrganizerOrder(ctx, tx, in)
+		f, items, err := s.validateOrganizerOrder(ctx, tx, accountID, in)
 		if err != nil {
 			return err
 		}
@@ -319,7 +330,7 @@ func (s *Service) UpdateOrder(ctx context.Context, accountID, orderID int, in or
 		if err := checkTransition(o, actEdit, in.Version); err != nil {
 			return err
 		}
-		f, items, err := s.validateOrganizerOrder(ctx, tx, in)
+		f, items, err := s.validateOrganizerOrder(ctx, tx, accountID, in)
 		if err != nil {
 			return err
 		}
@@ -414,7 +425,7 @@ func (s *Service) ConfirmOrder(ctx context.Context, userID, orderID, version int
 	}
 	log.Printf("[shop] order %d confirmed by user %d", orderID, userID)
 	s.questsChanged()
-	return s.repo.orderByID(ctx, s.repo.db, orderID, false)
+	return s.decided(ctx, orderID)
 }
 
 func (s *Service) RejectOrder(ctx context.Context, userID, orderID, version int, reason string) (*Order, error) {
@@ -438,7 +449,7 @@ func (s *Service) RejectOrder(ctx context.Context, userID, orderID, version int,
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.orderByID(ctx, s.repo.db, orderID, false)
+	return s.decided(ctx, orderID)
 }
 
 type adminPatchInput struct {
@@ -526,6 +537,18 @@ func (s *Service) PatchOrder(ctx context.Context, userID, orderID int, in adminP
 		s.questsChanged()
 	}
 	return s.repo.orderByID(ctx, s.repo.db, orderID, false)
+}
+
+// decided reloads an order after confirm/reject and hands it to the notifier.
+func (s *Service) decided(ctx context.Context, orderID int) (*Order, error) {
+	o, err := s.repo.orderByID(ctx, s.repo.db, orderID, false)
+	if err != nil || o == nil {
+		return o, err
+	}
+	if s.Notifier != nil {
+		s.Notifier.OrderDecided(ctx, o)
+	}
+	return o, nil
 }
 
 // ---------------------------------------------------------------------------

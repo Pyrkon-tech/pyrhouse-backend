@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -207,7 +208,7 @@ func (e *shopEnv) orderBody(items ...map[string]any) map[string]any {
 		items = []map[string]any{{"product_id": e.products[0], "quantity": 2}, {"product_id": e.products[1], "quantity": 4}}
 	}
 	return map[string]any{
-		"location_id": e.locationID, "contact_name": "Jan Organizator", "contact_phone": "600100200",
+		"location_id": e.locationID, "contact_name": "Jan Organizator", "budget_owner": "Gamesroom",
 		"delivery_window_id": e.delivery, "return_window_id": e.ret, "items": items,
 	}
 }
@@ -364,8 +365,18 @@ func TestShop_OrderLifecycle(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, e.do(http.MethodPut, path, other, merge(e.orderBody(), "version", 1)).Code)
 	assert.Equal(t, http.StatusNotFound, e.do(http.MethodPost, path+"/cancel", other, map[string]any{"version": 1}).Code)
 
-	tooLong := e.do(http.MethodPost, "/shop/orders", token, merge(e.orderBody(), "contact_phone", "123456789012345678901234567890123456789012345678901"))
+	tooLong := e.do(http.MethodPost, "/shop/orders", token, merge(e.orderBody(), "contact_name", strings.Repeat("x", 256)))
 	assert.Equal(t, http.StatusBadRequest, tooLong.Code)
+
+	// Recipient defaults to the Google name; budget owner suggestions come from own orders only
+	noContact := merge(e.orderBody(), "contact_name", "")
+	defaulted := e.do(http.MethodPost, "/shop/orders", token, noContact)
+	require.Equal(t, http.StatusCreated, defaulted.Code, string(defaulted.Raw))
+	assert.Equal(t, "shoptest-buyer@pyrkon.pl", defaulted.Body["contact_name"])
+	_ = e.do(http.MethodPost, fmt.Sprintf("/shop/orders/%d/cancel", num(defaulted.Body["id"])), token, map[string]any{"version": 1})
+	owners := e.do(http.MethodGet, "/shop/budget-owners", token, nil)
+	assert.Equal(t, "[\"Gamesroom\"]", string(owners.Raw))
+	assert.Equal(t, "[]", string(e.do(http.MethodGet, "/shop/budget-owners", other, nil).Raw))
 
 	// Validation
 	over := e.do(http.MethodPost, "/shop/orders", token, e.orderBody(map[string]any{"product_id": e.products[0], "quantity": 6}))

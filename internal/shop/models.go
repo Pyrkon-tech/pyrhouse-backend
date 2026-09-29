@@ -111,7 +111,6 @@ type Order struct {
 	Location      Location    `json:"location"`
 	LocationNote  *string     `json:"location_note"`
 	ContactName   string      `json:"contact_name"`
-	ContactPhone  *string     `json:"contact_phone"`
 	BudgetOwner   *string     `json:"budget_owner"`
 	Delivery      Window      `json:"delivery_window"`
 	Return        Window      `json:"return_window"`

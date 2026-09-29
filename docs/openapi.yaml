@@ -2910,6 +2910,24 @@ paths:
                 items:
                   $ref: "#/components/schemas/ShopWindow"
 
+  /shop/budget-owners:
+    get:
+      tags:
+        - shop
+      summary: Budget owner suggestions
+      description: The account's own earlier `budget_owner` values, most recent first (max 20). Never other accounts' values.
+      security:
+        - shopBearerAuth: []
+      responses:
+        "200":
+          description: Suggestions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
   /shop/orders:
     get:
       tags:
@@ -3757,7 +3775,7 @@ components:
 
     ShopOrderInput:
       type: object
-      required: [location_id, contact_name, delivery_window_id, return_window_id, items]
+      required: [location_id, delivery_window_id, return_window_id, items]
       properties:
         location_id:
           type: integer
@@ -3766,9 +3784,7 @@ components:
           nullable: true
         contact_name:
           type: string
-        contact_phone:
-          type: string
-          nullable: true
+          description: Recipient; empty or missing = the account's Google name (else its e-mail)
         budget_owner:
           type: string
           nullable: true
@@ -3833,9 +3849,6 @@ components:
           nullable: true
         contact_name:
           type: string
-        contact_phone:
-          type: string
-          nullable: true
         budget_owner:
           type: string
           nullable: true

@@ -530,7 +530,7 @@ func (r *Repository) locationByID(ctx context.Context, q querier, id int) (*Loca
 const orderSelect = `
 	SELECT o.id, o.number, o.account_id, a.email,
 	       l.id, COALESCE(l.name, ''), l.pavilion, o.location_note,
-	       o.contact_name, o.contact_phone, o.budget_owner,
+	       o.contact_name, o.budget_owner,
 	       dw.id, dw.kind, dw.starts_at, dw.ends_at, dw.label, dw.active,
 	       rw.id, rw.kind, rw.starts_at, rw.ends_at, rw.label, rw.active,
 	       to_char(o.return_date, 'YYYY-MM-DD'), o.notes, o.status, o.status_reason, o.decided_by, o.decided_at,
@@ -546,7 +546,7 @@ func scanOrder(row interface{ Scan(...any) error }) (*Order, error) {
 	var o Order
 	err := row.Scan(&o.ID, &o.Number, &o.AccountID, &o.AccountEmail,
 		&o.Location.ID, &o.Location.Name, &o.Location.Pavilion, &o.LocationNote,
-		&o.ContactName, &o.ContactPhone, &o.BudgetOwner,
+		&o.ContactName, &o.BudgetOwner,
 		&o.Delivery.ID, &o.Delivery.Kind, &o.Delivery.StartsAt, &o.Delivery.EndsAt, &o.Delivery.Label, &o.Delivery.Active,
 		&o.Return.ID, &o.Return.Kind, &o.Return.StartsAt, &o.Return.EndsAt, &o.Return.Label, &o.Return.Active,
 		&o.ReturnDate, &o.Notes, &o.Status, &o.StatusReason, &o.decidedBy, &o.DecidedAt,
@@ -660,6 +660,35 @@ func (r *Repository) orderItems(ctx context.Context, q querier, orderIDs []int) 
 	return out, rows.Err()
 }
 
+// accountContactName is the default recipient for an order: the Google name, else the e-mail.
+func (r *Repository) accountContactName(ctx context.Context, q querier, accountID int) (string, error) {
+	var name string
+	err := q.QueryRowContext(ctx, `SELECT COALESCE(NULLIF(display_name, ''), email) FROM shop_accounts WHERE id = $1`, accountID).Scan(&name)
+	return name, err
+}
+
+// budgetOwners are the account's own earlier values, as suggestions. Only its own: quests imported
+// from the sheet carry people's names in this field.
+func (r *Repository) budgetOwners(ctx context.Context, accountID int) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT budget_owner FROM shop_orders
+		WHERE account_id = $1 AND budget_owner IS NOT NULL
+		GROUP BY budget_owner ORDER BY max(created_at) DESC LIMIT 20`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) orderIDByIdempotencyKey(ctx context.Context, q querier, accountID int, key string) (int, error) {
 	var id int
 	err := q.QueryRowContext(ctx, `SELECT id FROM shop_orders WHERE account_id = $1 AND idempotency_key = $2`, accountID, key).Scan(&id)
@@ -674,7 +703,6 @@ type orderFields struct {
 	LocationID       int
 	LocationNote     *string
 	ContactName      string
-	ContactPhone     *string
 	BudgetOwner      *string
 	DeliveryWindowID int
 	ReturnWindowID   int
@@ -685,21 +713,21 @@ type orderFields struct {
 func (r *Repository) insertOrder(ctx context.Context, tx *sql.Tx, accountID int, f orderFields, idempotencyKey *string) (int, error) {
 	var id int
 	err := tx.QueryRowContext(ctx, `
-		INSERT INTO shop_orders (account_id, location_id, location_note, contact_name, contact_phone, budget_owner,
+		INSERT INTO shop_orders (account_id, location_id, location_note, contact_name, budget_owner,
 		                         delivery_window_id, return_window_id, return_date, notes, idempotency_key)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
-		accountID, f.LocationID, f.LocationNote, f.ContactName, f.ContactPhone, f.BudgetOwner,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+		accountID, f.LocationID, f.LocationNote, f.ContactName, f.BudgetOwner,
 		f.DeliveryWindowID, f.ReturnWindowID, f.ReturnDate, f.Notes, idempotencyKey).Scan(&id)
 	return id, err
 }
 
 func (r *Repository) updateOrderFields(ctx context.Context, tx *sql.Tx, id int, f orderFields) error {
 	_, err := tx.ExecContext(ctx, `
-		UPDATE shop_orders SET location_id = $2, location_note = $3, contact_name = $4, contact_phone = $5,
-		       budget_owner = $6, delivery_window_id = $7, return_window_id = $8, return_date = $9, notes = $10,
+		UPDATE shop_orders SET location_id = $2, location_note = $3, contact_name = $4,
+		       budget_owner = $5, delivery_window_id = $6, return_window_id = $7, return_date = $8, notes = $9,
 		       version = version + 1, updated_at = now()
 		WHERE id = $1`,
-		id, f.LocationID, f.LocationNote, f.ContactName, f.ContactPhone, f.BudgetOwner,
+		id, f.LocationID, f.LocationNote, f.ContactName, f.BudgetOwner,
 		f.DeliveryWindowID, f.ReturnWindowID, f.ReturnDate, f.Notes)
 	return err
 }

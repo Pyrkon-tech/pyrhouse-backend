@@ -52,6 +52,7 @@ func (h *Handler) RegisterShopRoutes(router *gin.Engine) {
 	a.GET("/catalog", h.catalog)
 	a.GET("/locations", h.locations)
 	a.GET("/delivery-windows", h.upcomingWindows)
+	a.GET("/budget-owners", h.budgetOwners)
 	a.GET("/orders", h.myOrders)
 	a.GET("/orders/:id", h.myOrder)
 	a.POST("/orders", h.submitOrder)
@@ -229,6 +230,15 @@ func (h *Handler) upcomingWindows(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, windows)
+}
+
+func (h *Handler) budgetOwners(c *gin.Context) {
+	list, err := h.repo.budgetOwners(c.Request.Context(), accountID(c))
+	if err != nil {
+		abort(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, list)
 }
 
 func (h *Handler) myOrders(c *gin.Context) {
