@@ -26,6 +26,9 @@ type GoogleUser struct {
 	EmailVerified bool   `json:"email_verified"`
 	Name          string `json:"name"`
 	Picture       string `json:"picture"`
+	// HD is the Google Workspace domain of the account; empty for consumer accounts.
+	// Unlike the email suffix it proves membership in the domain.
+	HD string `json:"hd"`
 }
 
 type GoogleTokenResponse struct {

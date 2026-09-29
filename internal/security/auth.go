@@ -3,6 +3,7 @@ package security
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 	"warehouse/internal/config"
 	"warehouse/internal/models"
@@ -22,8 +23,9 @@ const (
 )
 
 var (
-	jwtSecret     []byte
-	jwtExpiration time.Duration
+	jwtSecret         []byte
+	jwtExpiration     time.Duration
+	shopJWTExpiration time.Duration
 )
 
 func Initialize(cfg config.JWTConfig) error {
@@ -33,6 +35,10 @@ func Initialize(cfg config.JWTConfig) error {
 
 	jwtSecret = []byte(cfg.Secret)
 	jwtExpiration = cfg.Expiration
+	shopJWTExpiration = cfg.ShopExpiration
+	if shopJWTExpiration <= 0 {
+		shopJWTExpiration = 24 * time.Hour
+	}
 
 	log.Println("Security module initialized successfully")
 	return nil
@@ -74,6 +80,40 @@ func GenerateJWT(userID string, role string, username string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(jwtSecret)
+}
+
+// GenerateShopJWT is the only place that mints organizer shop tokens. sub is a shop_accounts.id,
+// not a users.id, so the token must never be accepted by warehouse routes (aud keeps them apart).
+func GenerateShopJWT(accountID int) (string, error) {
+	now := time.Now()
+	claims := jwt.RegisteredClaims{
+		Subject:   strconv.Itoa(accountID),
+		Audience:  jwt.ClaimStrings{AudienceShop},
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(shopJWTExpiration)),
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtSecret)
+}
+
+// ParseShopToken returns the shop account ID of a valid shop token. Warehouse tokens (aud
+// pyrhouse-warehouse or no aud at all) are rejected.
+func ParseShopToken(tokenString string) (int, error) {
+	token, err := parseSignedToken(tokenString)
+	if err != nil {
+		return 0, err
+	}
+	if err := checkExclusiveAudience(token, AudienceShop, false); err != nil {
+		return 0, err
+	}
+	sub, err := token.Claims.GetSubject()
+	if err != nil || sub == "" {
+		return 0, fmt.Errorf("token has no subject")
+	}
+	accountID, err := strconv.Atoi(sub)
+	if err != nil || accountID <= 0 {
+		return 0, fmt.Errorf("invalid token subject")
+	}
+	return accountID, nil
 }
 
 func GetUserIDFromToken(c *gin.Context) (string, error) {

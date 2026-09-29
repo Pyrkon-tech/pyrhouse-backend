@@ -25,6 +25,7 @@ import (
 	"warehouse/internal/security"
 	"warehouse/internal/service_desk"
 	"warehouse/internal/settings"
+	"warehouse/internal/shop"
 	"warehouse/internal/users"
 )
 
@@ -56,6 +57,7 @@ type Container struct {
 	SettingsHandler         *settings.Handler
 	SettingsRepo            *settings.Repository
 	ReservationHandler      *reservations.Handler
+	ShopHandler             *shop.Handler
 }
 
 func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
@@ -109,9 +111,11 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	}
 
 	var googleHandler *security.GoogleHandler
+	var shopGoogle shop.GoogleAuth // stays nil without Google config → shop login answers 503
 	if cfg.Google.ClientID != "" && cfg.Google.ClientSecret != "" {
 		googleOAuth := oauth.NewGoogleOAuth(cfg.Google)
 		googleHandler = security.NewGoogleHandler(googleOAuth, userRepo)
+		shopGoogle = googleOAuth
 	}
 
 	equipmentRequestRepo := equipment_requests.NewRepository(repo)
@@ -131,6 +135,12 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 	)
 
 	equipmentRequestHandler := equipment_requests.NewHandler(equipmentRequestService)
+
+	// Organizer shop — confirmed orders become quests, so the quest board refreshes over SSE
+	shopRepo := shop.NewRepository(db)
+	shopService := shop.NewService(shopRepo)
+	shopService.OnQuestsChanged = equipmentRequestService.BroadcastQuestsChanged
+	shopHandler := shop.NewHandler(shopService, shop.NewAuthService(shopRepo, shopGoogle, cfg.Shop.URL), shopRepo, cfg.Shop.URL)
 
 	reservationRepo := reservations.NewRepository(repo)
 	reservationService := reservations.NewService(reservationRepo, assetRepo, repo, originService, auditLog)
@@ -168,6 +178,7 @@ func NewAppContainer(db *sql.DB, cfg *config.Config) *Container {
 		SettingsHandler:         settingsHandler,
 		SettingsRepo:            settingsRepo,
 		ReservationHandler:      reservationHandler,
+		ShopHandler:             shopHandler,
 	}
 }
 

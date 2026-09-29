@@ -124,6 +124,7 @@ type UnresolvedItem struct {
 
 // QuestEvent is broadcast over SSE. Discriminate on Type field.
 //
+//	"quests_changed"  — quests were created or moved outside the quest board (shop orders)
 //	"stocks_changed"  — after a stock create/update/delete (LocationID + Action populated)
 type QuestEvent struct {
 	Type       string `json:"type"`

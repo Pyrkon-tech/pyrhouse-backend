@@ -48,8 +48,9 @@ type SentryConfig struct {
 }
 
 type JWTConfig struct {
-	Secret     string
-	Expiration time.Duration
+	Secret         string
+	Expiration     time.Duration
+	ShopExpiration time.Duration // organizer shop tokens, shorter-lived than warehouse ones
 }
 
 type CORSConfig struct {
@@ -99,8 +100,9 @@ func Load() (*Config, error) {
 			TracesSampleRate: getFloatEnv("SENTRY_TRACES_SAMPLE_RATE", 0),
 		},
 		JWT: JWTConfig{
-			Secret:     os.Getenv("JWT_SECRET"),
-			Expiration: getDurationEnv("JWT_EXPIRATION_HOURS", 120) * time.Hour,
+			Secret:         os.Getenv("JWT_SECRET"),
+			Expiration:     getDurationEnv("JWT_EXPIRATION_HOURS", 120) * time.Hour,
+			ShopExpiration: getDurationEnv("SHOP_JWT_EXPIRATION_HOURS", 24) * time.Hour,
 		},
 		CORS: CORSConfig{
 			AllowedOrigins:   getSliceEnv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://localhost:5000"}),

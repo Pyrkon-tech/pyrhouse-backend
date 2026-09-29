@@ -89,6 +89,11 @@ func (s *Service) BroadcastStocksChanged(locationID int, action string) {
 	s.broadcastEvent(QuestEvent{Type: "stocks_changed", LocationID: locationID, Action: action})
 }
 
+// BroadcastQuestsChanged tells SSE clients to reload quests (e.g. a shop order was confirmed).
+func (s *Service) BroadcastQuestsChanged() {
+	s.broadcastEvent(QuestEvent{Type: "quests_changed"})
+}
+
 // SetTransferCreator sets the transfer creator (called after DI wiring to avoid circular deps)
 func (s *Service) SetTransferCreator(tc TransferCreator) {
 	s.transferCreator = tc

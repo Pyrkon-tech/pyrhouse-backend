@@ -14,6 +14,8 @@ func RegisterPublicRoutes(router *gin.Engine, container *di.Container) {
 	container.ServiceDeskHandler.RegisterPublicRoutes(router)
 	container.UserHandler.RegisterPublicRoutes(router)
 	container.LocationHandler.RegisterPublicRoutes(router)
+	// /shop/* authenticates with shop tokens (ShopAuth), never with JWTMiddleware
+	container.ShopHandler.RegisterShopRoutes(router)
 
 	if container.DiscordHandler != nil {
 		container.DiscordHandler.RegisterRoutes(router.Group(""))
@@ -63,6 +65,8 @@ func RegisterProtectedRoutes(router *gin.Engine, container *di.Container) {
 
 	container.ReservationHandler.RegisterRoutes(protectedRoutes)
 	log.Println("[Reservations]: Routes registered successfully")
+
+	container.ShopHandler.RegisterAdminRoutes(protectedRoutes)
 
 	if container.DiscordHandler != nil {
 		container.DiscordHandler.RegisterProtectedRoutes(protectedRoutes)

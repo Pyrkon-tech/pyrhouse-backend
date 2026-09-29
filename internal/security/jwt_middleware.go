@@ -157,32 +157,39 @@ func getTokenFromContext(c *gin.Context) (*jwt.Token, error) {
 		return nil, fmt.Errorf("no token provided")
 	}
 
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return jwtSecret, nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
+	token, err := parseSignedToken(strings.TrimPrefix(authHeader, "Bearer "))
 	if err != nil {
 		return nil, err
 	}
 
-	if err := checkWarehouseAudience(token); err != nil {
+	// Legacy warehouse tokens predate the aud claim and stay valid until they expire.
+	if err := checkExclusiveAudience(token, AudienceWarehouse, true); err != nil {
 		return nil, err
 	}
 
 	return token, nil
 }
 
-// checkWarehouseAudience accepts tokens issued for the warehouse and legacy tokens
-// without an aud claim (issued before audiences existed, valid until they expire).
-// Any other audience, notably the shop's, is rejected.
-func checkWarehouseAudience(token *jwt.Token) error {
+// parseSignedToken verifies signature (HS256 only) and expiry (required), nothing else.
+func parseSignedToken(tokenString string) (*jwt.Token, error) {
+	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return jwtSecret, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
+}
+
+// checkExclusiveAudience requires every aud entry to equal want. jwt.WithAudience is not enough:
+// it accepts a token as soon as want is one of several audiences. allowMissing accepts tokens
+// with no aud claim at all.
+func checkExclusiveAudience(token *jwt.Token, want string, allowMissing bool) error {
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return fmt.Errorf("unexpected claims type")
 	}
 	if _, present := claims["aud"]; !present {
-		return nil
+		if allowMissing {
+			return nil
+		}
+		return fmt.Errorf("token has no audience")
 	}
 
 	// GetAudience silently maps unsupported types (e.g. a number) to an empty list,
@@ -195,7 +202,7 @@ func checkWarehouseAudience(token *jwt.Token) error {
 		return fmt.Errorf("invalid aud claim")
 	}
 	for _, a := range aud {
-		if a != AudienceWarehouse {
+		if a != want {
 			return fmt.Errorf("token audience %q is not allowed", a)
 		}
 	}

@@ -150,3 +150,92 @@ func TestWarehouseToken_Validation(t *testing.T) {
 		})
 	}
 }
+
+func shopClaims() jwt.MapClaims {
+	return jwt.MapClaims{
+		"sub": "7",
+		"aud": []string{AudienceShop},
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}
+}
+
+func TestShopToken_RoundTrip(t *testing.T) {
+	initTestJWT(t)
+
+	token, err := GenerateShopJWT(7)
+	require.NoError(t, err)
+
+	accountID, err := ParseShopToken(token)
+	require.NoError(t, err)
+	assert.Equal(t, 7, accountID)
+}
+
+func TestParseShopToken_Rejects(t *testing.T) {
+	initTestJWT(t)
+
+	warehouseToken, err := GenerateJWT("42", "admin", "tester")
+	require.NoError(t, err)
+
+	mutate := func(f func(jwt.MapClaims)) string {
+		c := shopClaims()
+		f(c)
+		return signTestToken(t, c)
+	}
+
+	tests := []struct {
+		name  string
+		token string
+	}{
+		{"warehouse token", warehouseToken},
+		{"legacy token without aud", signTestToken(t, baseClaims())},
+		{"shop token without aud", mutate(func(c jwt.MapClaims) { delete(c, "aud") })},
+		{"both audiences", mutate(func(c jwt.MapClaims) { c["aud"] = []string{AudienceShop, AudienceWarehouse} })},
+		{"expired", mutate(func(c jwt.MapClaims) { c["exp"] = time.Now().Add(-time.Minute).Unix() })},
+		{"without exp", mutate(func(c jwt.MapClaims) { delete(c, "exp") })},
+		{"without sub", mutate(func(c jwt.MapClaims) { delete(c, "sub") })},
+		{"non-numeric sub", mutate(func(c jwt.MapClaims) { c["sub"] = "admin" })},
+		{"zero sub", mutate(func(c jwt.MapClaims) { c["sub"] = "0" })},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseShopToken(tt.token)
+			assert.Error(t, err)
+		})
+	}
+}
+
+// A shop token must never authenticate against warehouse routes, even when a buggy issuer
+// drops its aud claim (it then lacks userID/role and is still rejected).
+func TestShopToken_RejectedByWarehouse(t *testing.T) {
+	initTestJWT(t)
+	gin.SetMode(gin.TestMode)
+
+	shopToken, err := GenerateShopJWT(42)
+	require.NoError(t, err)
+	stripped := shopClaims()
+	delete(stripped, "aud")
+
+	for name, token := range map[string]string{
+		"shop token":             shopToken,
+		"shop token without aud": signTestToken(t, stripped),
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := gin.New()
+			r.GET("/p", JWTMiddleware(), func(c *gin.Context) { c.Status(http.StatusOK) })
+			req := httptest.NewRequest(http.MethodGet, "/p", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+		})
+	}
+
+	t.Run("GetUserIDFromToken", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+		c.Request.Header.Set("Authorization", "Bearer "+shopToken)
+		_, err := GetUserIDFromToken(c)
+		assert.Error(t, err)
+	})
+}
