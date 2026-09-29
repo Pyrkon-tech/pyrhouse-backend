@@ -69,7 +69,7 @@ func (h *Handler) ListQuests(c *gin.Context) {
 		"count":  len(quests),
 		"limit":  filter.Limit,
 		"offset": filter.Offset,
-		"quests": quests,
+		"quests": nonNilQuests(quests),
 	})
 }
 
@@ -259,7 +259,7 @@ func (h *Handler) ListUnresolvedLocationQuests(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"count":  len(quests),
-		"quests": quests,
+		"quests": nonNilQuests(quests),
 	})
 }
 
@@ -302,6 +302,14 @@ func (h *Handler) UpdateQuestLocation(c *gin.Context) {
 }
 
 // Helper functions
+
+// nonNilQuests keeps an empty result a JSON array (Go encodes a nil slice as null).
+func nonNilQuests(q []Quest) []Quest {
+	if q == nil {
+		return []Quest{}
+	}
+	return q
+}
 
 func getIntQuery(c *gin.Context, key string, defaultValue int) int {
 	valueStr := c.Query(key)

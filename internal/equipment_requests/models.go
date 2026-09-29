@@ -32,13 +32,13 @@ type Quest struct {
 	ReturnDate         *string          `json:"return_date"`   // YYYY-MM-DD, null when unknown (sheet quests)
 	Source             string           `json:"source"`        // SourceSheet | SourceShop
 	ShopOrderID        *int             `json:"shop_order_id"` // set when Source is SourceShop
-	PickupTime         string           `json:"pickup_time,omitempty"`
+	PickupTime         string           `json:"pickup_time"`
 	BudgetOwner        string           `json:"budget_owner"`
 	Items              []QuestItem      `json:"items"`
 	Status             string           `json:"status"`
 	Transfers          []QuestTransfer  `json:"transfers"` // All linked transfers (empty when none)
-	LocationID         *int             `json:"location_id,omitempty"`
-	LocationName       *string          `json:"location_name,omitempty"`
+	LocationID         *int             `json:"location_id"`
+	LocationName       *string          `json:"location_name"`
 	LocationResolved   bool             `json:"location_resolved"`
 	AssignedVolunteers []QuestVolunteer `json:"assigned_volunteers"` // Aggregated across all transfers
 }
@@ -59,10 +59,10 @@ func (q *Quest) HasActiveTransfer() bool {
 type QuestItem struct {
 	Name         string  `json:"name"`
 	Quantity     *int    `json:"quantity"`
-	CategoryID   *int    `json:"category_id,omitempty"`   // nil only for historic sheet items that matched no category
-	CategoryName *string `json:"category_name,omitempty"` // read-only, joined from item_category.label
-	BudgetOwner  string  `json:"budget_owner,omitempty"`  // Per-item budget owner (can differ from quest)
-	Notes        string  `json:"notes,omitempty"`
+	CategoryID   *int    `json:"category_id"`   // nil only for historic sheet items that matched no category
+	CategoryName *string `json:"category_name"` // read-only, joined from item_category.label
+	BudgetOwner  string  `json:"budget_owner"`  // Per-item budget owner (can differ from quest)
+	Notes        string  `json:"notes"`
 }
 
 // Destination represents where items should be delivered
@@ -99,8 +99,8 @@ type UserOverride struct {
 // TransferPreview is returned by the preview endpoint to show what a transfer would look like
 type TransferPreview struct {
 	FromLocationID  int                 `json:"from_location_id"`
-	ToLocationID    *int                `json:"to_location_id,omitempty"`
-	ToLocationName  string              `json:"to_location_name,omitempty"`
+	ToLocationID    *int                `json:"to_location_id"`
+	ToLocationName  string              `json:"to_location_name"`
 	ResolvedItems   []ResolvedStockItem `json:"resolved_items"`
 	UnresolvedItems []UnresolvedItem    `json:"unresolved_items"`
 }
@@ -109,7 +109,7 @@ type TransferPreview struct {
 type ResolvedStockItem struct {
 	StockID      int    `json:"stock_id"`
 	CategoryID   int    `json:"category_id"`
-	CategoryName string `json:"category_name,omitempty"`
+	CategoryName string `json:"category_name"`
 	ItemName     string `json:"item_name"`
 	Quantity     int    `json:"quantity"`
 	Available    int    `json:"available"`
@@ -119,7 +119,7 @@ type ResolvedStockItem struct {
 type UnresolvedItem struct {
 	ItemName   string `json:"item_name"`
 	Quantity   *int   `json:"quantity"`
-	CategoryID *int   `json:"category_id,omitempty"`
+	CategoryID *int   `json:"category_id"`
 	Reason     string `json:"reason"`
 }
 

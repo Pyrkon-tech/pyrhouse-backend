@@ -1512,24 +1512,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  count:
-                    type: integer
-                    description: Number of quests returned
-                    example: 2
-                  limit:
-                    type: integer
-                    description: Limit applied
-                    example: 50
-                  offset:
-                    type: integer
-                    description: Offset applied
-                    example: 0
-                  quests:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/EquipmentRequestQuest"
+                $ref: "#/components/schemas/QuestsListResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -4388,7 +4371,7 @@ components:
           description: When the equipment comes back (null for sheet quests)
           example: "2025-06-16"
         pickup_time:
-          type: [string, "null"]
+          type: string
           description: When to pick up equipment (flexible format)
           example: "17-18"
         budget_owner:
@@ -4409,22 +4392,23 @@ components:
             - completed
             - cancelled
           example: "pending"
-        transfer_id:
-          type: [integer, "null"]
-          description: ID of the linked inventory transfer (set when transfer is created from quest)
-          example: 42
-        transfer_status:
-          type: [string, "null"]
-          description: Status of the linked transfer (derived from transfer, not stored on quest)
-          enum:
-            - in_transit
-            - completed
-            - cancelled
-          example: "in_transit"
+        transfers:
+          type: array
+          description: All transfers created from this quest (a quest can be delivered in several)
+          items:
+            $ref: "#/components/schemas/QuestTransfer"
+        assigned_volunteers:
+          type: array
+          description: Volunteers assigned to the quest's transfers
+          items:
+            $ref: "#/components/schemas/QuestVolunteer"
         location_id:
           type: [integer, "null"]
           description: Resolved location ID from pavilion+location (null if unresolved)
           example: 3
+        location_name:
+          type: [string, "null"]
+          description: Name of the resolved location
         location_resolved:
           type: boolean
           description: Whether the destination location was successfully resolved
@@ -4440,6 +4424,32 @@ components:
             - sheet
             - shop
           example: "shop"
+
+    QuestTransfer:
+      type: object
+      properties:
+        transfer_id:
+          type: integer
+        status:
+          type: string
+          enum: [in_transit, completed, cancelled]
+        created_at:
+          type: string
+          format: date-time
+
+    QuestsListResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        quests:
+          type: array
+          items:
+            $ref: "#/components/schemas/EquipmentRequestQuest"
 
     QuestDestination:
       type: object
@@ -4476,11 +4486,11 @@ components:
           description: Category label (read-only)
           example: "Laptop"
         budget_owner:
-          type: [string, "null"]
+          type: string
           description: Budget owner for this specific item (can differ from quest budget_owner)
           example: "Anna Nowak"
         notes:
-          type: [string, "null"]
+          type: string
           description: Additional notes from requestor
           example: "Must have good battery life"
 
