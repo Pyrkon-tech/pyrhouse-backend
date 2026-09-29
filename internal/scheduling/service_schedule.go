@@ -71,7 +71,8 @@ func (s *Service) RegenerateSlots() (*ScheduleDetail, error) {
 
 // generateScheduleSlots creates montage (hourly within day window), festival (1h blocks),
 // and demontage (hourly within day window) slots. All times in Europe/Warsaw.
-// dayWindows maps date string "2006-01-02" → [startHour, endHour]; nil/missing entry → default 8-20.
+// dayWindows maps date string "2006-01-02" → [startHour, endHour]; a missing entry defaults to
+// 8-20 for montage days and 10-16 for the demontage day.
 func generateScheduleSlots(schedule *Schedule, dayWindows map[string][2]int) []Slot {
 	var slots []Slot
 

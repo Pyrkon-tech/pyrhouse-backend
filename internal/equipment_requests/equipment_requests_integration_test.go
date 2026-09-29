@@ -371,7 +371,9 @@ func TestCreateTransferFromQuest_E2E(t *testing.T) {
 	fx := createEQFixtures(t, db)
 	router := newEQRouter(db)
 
-	t.Run("auto-resolves stock from quest items and creates transfer", func(t *testing.T) {
+	// The service never picks stock on its own: the preview suggests stock items per category and
+	// the caller sends the ones it wants (this is what the dispatch UI does).
+	t.Run("preview suggests stock, transfer created with it", func(t *testing.T) {
 		questID := insertTestQuest(t, db, &fx.toLocID, "pending")
 		dbQuestID := getQuestDBID(t, db, questID)
 		insertTestQuestItem(t, db, dbQuestID, fx.categoryID, "__TEST__EQCat", 5)
@@ -379,12 +381,23 @@ func TestCreateTransferFromQuest_E2E(t *testing.T) {
 		var beforeQty int
 		require.NoError(t, db.QueryRow("SELECT quantity FROM non_serialized_items WHERE id = $1", fx.stockID).Scan(&beforeQty))
 
+		pw := httptest.NewRecorder()
+		router.ServeHTTP(pw, httptest.NewRequest(http.MethodGet,
+			fmt.Sprintf("/equipment-requests/quests/%s/transfer-preview?from_location_id=%d", questID, fx.fromLocID), nil))
+		require.Equal(t, http.StatusOK, pw.Code, "body: %s", pw.Body.String())
+		var preview TransferPreview
+		require.NoError(t, json.Unmarshal(pw.Body.Bytes(), &preview))
+		require.Len(t, preview.ResolvedItems, 1)
+		assert.Equal(t, fx.stockID, preview.ResolvedItems[0].StockID)
+		assert.Equal(t, 5, preview.ResolvedItems[0].Quantity)
+
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost,
 			"/equipment-requests/quests/"+questID+"/transfer",
 			eqJSON(t, map[string]any{
 				"from_location_id": fx.fromLocID,
 				"to_location_id":   fx.toLocID,
+				"stock_items":      []map[string]any{{"id": preview.ResolvedItems[0].StockID, "quantity": preview.ResolvedItems[0].Quantity}},
 			}))
 		req.Header.Set("Content-Type", "application/json")
 		router.ServeHTTP(w, req)
@@ -418,7 +431,20 @@ func TestCreateTransferFromQuest_E2E(t *testing.T) {
 		assert.Equal(t, "in_transit", tStatus)
 	})
 
-	t.Run("explicit stock_items override used instead of auto-resolve", func(t *testing.T) {
+	t.Run("a transfer without stock items or assets is rejected with 422", func(t *testing.T) {
+		questID := insertTestQuest(t, db, &fx.toLocID, "pending")
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost,
+			"/equipment-requests/quests/"+questID+"/transfer",
+			eqJSON(t, map[string]any{"from_location_id": fx.fromLocID, "to_location_id": fx.toLocID}))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code, "body: %s", w.Body.String())
+	})
+
+	t.Run("partial quantity from explicit stock_items", func(t *testing.T) {
 		questID := insertTestQuest(t, db, &fx.toLocID, "pending")
 		dbQuestID := getQuestDBID(t, db, questID)
 		insertTestQuestItem(t, db, dbQuestID, fx.categoryID, "__TEST__EQCat", 10)

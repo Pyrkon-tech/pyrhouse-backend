@@ -56,8 +56,10 @@ func TestGenerateScheduleSlots_Types(t *testing.T) {
 		assert.Equal(t, time.Hour, dur, "each festival slot should be exactly 1h")
 	}
 
-	// Demontage: 21 June, default window 08-20h = 12 hourly slots
-	assert.Len(t, demontage, 12)
+	// Demontage: 21 June, default window 10-16h (event closure hours, 4833b58) = 6 hourly slots
+	assert.Len(t, demontage, 6)
+	assert.Equal(t, 10, demontage[0].StartTime.In(warsawLocation).Hour())
+	assert.Equal(t, 16, demontage[len(demontage)-1].EndTime.In(warsawLocation).Hour())
 	assert.Equal(t, 1.0, demontage[0].CreditHours)
 	assert.Equal(t, 2, demontage[0].Capacity)
 	assert.Equal(t, 21, demontage[0].StartTime.In(warsawLocation).Day())

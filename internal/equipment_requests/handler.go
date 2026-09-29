@@ -171,7 +171,8 @@ func (h *Handler) CreateTransferFromQuest(c *gin.Context) {
 		case strings.Contains(errMsg, "cannot create transfer for quest with status"):
 			status = http.StatusConflict
 		case strings.Contains(errMsg, "could not resolve"),
-			strings.Contains(errMsg, "no stock items"):
+			strings.Contains(errMsg, "no stock items"),
+			strings.Contains(errMsg, "must include at least one stock item or asset"):
 			status = http.StatusUnprocessableEntity
 		case strings.Contains(errMsg, "quest not found"):
 			status = http.StatusNotFound
