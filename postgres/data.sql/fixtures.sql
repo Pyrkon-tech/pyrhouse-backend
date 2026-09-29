@@ -1,6 +1,6 @@
 -- Fixtures: anonymised data from staging-pyrhouse-2026-08-06_233419-restore.sql, built by postgres/build-fixtures.sh on 2026-09-28.
 -- Load into a migrated database; it replaces whatever the tables hold. Passwords: "pyrhouse".
-TRUNCATE app_settings, audit_logs, equipment_request_category_mapping, equipment_request_items, equipment_request_location_mapping, equipment_request_price_list, equipment_request_quests, equipment_request_sync_log, item_category, items, locations, non_serialized_items, non_serialized_transfers, origins, pyr_code_reservations, quest_transfers, release_assets, release_stocks, releases, schedule_assignments, schedule_day_windows, schedule_slots, schedule_volunteers, schedules, serialized_transfers, service_desk_request_comments, service_desk_requests, transfer_users, transfers, users RESTART IDENTITY CASCADE;
+TRUNCATE app_settings, audit_logs, equipment_request_items, equipment_request_price_list, equipment_request_quests, item_category, items, locations, non_serialized_items, non_serialized_transfers, origins, pyr_code_reservations, quest_transfers, release_assets, release_stocks, releases, schedule_assignments, schedule_day_windows, schedule_slots, schedule_volunteers, schedules, serialized_transfers, service_desk_request_comments, service_desk_requests, transfer_users, transfers, users RESTART IDENTITY CASCADE;
 --
 -- PostgreSQL database dump
 --
@@ -30,10 +30,7 @@ SET SESSION AUTHORIZATION DEFAULT;
 ALTER TABLE public.app_settings DISABLE TRIGGER ALL;
 
 COPY public.app_settings (key, value, description, updated_at) FROM stdin;
-equipment_request.sheet_name	Arkusz1	Sheet tab name within the document	2026-05-11 10:03:01.348079
 scheduling.sheet_name	Grafik	Schedule - Sheet tab name	2026-05-12 07:45:48.43208
-equipment_request.cennik_sheet_name	Cennik	Sheet name for price list (Cennik tab)	2026-05-14 20:27:09.516847
-equipment_request.sheet_id	fixture-sheet-id	Google Sheets document ID for equipment requests	2026-05-11 09:44:08.106183
 scheduling.sheet_id	fixture-sheet-id	Schedule - Google Sheets document ID	2026-05-12 07:50:39.609197
 \.
 
@@ -340,18 +337,6 @@ COPY public.item_category (id, item_category, label, pyr_id, category_type) FROM
 
 
 ALTER TABLE public.item_category ENABLE TRIGGER ALL;
-
---
--- Data for Name: equipment_request_category_mapping; Type: TABLE DATA; Schema: public; Owner: -
---
-
-ALTER TABLE public.equipment_request_category_mapping DISABLE TRIGGER ALL;
-
-COPY public.equipment_request_category_mapping (id, form_item_name, category_id, created_by, created_at, last_used_at, use_count) FROM stdin;
-\.
-
-
-ALTER TABLE public.equipment_request_category_mapping ENABLE TRIGGER ALL;
 
 --
 -- Data for Name: locations; Type: TABLE DATA; Schema: public; Owner: -
@@ -666,34 +651,6 @@ COPY public.equipment_request_items (id, quest_id, item_name, quantity, category
 ALTER TABLE public.equipment_request_items ENABLE TRIGGER ALL;
 
 --
--- Data for Name: equipment_request_location_mapping; Type: TABLE DATA; Schema: public; Owner: -
---
-
-ALTER TABLE public.equipment_request_location_mapping DISABLE TRIGGER ALL;
-
-COPY public.equipment_request_location_mapping (id, pavilion, location_name, location_id, created_at, usage_count) FROM stdin;
-1	Wejście zachodnie	Akredytacja	14	2026-02-22 19:40:36.802779	25
-14	Pawilon 3	GIF	34	2026-05-26 08:28:40.101905	5
-6	Pawilon 8a	Strefa Autografów i Foto	43	2026-05-12 19:26:42.888607	6
-5	PCC	Szatnia	42	2026-03-05 22:27:27.465525	13
-9	Pawilon 5	Strefa komiksowa	45	2026-05-26 08:26:58.441106	622
-18	Pawilon 5	Aleja Artystów i Kolekcjonerów - Antresola	48	2026-06-14 21:16:55.980557	0
-20	Wejście północne	Kamilek	49	2026-06-14 22:01:11.47906	0
-21	Pawilon 2	Oznakowanie	51	2026-06-17 10:12:08.225874	0
-22	Pawilon 3	Antresola	22	2026-06-18 09:15:47.422072	0
-15	Pawilon 7	Sala Kameralna	44	2026-05-26 08:29:07.343598	3
-23	PCC	Sala Warsztatowa	26	2026-06-19 13:11:28.79802	0
-16	Pawilon 10		6	2026-05-26 08:29:30.889894	0
-2	Wejście północne	Szatnia	38	2026-02-22 23:09:54.568452	965
-3	Wejście wschodnie	Szatnia	37	2026-02-24 23:23:39.860426	7
-13	Pawilon 3a	Strefa Puzzlowa - Antresola	47	2026-05-26 08:28:11.514436	1
-10	Wejście zachodnie	Szatnia	35	2026-05-26 08:27:16.006367	1
-\.
-
-
-ALTER TABLE public.equipment_request_location_mapping ENABLE TRIGGER ALL;
-
---
 -- Data for Name: equipment_request_price_list; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -719,68 +676,6 @@ COPY public.equipment_request_price_list (id, item_name, supplier, unit_price, u
 
 
 ALTER TABLE public.equipment_request_price_list ENABLE TRIGGER ALL;
-
---
--- Data for Name: equipment_request_sync_log; Type: TABLE DATA; Schema: public; Owner: -
---
-
-ALTER TABLE public.equipment_request_sync_log DISABLE TRIGGER ALL;
-
-COPY public.equipment_request_sync_log (id, synced_at, rows_processed, quests_created, quests_updated, quests_unchanged, items_added, items_removed, errors, success, duration_ms, sheet_id) FROM stdin;
-7361	2026-08-06 09:15:46.836746	160	0	0	63	0	0	\N	t	1514	fixture-sheet-id
-7362	2026-08-06 09:30:46.840392	160	0	0	63	0	0	\N	t	1519	fixture-sheet-id
-7363	2026-08-06 09:45:46.663911	160	0	0	63	0	0	\N	t	1343	fixture-sheet-id
-7364	2026-08-06 10:00:46.706369	160	0	0	63	0	0	\N	t	1386	fixture-sheet-id
-7365	2026-08-06 10:15:46.85058	160	0	0	63	0	0	\N	t	1530	fixture-sheet-id
-7366	2026-08-06 10:30:46.738626	160	0	0	63	0	0	\N	t	1418	fixture-sheet-id
-7367	2026-08-06 10:45:46.720614	160	0	0	63	0	0	\N	t	1400	fixture-sheet-id
-7368	2026-08-06 11:00:46.837929	160	0	0	63	0	0	\N	t	1517	fixture-sheet-id
-7369	2026-08-06 11:15:46.657914	160	0	0	63	0	0	\N	t	1336	fixture-sheet-id
-7370	2026-08-06 11:30:47.083803	160	0	0	63	0	0	\N	t	1760	fixture-sheet-id
-7371	2026-08-06 11:45:46.765811	160	0	0	63	0	0	\N	t	1444	fixture-sheet-id
-7372	2026-08-06 12:00:46.971786	160	0	0	63	0	0	\N	t	1648	fixture-sheet-id
-7373	2026-08-06 12:15:48.154049	160	0	0	63	0	0	\N	t	2832	fixture-sheet-id
-7374	2026-08-06 12:30:47.512965	160	0	0	63	0	0	\N	t	2190	fixture-sheet-id
-7375	2026-08-06 12:45:46.836918	160	0	0	63	0	0	\N	t	1514	fixture-sheet-id
-7376	2026-08-06 13:00:47.321311	160	0	0	63	0	0	\N	t	1995	fixture-sheet-id
-7377	2026-08-06 13:15:46.820946	160	0	0	63	0	0	\N	t	1498	fixture-sheet-id
-7378	2026-08-06 13:30:47.688774	160	0	0	63	0	0	\N	t	2365	fixture-sheet-id
-7379	2026-08-06 13:45:53.798766	160	0	0	63	0	0	\N	t	8477	fixture-sheet-id
-7380	2026-08-06 14:00:46.974865	160	0	0	63	0	0	\N	t	1652	fixture-sheet-id
-7381	2026-08-06 14:15:46.760945	160	0	0	63	0	0	\N	t	1440	fixture-sheet-id
-7382	2026-08-06 14:30:47.458835	160	0	0	63	0	0	\N	t	2138	fixture-sheet-id
-7383	2026-08-06 14:45:46.661952	160	0	0	63	0	0	\N	t	1341	fixture-sheet-id
-7384	2026-08-06 15:00:47.768841	160	0	0	63	0	0	\N	t	2447	fixture-sheet-id
-7385	2026-08-06 15:15:46.999724	160	0	0	63	0	0	\N	t	1678	fixture-sheet-id
-7386	2026-08-06 15:30:46.944988	160	0	0	63	0	0	\N	t	1624	fixture-sheet-id
-7387	2026-08-06 15:45:46.646346	160	0	0	63	0	0	\N	t	1321	fixture-sheet-id
-7388	2026-08-06 16:00:47.386111	160	0	0	63	0	0	\N	t	2065	fixture-sheet-id
-7389	2026-08-06 16:15:46.661756	160	0	0	63	0	0	\N	t	1340	fixture-sheet-id
-7390	2026-08-06 16:30:47.413313	160	0	0	63	0	0	\N	t	2092	fixture-sheet-id
-7391	2026-08-06 16:45:47.01661	160	0	0	63	0	0	\N	t	1695	fixture-sheet-id
-7392	2026-08-06 17:00:46.923691	160	0	0	63	0	0	\N	t	1603	fixture-sheet-id
-7393	2026-08-06 17:15:46.710095	160	0	0	63	0	0	\N	t	1390	fixture-sheet-id
-7394	2026-08-06 17:30:46.9701	160	0	0	63	0	0	\N	t	1648	fixture-sheet-id
-7395	2026-08-06 17:45:46.71166	160	0	0	63	0	0	\N	t	1391	fixture-sheet-id
-7396	2026-08-06 18:00:46.775954	160	0	0	63	0	0	\N	t	1455	fixture-sheet-id
-7397	2026-08-06 18:15:46.717684	160	0	0	63	0	0	\N	t	1396	fixture-sheet-id
-7398	2026-08-06 18:30:46.808261	160	0	0	63	0	0	\N	t	1487	fixture-sheet-id
-7399	2026-08-06 18:45:46.693173	160	0	0	63	0	0	\N	t	1372	fixture-sheet-id
-7400	2026-08-06 19:00:46.735744	160	0	0	63	0	0	\N	t	1414	fixture-sheet-id
-7401	2026-08-06 19:15:46.838709	160	0	0	63	0	0	\N	t	1517	fixture-sheet-id
-7402	2026-08-06 19:30:46.875215	160	0	0	63	0	0	\N	t	1553	fixture-sheet-id
-7403	2026-08-06 19:45:46.775615	160	0	0	63	0	0	\N	t	1455	fixture-sheet-id
-7404	2026-08-06 20:00:46.823297	160	0	0	63	0	0	\N	t	1502	fixture-sheet-id
-7405	2026-08-06 20:15:46.679667	160	0	0	63	0	0	\N	t	1359	fixture-sheet-id
-7406	2026-08-06 20:30:46.759553	160	0	0	63	0	0	\N	t	1438	fixture-sheet-id
-7407	2026-08-06 20:45:46.569501	160	0	0	63	0	0	\N	t	1247	fixture-sheet-id
-7408	2026-08-06 21:00:46.654209	160	0	0	63	0	0	\N	t	1334	fixture-sheet-id
-7409	2026-08-06 21:15:46.764517	160	0	0	63	0	0	\N	t	1441	fixture-sheet-id
-7410	2026-08-06 21:30:46.666745	160	0	0	63	0	0	\N	t	1346	fixture-sheet-id
-\.
-
-
-ALTER TABLE public.equipment_request_sync_log ENABLE TRIGGER ALL;
 
 --
 -- Data for Name: origins; Type: TABLE DATA; Schema: public; Owner: -
@@ -3042,24 +2937,10 @@ SELECT pg_catalog.setval('public.audit_logs_id_seq', 2260, true);
 
 
 --
--- Name: equipment_request_category_mapping_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
---
-
-SELECT pg_catalog.setval('public.equipment_request_category_mapping_id_seq', 1, false);
-
-
---
 -- Name: equipment_request_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
 SELECT pg_catalog.setval('public.equipment_request_items_id_seq', 254, true);
-
-
---
--- Name: equipment_request_location_mapping_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
---
-
-SELECT pg_catalog.setval('public.equipment_request_location_mapping_id_seq', 23, true);
 
 
 --
@@ -3074,13 +2955,6 @@ SELECT pg_catalog.setval('public.equipment_request_price_list_id_seq', 101879, t
 --
 
 SELECT pg_catalog.setval('public.equipment_request_quests_id_seq', 95, true);
-
-
---
--- Name: equipment_request_sync_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
---
-
-SELECT pg_catalog.setval('public.equipment_request_sync_log_id_seq', 7410, true);
 
 
 --

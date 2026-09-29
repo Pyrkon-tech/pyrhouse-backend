@@ -8,22 +8,13 @@ import (
 )
 
 type Config struct {
-	Server           ServerConfig
-	Database         DatabaseConfig
-	JWT              JWTConfig
-	CORS             CORSConfig
-	Sentry           SentryConfig
-	Discord          DiscordConfig
-	Google           GoogleConfig
-	EquipmentRequest EquipmentRequestConfig
-}
-
-type EquipmentRequestConfig struct {
-	SheetID        string
-	SheetName      string
-	SyncEnabled    bool
-	SyncInterval   time.Duration
-	FuzzyThreshold int
+	Server   ServerConfig
+	Database DatabaseConfig
+	JWT      JWTConfig
+	CORS     CORSConfig
+	Sentry   SentryConfig
+	Discord  DiscordConfig
+	Google   GoogleConfig
 }
 
 type ServerConfig struct {
@@ -122,13 +113,6 @@ func Load() (*Config, error) {
 			ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 			RedirectURI:  os.Getenv("GOOGLE_REDIRECT_URI"),
 			FrontendURL:  os.Getenv("FRONTEND_URL"),
-		},
-		EquipmentRequest: EquipmentRequestConfig{
-			SheetID:        os.Getenv("EQUIPMENT_REQUEST_SHEET_ID"),
-			SheetName:      getEnv("EQUIPMENT_REQUEST_SHEET_NAME", "Zamówienia"),
-			SyncEnabled:    getEnv("EQUIPMENT_REQUEST_SYNC_ENABLED", "false") == "true",
-			SyncInterval:   parseDurationEnv("EQUIPMENT_REQUEST_SYNC_INTERVAL", 15*time.Minute),
-			FuzzyThreshold: getIntEnv("EQUIPMENT_REQUEST_FUZZY_THRESHOLD", 3),
 		},
 	}
 

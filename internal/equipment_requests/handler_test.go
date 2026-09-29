@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,13 +18,10 @@ import (
 
 // mockQuestRepository is a mock implementation for testing
 type mockQuestRepository struct {
-	quests           []Quest
-	syncLogs         []SyncLog
-	mappings         map[string]int
-	categoryMappings []CategoryMapping
-	statusUpdate     func(ctx context.Context, questID string, status string) error
-	stockFinder      func(locationID, categoryID int) ([]StockMatch, error)
-	fulfilled        map[string]map[int]int // questID -> category_id -> delivered quantity
+	quests       []Quest
+	statusUpdate func(ctx context.Context, questID string, status string) error
+	stockFinder  func(locationID, categoryID int) ([]StockMatch, error)
+	fulfilled    map[string]map[int]int // questID -> category_id -> delivered quantity
 }
 
 // mockTransferCreator is a mock TransferCreator for testing
@@ -67,27 +63,6 @@ func (m *mockQuestRepository) GetQuestByKey(ctx context.Context, questKey string
 	return nil, nil
 }
 
-func (m *mockQuestRepository) DeleteOrphanedPendingQuests(ctx context.Context, keepKeys []string) (int, error) {
-	if len(keepKeys) == 0 {
-		return 0, nil
-	}
-	keep := make(map[string]bool, len(keepKeys))
-	for _, k := range keepKeys {
-		keep[k] = true
-	}
-	kept := make([]Quest, 0, len(m.quests))
-	deleted := 0
-	for _, q := range m.quests {
-		if q.Status == "pending" && !keep[q.QuestKey] {
-			deleted++
-			continue
-		}
-		kept = append(kept, q)
-	}
-	m.quests = kept
-	return deleted, nil
-}
-
 func (m *mockQuestRepository) ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error) {
 	result := []Quest{}
 	for _, q := range m.quests {
@@ -124,37 +99,6 @@ func (m *mockQuestRepository) UpdateQuestStatus(ctx context.Context, questID str
 		}
 	}
 	return assert.AnError
-}
-
-func (m *mockQuestRepository) CreateSyncLog(ctx context.Context, log *SyncLog) error {
-	log.ID = len(m.syncLogs) + 1
-	m.syncLogs = append(m.syncLogs, *log)
-	return nil
-}
-
-func (m *mockQuestRepository) GetLatestSyncLog(ctx context.Context) (*SyncLog, error) {
-	if len(m.syncLogs) == 0 {
-		return nil, assert.AnError
-	}
-	return &m.syncLogs[len(m.syncLogs)-1], nil
-}
-
-func (m *mockQuestRepository) GetCategoryMapping(ctx context.Context, itemName string) (*int, error) {
-	if catID, ok := m.mappings[itemName]; ok {
-		return &catID, nil
-	}
-	return nil, nil
-}
-
-func (m *mockQuestRepository) CreateCategoryMapping(ctx context.Context, mapping *CategoryMapping) error {
-	mapping.ID = len(m.mappings) + 1
-	mapping.CreatedAt = time.Now()
-	m.mappings[mapping.FormItemName] = mapping.CategoryID
-	return nil
-}
-
-func (m *mockQuestRepository) IncrementMappingUsage(ctx context.Context, itemName string) error {
-	return nil
 }
 
 func (m *mockQuestRepository) AddTransferToQuest(ctx context.Context, questID string, transferID int) error {
@@ -225,34 +169,6 @@ func (m *mockQuestRepository) FindStockItemsByCategory(fromLocationID int, categ
 	return nil, nil
 }
 
-func (m *mockQuestRepository) ResolveLocationByPavilionAndName(pavilion, name string) (*int, error) {
-	return nil, nil
-}
-
-func (m *mockQuestRepository) ResolveLocationByNameOnly(name string) (*int, error) {
-	return nil, nil
-}
-
-func (m *mockQuestRepository) GetLocationMapping(ctx context.Context, pavilion, locationName string) (*int, error) {
-	return nil, nil
-}
-
-func (m *mockQuestRepository) CreateLocationMapping(ctx context.Context, mapping *LocationMapping) error {
-	return nil
-}
-
-func (m *mockQuestRepository) ListLocationMappings(ctx context.Context) ([]LocationMapping, error) {
-	return nil, nil
-}
-
-func (m *mockQuestRepository) DeleteLocationMapping(ctx context.Context, id int) error {
-	return nil
-}
-
-func (m *mockQuestRepository) IncrementLocationMappingUsage(ctx context.Context, pavilion, locationName string) error {
-	return nil
-}
-
 func (m *mockQuestRepository) UpdateQuestLocationResolution(ctx context.Context, questID string, locationID *int, resolved bool) error {
 	for i, q := range m.quests {
 		if q.ID == questID {
@@ -274,29 +190,15 @@ func (m *mockQuestRepository) ListUnresolvedLocationQuests(ctx context.Context) 
 	return result, nil
 }
 
-func (m *mockQuestRepository) ListCategoryMappings(ctx context.Context) ([]CategoryMapping, error) {
-	return m.categoryMappings, nil
-}
-
-func (m *mockQuestRepository) DeleteCategoryMapping(ctx context.Context, id int) error {
-	for i, cm := range m.categoryMappings {
-		if cm.ID == id {
-			m.categoryMappings = append(m.categoryMappings[:i], m.categoryMappings[i+1:]...)
-			return nil
-		}
-	}
-	return fmt.Errorf("category mapping %d not found", id)
-}
-
 func (m *mockTransferCreator) InitTransfer(req models.TransferRequest, status string) (int, error) {
 	return m.transferID, m.err
 }
 
+func intPtr(i int) *int { return &i }
+
 func setupTestHandler() (*Handler, *mockQuestRepository) {
 	mockRepo := &mockQuestRepository{
-		quests:   []Quest{},
-		syncLogs: []SyncLog{},
-		mappings: make(map[string]int),
+		quests: []Quest{},
 	}
 
 	// Service doesn't need questRepo for these handler tests
@@ -502,91 +404,6 @@ func TestHandler_UpdateQuestStatus(t *testing.T) {
 	}
 }
 
-func TestHandler_CreateCategoryMapping(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	handler, _ := setupTestHandler()
-
-	tests := []struct {
-		name           string
-		requestBody    map[string]interface{}
-		expectedStatus int
-	}{
-		{
-			name: "Valid mapping",
-			requestBody: map[string]interface{}{
-				"form_item_name": "Laptop Dell",
-				"category_id":    float64(100),
-			},
-			expectedStatus: http.StatusCreated,
-		},
-		{
-			name: "With created_by",
-			requestBody: map[string]interface{}{
-				"form_item_name": "Mouse Logitech",
-				"category_id":    float64(200),
-				"created_by":     float64(7),
-			},
-			expectedStatus: http.StatusCreated,
-		},
-		{
-			name: "Missing required field",
-			requestBody: map[string]interface{}{
-				"form_item_name": "Keyboard",
-			},
-			expectedStatus: http.StatusBadRequest,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bodyBytes, _ := json.Marshal(tt.requestBody)
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest("POST", "/api/equipment-requests/category-mapping", bytes.NewReader(bodyBytes))
-			c.Request.Header.Set("Content-Type", "application/json")
-
-			handler.CreateCategoryMapping(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-		})
-	}
-}
-
-func TestHandler_GetSyncLog(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	handler, mockRepo := setupTestHandler()
-
-	// Add sync log
-	syncLog := SyncLog{
-		ID:              1,
-		SyncedAt:        time.Now(),
-		RowsProcessed:   20,
-		QuestsCreated:   5,
-		QuestsUpdated:   3,
-		QuestsUnchanged: 12,
-		ItemsAdded:      8,
-		ItemsRemoved:    2,
-		Success:         true,
-		DurationMs:      2500,
-		SheetID:         "test-sheet-id",
-	}
-	mockRepo.syncLogs = append(mockRepo.syncLogs, syncLog)
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("GET", "/api/equipment-requests/sync-log", nil)
-
-	handler.GetSyncLog(c)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response SyncLog
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.Equal(t, syncLog.QuestsCreated, response.QuestsCreated)
-	assert.Equal(t, syncLog.QuestsUpdated, response.QuestsUpdated)
-}
-
 func TestGetIntQuery(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -702,9 +519,7 @@ func TestHandler_UpdateQuestStatus_409_WhenQuestHasTransfer(t *testing.T) {
 
 func setupHandlerWithTransferCreator(tc TransferCreator) (*Handler, *mockQuestRepository) {
 	mockRepo := &mockQuestRepository{
-		quests:   []Quest{},
-		syncLogs: []SyncLog{},
-		mappings: make(map[string]int),
+		quests: []Quest{},
 	}
 	svc := &Service{transferCreator: tc}
 	svc.questRepo = mockRepo
@@ -780,6 +595,29 @@ func TestHandler_CreateTransferFromQuest(t *testing.T) {
 			transferID:     156,
 			expectedStatus: http.StatusCreated,
 		},
+		{
+			name:    "Omitted to_location_id falls back to the quest's stored location",
+			questID: "quest-located",
+			quest: &Quest{
+				ID:         "quest-located",
+				Status:     "pending",
+				LocationID: &toLocationID,
+			},
+			body:           map[string]interface{}{"from_location_id": 1, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
+			transferID:     157,
+			expectedStatus: http.StatusCreated,
+		},
+		{
+			name:    "Omitted to_location_id without stored location returns 422",
+			questID: "quest-unlocated",
+			quest: &Quest{
+				ID:          "quest-unlocated",
+				Status:      "pending",
+				Destination: Destination{Pavilion: "P1", Location: "L1"},
+			},
+			body:           map[string]interface{}{"from_location_id": 1, "stock_items": []map[string]interface{}{{"id": 10, "quantity": 2}}},
+			expectedStatus: http.StatusUnprocessableEntity,
+		},
 	}
 
 	for _, tt := range tests {
@@ -844,6 +682,7 @@ func TestHandler_PreviewTransferFromQuest(t *testing.T) {
 				ID:          "quest-2",
 				Status:      "pending",
 				Destination: Destination{Pavilion: "P1", Location: "L1"},
+				LocationID:  intPtr(7),
 				Items:       []QuestItem{{Name: "Laptop", Quantity: intPtr(2)}},
 				SourceRows:  []int{1},
 			},
@@ -877,6 +716,7 @@ func TestHandler_PreviewTransferFromQuest(t *testing.T) {
 				var resp TransferPreview
 				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, 1, resp.FromLocationID)
+				assert.Equal(t, tt.quest.LocationID, resp.ToLocationID)
 			}
 		})
 	}
@@ -1015,7 +855,6 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRepo := &mockQuestRepository{
 				quests:    tt.initialQuests,
-				mappings:  make(map[string]int),
 				fulfilled: tt.fulfilled,
 			}
 			svc := &Service{questRepo: mockRepo}
@@ -1030,93 +869,6 @@ func TestService_OnTransferStatusChanged(t *testing.T) {
 			tt.checkResult(t, mockRepo)
 		})
 	}
-}
-
-func TestHandler_ListCategoryMappings(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	handler, mockRepo := setupTestHandler()
-
-	mockRepo.categoryMappings = []CategoryMapping{
-		{ID: 1, FormItemName: "Laptop Dell", CategoryID: 10, UseCount: 5},
-		{ID: 2, FormItemName: "Mouse", CategoryID: 20, UseCount: 1},
-	}
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("GET", "/api/equipment-requests/category-mappings", nil)
-
-	handler.ListCategoryMappings(c)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]interface{}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.EqualValues(t, 2, resp["count"])
-	mappings, ok := resp["mappings"].([]interface{})
-	require.True(t, ok)
-	assert.Len(t, mappings, 2)
-}
-
-func TestHandler_DeleteCategoryMapping(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	tests := []struct {
-		name           string
-		id             string
-		initialData    []CategoryMapping
-		expectedStatus int
-	}{
-		{
-			name:           "Delete existing mapping returns 204",
-			id:             "1",
-			initialData:    []CategoryMapping{{ID: 1, FormItemName: "Laptop", CategoryID: 10}},
-			expectedStatus: http.StatusNoContent,
-		},
-		{
-			name:           "Delete non-existent mapping returns 404",
-			id:             "99",
-			initialData:    []CategoryMapping{},
-			expectedStatus: http.StatusNotFound,
-		},
-		{
-			name:           "Invalid ID returns 400",
-			id:             "abc",
-			initialData:    []CategoryMapping{},
-			expectedStatus: http.StatusBadRequest,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			handler, mockRepo := setupTestHandler()
-			mockRepo.categoryMappings = tt.initialData
-
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Params = gin.Params{{Key: "id", Value: tt.id}}
-			c.Request = httptest.NewRequest("DELETE", "/api/equipment-requests/category-mappings/"+tt.id, nil)
-
-			handler.DeleteCategoryMapping(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-		})
-	}
-}
-
-func TestHandler_GetSyncStatus_NoScheduler(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	handler, _ := setupTestHandler() // scheduler is nil by default
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("GET", "/api/equipment-requests/sync-status", nil)
-
-	handler.GetSyncStatus(c)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	var resp SyncStatus
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.False(t, resp.Enabled)
-	assert.Nil(t, resp.LastSync)
 }
 
 // compile-time check: mockTransferCreator implements TransferCreator

@@ -259,157 +259,43 @@ The `.up.sql` should contain the forward migration, `.down.sql` the rollback. Mi
 ## Equipment Requests Feature
 
 **Location:** `internal/equipment_requests/`
-**Status:** ✅ Fully implemented (Phase 1-3 complete)
-**Purpose:** Automated equipment release request management integrated with Google Sheets
+**Purpose:** Equipment release requests ("quests") that dispatch turns into inventory transfers.
 
-### Architecture Overview
-
-```
-Google Forms → Google Sheets → Backend (auto-sync) → PostgreSQL
-                                    ↓
-                            Quest Aggregation + Fuzzy Matching
-                                    ↓
-                            REST API for Frontend
-```
+Quests used to be imported from a Google Sheets form (auto-sync, fuzzy category/location matching). That
+integration was removed in migration 000049: the organizer shop (`docs/shop/PLAN.md` in the workspace repo)
+becomes the only source of new quests, created with an exact `category_id` and `location_id`. Quests imported
+from the sheet remain in the database as history. `internal/integrations/googlesheets` stays — it serves the
+volunteer import in scheduling, not quests.
 
 ### Components
 
-**Files:**
-- `handler.go` - HTTP endpoints for quests management
-- `service.go` - Business logic, fuzzy matching (Levenshtein), sync orchestration
-- `repository.go` - Database operations (CRUD + category mapping)
-- `scheduler.go` - Auto-sync background scheduler (Phase 3)
-- `models.go` - Data models (Quest, QuestItem, Destination)
-- `column_mapper.go` - Flexible Google Sheets column parsing
-- Tests: `*_test.go` (47 unit tests, all passing)
+- `handler.go` - HTTP endpoints (list/detail, status, location fix-up, transfer from quest, SSE stream)
+- `service.go` - Transfer-from-quest logic, transfer status callback, quest fulfillment check, SSE broadcaster
+- `repository.go` - Database operations
+- `models.go` - Quest, QuestItem, Destination, transfer request/preview types
 
-**Database Tables (Migration 000028):**
-- `equipment_request_quests` - Aggregated requests by destination/recipient/date
-- `equipment_request_items` - Line items with category matching metadata
-- `equipment_request_sync_log` - Synchronization history and statistics
-- `equipment_request_category_mapping` - Manual item name → category overrides
-
-### Key Concepts
-
-**Quest Aggregation:**
-Items from Google Sheets are grouped into "quests" based on:
-- Pavilion + Location + Recipient + Delivery Date + Pickup Time
-
-**Fuzzy Category Matching (4-level priority):**
-1. **Manual mapping** (confidence: 1.0) - User-defined overrides in DB
-2. **Exact match** (confidence: 1.0) - Case-insensitive string match
-3. **Fuzzy match** (confidence: 0.0-1.0) - Levenshtein distance ≤ threshold (default: 3)
-4. **No match** (confidence: 0.0) - Item name doesn't match any category
-
-**Auto-Sync Scheduler:**
-- Configurable interval (default: 15 minutes, range: 1m-24h)
-- Graceful shutdown support
-- Error recovery (continues running on sync failures)
-- Manual trigger available via API
+**Database tables:** `equipment_request_quests`, `equipment_request_items` (items keep `category_match_type`
+and confidence columns from the sheet era), `quest_transfers` (quest ↔ transfer links).
 
 ### API Endpoints
 
-All under `/api/equipment-requests`:
+All under `/equipment-requests`:
 
-| Method | Path | Description | Auth |
+| Method | Path | Description | Role |
 |--------|------|-------------|------|
-| GET | `/quests` | List quests (filter, paginate) | JWT |
-| GET | `/quests/:id` | Get quest details | JWT |
-| PATCH | `/quests/:id/status` | Update quest status | JWT |
-| POST | `/sync` | Manual sync trigger | JWT |
-| GET | `/sync-log` | Latest sync statistics | JWT |
-| POST | `/category-mapping` | Create manual mapping | JWT |
+| GET | `/quests` | List quests (filter, paginate) | any |
+| GET | `/quests/unresolved-locations` | Quests without a resolved location (historic sheet quests) | any |
+| GET | `/quests/:id` | Quest details | any |
+| GET | `/quests/:id/transfer-preview` | Preview transfer resolution | any |
+| GET | `/stream` | SSE `quest_update` events | any |
+| PATCH | `/quests/:id/status` | Update quest status (409 when a transfer is linked) | dispatcher |
+| PATCH | `/quests/:id/location` | Manually assign location | dispatcher |
+| POST | `/quests/:id/transfer` | Create transfer from quest | dispatcher |
 
-**Quest Statuses:**
-- `pending` - Awaiting processing
-- `in_progress` - Being prepared
-- `completed` - Delivered
-- `cancelled` - Cancelled
+Budget endpoints (`/budget`, `/prices`, `/suppliers`) live in `internal/budget/` under the same prefix; prices are
+edited via `PUT /prices` (the Cennik sheet sync is gone).
 
-### Configuration (.env)
-
-```bash
-# Required
-EQUIPMENT_REQUEST_SHEET_ID=<google-sheets-id>
-EQUIPMENT_REQUEST_SHEET_NAME=Zamówienia
-
-# Optional (Phase 3)
-EQUIPMENT_REQUEST_SYNC_ENABLED=false        # Auto-sync toggle
-EQUIPMENT_REQUEST_SYNC_INTERVAL=15m         # 1m-24h
-EQUIPMENT_REQUEST_FUZZY_THRESHOLD=3         # Levenshtein distance
-```
-
-### Usage Examples
-
-**Start server with auto-sync:**
-```bash
-# .env
-EQUIPMENT_REQUEST_SYNC_ENABLED=true
-EQUIPMENT_REQUEST_SYNC_INTERVAL=5m
-
-# Server will log:
-# [INFO] Equipment request auto-sync enabled (interval: 5m0s)
-# [INFO] Auto-sync: Starting equipment request sync...
-# [INFO] Auto-sync completed in 1.2s: 2 created, 1 updated, 15 unchanged
-```
-
-**Manual sync via API:**
-```bash
-POST /api/equipment-requests/sync
-Authorization: Bearer <token>
-
-Response:
-{
-  "message": "Sync completed successfully",
-  "stats": {
-    "quests_created": 5,
-    "quests_updated": 3,
-    "quests_unchanged": 12,
-    "items_added": 8,
-    "items_removed": 2
-  }
-}
-```
-
-### Frontend Integration
-
-**Specification:** See `EQUIPMENT_REQUESTS_FRONTEND_SPEC.md`
-**TypeScript types provided:** Quest, QuestItem, SyncStats, etc.
-**UI mockups:** Included in spec (List, Detail, Dashboard views)
-
-### Testing
-
-Run all equipment request tests:
-```bash
-go test ./internal/equipment_requests/... -v -short
-# 47 tests total, ~1.5s runtime
-```
-
-Integration tests (require test DB):
-```bash
-go test ./internal/equipment_requests/... -v  # without -short
-```
-
-### Rollback
-
-If auto-sync causes issues:
-1. Set `EQUIPMENT_REQUEST_SYNC_ENABLED=false`
-2. Restart server
-3. Manual sync still available via API
-
-To fully rollback Phase 3:
-```bash
-migrate -path migrations -database $DATABASE_URL down 1
-# Rolls back migration 000028
-```
-
-### Implementation Notes
-
-- **Scheduler:** Thread-safe, graceful shutdown via `container.Close()`
-- **Fuzzy matching:** Levenshtein distance algorithm (O(m*n) time complexity)
-- **Quest keys:** MD5 hash of aggregation fields for deduplication
-- **Transaction safety:** All multi-step DB operations use `repository.WithTransaction()`
-- **Error handling:** Sync errors logged but don't crash scheduler
+**Quest Statuses:** `pending`, `in_progress`, `completed`, `cancelled`.
 
 ### Quest → Transfer Integration (Phase 4)
 
@@ -417,16 +303,16 @@ migrate -path migrations -database $DATABASE_URL down 1
 
 **Architecture:**
 ```
-Google Sheets → Quest (demand: "what was ordered") → Transfer (fulfillment: "how we issue")
+Shop order → Quest (demand: "what was ordered") → Transfer (fulfillment: "how we issue")
 ```
 
-Quest is the **integration layer** (sync, parsing, fuzzy matching from forms). Transfer is the **operational layer** (warehouse logistics, GPS tracking, audit). They are linked but separate responsibilities.
+Quest is the **demand layer** (what, where, when). Transfer is the **operational layer** (warehouse logistics, GPS tracking, audit). They are linked but separate responsibilities.
 
 **Flow:**
-1. Quest created via Google Sheets sync → status: `pending`, `transfer_id: null`
+1. Quest created (historically by the sheet sync, from now on by confirming a shop order) → status: `pending`
 2. User calls `POST /equipment-requests/quests/:id/transfer` with `from_location_id`
-3. System resolves destination location from quest pavilion+location (or uses provided `to_location_id`)
-4. System resolves stock items from quest item categories at source location (or uses provided `stock_items`)
+3. Destination is the provided `to_location_id`, otherwise the quest's stored `location_id` (422 if neither)
+4. The request lists `stock_items` / `assets` explicitly; the preview endpoint suggests stock items per category
 5. Transfer created via `TransferService.InitTransfer()` → quest linked with `transfer_id`, status: `in_progress`
 6. Transfer lifecycle proceeds normally (GPS, user assignment, etc.)
 7. `PATCH /transfers/:id/confirm` → callback auto-completes quest
@@ -436,7 +322,7 @@ Quest is the **integration layer** (sync, parsing, fuzzy matching from forms). T
 - **Dedicated endpoint, not auto-creation on status change** — transfer creation requires user input (`from_location_id`, optional stock/asset overrides)
 - **Quest status is transfer-driven once linked** — `PATCH /quests/:id/status` returns 409 Conflict if `transfer_id` is set
 - **Callback pattern avoids circular dependencies** — `TransferStatusCallback` interface in `transfers/service.go`, implemented by `equipment_requests/Service.OnTransferStatusChanged()`
-- **Category→stock resolution gap** — quest items have `category_id` (fuzzy-matched), transfers need `stock_id` (specific row in `non_serialized_items`). Preview endpoint helps users review before creating.
+- **Category→stock resolution gap** — quest items have `category_id`, transfers need `stock_id` (specific row in `non_serialized_items`). Preview endpoint helps users review before creating.
 
 **New endpoints:**
 | Method | Path | Description |
@@ -458,9 +344,7 @@ Quest is the **integration layer** (sync, parsing, fuzzy matching from forms). T
 
 ### Future Enhancements (Not Implemented)
 
-- Real-time sync via webhooks (Google Sheets limitation)
 - Budget tracking and approval workflow
-- Email notifications on sync errors
 - Analytics dashboard (quest trends, popular items)
 - Multiple transfers per quest (partial fulfillment / split delivery)
 

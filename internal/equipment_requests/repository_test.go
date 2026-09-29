@@ -274,79 +274,6 @@ func TestRepository_UpdateQuestStatus(t *testing.T) {
 	assert.Equal(t, "in_progress", retrieved.Status)
 }
 
-// TestRepository_CreateSyncLog tests creating sync log entries
-func TestRepository_CreateSyncLog(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	repo := NewRepository(repository.NewRepository(db))
-	ctx := context.Background()
-
-	syncLog := &SyncLog{
-		SyncedAt:        time.Now(),
-		RowsProcessed:   20,
-		QuestsCreated:   5,
-		QuestsUpdated:   3,
-		QuestsUnchanged: 12,
-		ItemsAdded:      8,
-		ItemsRemoved:    2,
-		Success:         true,
-		DurationMs:      2500,
-		SheetID:         "test-sheet-id",
-		Errors:          "",
-	}
-
-	err := repo.CreateSyncLog(ctx, syncLog)
-	require.NoError(t, err)
-	assert.NotZero(t, syncLog.ID)
-
-	// Retrieve latest sync log
-	retrieved, err := repo.GetLatestSyncLog(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, syncLog.QuestsCreated, retrieved.QuestsCreated)
-	assert.Equal(t, syncLog.QuestsUpdated, retrieved.QuestsUpdated)
-}
-
-// TestRepository_CategoryMapping tests manual category mapping
-func TestRepository_CategoryMapping(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	repo := NewRepository(repository.NewRepository(db))
-	ctx := context.Background()
-
-	userID := 7
-	mapping := &CategoryMapping{
-		FormItemName: "Laptop Dell",
-		CategoryID:   100,
-		CreatedBy:    &userID,
-	}
-
-	// Create mapping
-	err := repo.CreateCategoryMapping(ctx, mapping)
-	require.NoError(t, err)
-	assert.NotZero(t, mapping.ID)
-
-	// Retrieve mapping
-	categoryID, err := repo.GetCategoryMapping(ctx, "Laptop Dell")
-	require.NoError(t, err)
-	require.NotNil(t, categoryID)
-	assert.Equal(t, 100, *categoryID)
-
-	// Test non-existent mapping
-	notFound, err := repo.GetCategoryMapping(ctx, "Non Existent Item")
-	require.NoError(t, err)
-	assert.Nil(t, notFound)
-}
-
 // setupTestDB creates a test database connection
 // Note: This requires a test database to be available
 // You may need to configure this based on your test environment
@@ -370,8 +297,6 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 		// Clean up test data
 		db.Exec("DELETE FROM equipment_request_items")
 		db.Exec("DELETE FROM equipment_request_quests")
-		db.Exec("DELETE FROM equipment_request_sync_log")
-		db.Exec("DELETE FROM equipment_request_category_mapping")
 		db.Close()
 	}
 

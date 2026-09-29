@@ -16,7 +16,6 @@ type QuestRepositoryInterface interface {
 	UpdateQuest(ctx context.Context, questID string, quest *Quest) error
 	GetQuestByID(ctx context.Context, questID string) (*Quest, error)
 	GetQuestByKey(ctx context.Context, questKey string) (*Quest, error)
-	DeleteOrphanedPendingQuests(ctx context.Context, keepKeys []string) (int, error)
 	ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error)
 	UpdateQuestStatus(ctx context.Context, questID string, status string) error
 	AddTransferToQuest(ctx context.Context, questID string, transferID int) error
@@ -25,22 +24,6 @@ type QuestRepositoryInterface interface {
 	GetActiveTransfersForQuest(ctx context.Context, questID string) ([]int, error)
 	GetFulfilledQuantitiesByCategory(ctx context.Context, questID string) (map[int]int, error)
 	FindStockItemsByCategory(fromLocationID int, categoryID int) ([]StockMatch, error)
-	ResolveLocationByPavilionAndName(pavilion, name string) (*int, error)
-	ResolveLocationByNameOnly(name string) (*int, error)
-	CreateSyncLog(ctx context.Context, log *SyncLog) error
-	GetLatestSyncLog(ctx context.Context) (*SyncLog, error)
-	GetCategoryMapping(ctx context.Context, itemName string) (*int, error)
-	CreateCategoryMapping(ctx context.Context, mapping *CategoryMapping) error
-	IncrementMappingUsage(ctx context.Context, itemName string) error
-	ListCategoryMappings(ctx context.Context) ([]CategoryMapping, error)
-	DeleteCategoryMapping(ctx context.Context, id int) error
-
-	// Location mapping
-	GetLocationMapping(ctx context.Context, pavilion, locationName string) (*int, error)
-	CreateLocationMapping(ctx context.Context, mapping *LocationMapping) error
-	ListLocationMappings(ctx context.Context) ([]LocationMapping, error)
-	DeleteLocationMapping(ctx context.Context, id int) error
-	IncrementLocationMappingUsage(ctx context.Context, pavilion, locationName string) error
 
 	// Location resolution tracking
 	UpdateQuestLocationResolution(ctx context.Context, questID string, locationID *int, resolved bool) error
@@ -72,33 +55,6 @@ type QuestFilter struct {
 	Offset         int
 	DeliveryAfter  *time.Time
 	DeliveryBefore *time.Time
-}
-
-// SyncLog represents a sync operation record
-type SyncLog struct {
-	ID              int       `db:"id" json:"id"`
-	SyncedAt        time.Time `db:"synced_at" json:"synced_at"`
-	RowsProcessed   int       `db:"rows_processed" json:"rows_processed"`
-	QuestsCreated   int       `db:"quests_created" json:"quests_created"`
-	QuestsUpdated   int       `db:"quests_updated" json:"quests_updated"`
-	QuestsUnchanged int       `db:"quests_unchanged" json:"quests_unchanged"`
-	ItemsAdded      int       `db:"items_added" json:"items_added"`
-	ItemsRemoved    int       `db:"items_removed" json:"items_removed"`
-	Errors          string    `db:"errors" json:"errors,omitempty"`
-	Success         bool      `db:"success" json:"success"`
-	DurationMs      int       `db:"duration_ms" json:"duration_ms"`
-	SheetID         string    `db:"sheet_id" json:"sheet_id"`
-}
-
-// CategoryMapping represents manual item-to-category mapping
-type CategoryMapping struct {
-	ID           int        `db:"id" json:"id"`
-	FormItemName string     `db:"form_item_name" json:"form_item_name"`
-	CategoryID   int        `db:"category_id" json:"category_id"`
-	CreatedBy    *int       `db:"created_by" json:"created_by,omitempty"`
-	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
-	LastUsedAt   *time.Time `db:"last_used_at" json:"last_used_at,omitempty"`
-	UseCount     int        `db:"use_count" json:"use_count"`
 }
 
 // QuestDB represents quest as stored in database
@@ -372,34 +328,6 @@ func (r *Repository) GetQuestByKey(ctx context.Context, questKey string) (*Quest
 	return r.recordToQuest(&questDB, items), nil
 }
 
-// DeleteOrphanedPendingQuests removes pending quests whose quest_key is no longer present
-// in the latest sheet sync (keepKeys) and that have no linked transfer. Items cascade via
-// the ON DELETE CASCADE FK. Quests that are in_progress/completed/cancelled, or linked to a
-// transfer, are never touched. Returns the number of quests deleted. As a safety guard it is
-// a no-op when keepKeys is empty (so an empty/failed sheet fetch can never wipe the table).
-func (r *Repository) DeleteOrphanedPendingQuests(ctx context.Context, keepKeys []string) (int, error) {
-	if len(keepKeys) == 0 {
-		return 0, nil
-	}
-
-	linkedQuestIDs := r.repo.GoquDBWrapper.From("quest_transfers").Select("quest_id")
-
-	result, err := r.repo.GoquDBWrapper.
-		Delete("equipment_request_quests").
-		Where(
-			goqu.C("status").Eq("pending"),
-			goqu.C("quest_key").NotIn(keepKeys),
-			goqu.C("quest_id").NotIn(linkedQuestIDs),
-		).
-		Executor().Exec()
-	if err != nil {
-		return 0, fmt.Errorf("failed to delete orphaned pending quests: %w", err)
-	}
-
-	rows, _ := result.RowsAffected()
-	return int(rows), nil
-}
-
 // ListQuests retrieves quests with filtering and pagination
 func (r *Repository) ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error) {
 	query := r.questBaseQuery().
@@ -497,152 +425,6 @@ func (r *Repository) AddTransferToQuest(ctx context.Context, questID string, tra
 		_ = result
 		return nil
 	})
-}
-
-// CreateSyncLog creates a sync history record
-func (r *Repository) CreateSyncLog(ctx context.Context, log *SyncLog) error {
-	record := goqu.Record{
-		"rows_processed":   log.RowsProcessed,
-		"quests_created":   log.QuestsCreated,
-		"quests_updated":   log.QuestsUpdated,
-		"quests_unchanged": log.QuestsUnchanged,
-		"items_added":      log.ItemsAdded,
-		"items_removed":    log.ItemsRemoved,
-		"errors":           log.Errors,
-		"success":          log.Success,
-		"duration_ms":      log.DurationMs,
-		"sheet_id":         log.SheetID,
-	}
-
-	_, err := r.repo.GoquDBWrapper.
-		Insert("equipment_request_sync_log").
-		Rows(record).
-		Executor().Exec()
-
-	if err != nil {
-		return fmt.Errorf("failed to create sync log: %w", err)
-	}
-
-	return nil
-}
-
-// GetLatestSyncLog retrieves the most recent sync log
-func (r *Repository) GetLatestSyncLog(ctx context.Context) (*SyncLog, error) {
-	var log SyncLog
-
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_sync_log").
-		Order(goqu.I("synced_at").Desc()).
-		Limit(1)
-
-	found, err := query.Executor().ScanStruct(&log)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch latest sync log: %w", err)
-	}
-	if !found {
-		return nil, fmt.Errorf("no sync log found")
-	}
-
-	return &log, nil
-}
-
-// GetCategoryMapping retrieves manual category mapping for an item name
-func (r *Repository) GetCategoryMapping(ctx context.Context, itemName string) (*int, error) {
-	var mapping CategoryMapping
-
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_category_mapping").
-		Where(goqu.Ex{"form_item_name": itemName})
-
-	found, err := query.Executor().ScanStruct(&mapping)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch category mapping: %w", err)
-	}
-	if !found {
-		return nil, nil // No mapping found is not an error
-	}
-
-	return &mapping.CategoryID, nil
-}
-
-// CreateCategoryMapping creates a manual category mapping
-func (r *Repository) CreateCategoryMapping(ctx context.Context, mapping *CategoryMapping) error {
-	record := goqu.Record{
-		"form_item_name": mapping.FormItemName,
-		"category_id":    mapping.CategoryID,
-		"created_by":     mapping.CreatedBy,
-	}
-
-	_, err := r.repo.GoquDBWrapper.
-		Insert("equipment_request_category_mapping").
-		Rows(record).
-		Executor().Exec()
-
-	if err != nil {
-		return fmt.Errorf("failed to create category mapping: %w", err)
-	}
-
-	return nil
-}
-
-// IncrementMappingUsage updates last_used_at and increments use_count
-func (r *Repository) IncrementMappingUsage(ctx context.Context, itemName string) error {
-	now := time.Now()
-
-	_, err := r.repo.GoquDBWrapper.
-		Update("equipment_request_category_mapping").
-		Set(goqu.Record{
-			"last_used_at": now,
-			"use_count":    goqu.L("use_count + 1"),
-		}).
-		Where(goqu.Ex{"form_item_name": itemName}).
-		Executor().Exec()
-
-	if err != nil {
-		return fmt.Errorf("failed to increment mapping usage: %w", err)
-	}
-
-	return nil
-}
-
-// ListCategoryMappings returns all manual category mappings ordered by use frequency
-func (r *Repository) ListCategoryMappings(ctx context.Context) ([]CategoryMapping, error) {
-	var mappings []CategoryMapping
-
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_category_mapping").
-		Order(
-			goqu.I("use_count").Desc(),
-			goqu.I("created_at").Desc(),
-		)
-
-	if err := query.Executor().ScanStructs(&mappings); err != nil {
-		return nil, fmt.Errorf("failed to list category mappings: %w", err)
-	}
-
-	return mappings, nil
-}
-
-// DeleteCategoryMapping removes a manual category mapping by ID
-func (r *Repository) DeleteCategoryMapping(ctx context.Context, id int) error {
-	result, err := r.repo.GoquDBWrapper.
-		Delete("equipment_request_category_mapping").
-		Where(goqu.Ex{"id": id}).
-		Executor().Exec()
-
-	if err != nil {
-		return fmt.Errorf("failed to delete category mapping: %w", err)
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return fmt.Errorf("category mapping %d not found", id)
-	}
-
-	return nil
 }
 
 // Helper: Get items by quest DB ID
@@ -925,142 +707,6 @@ func (r *Repository) FindStockItemsByCategory(fromLocationID int, categoryID int
 	}
 
 	return matches, nil
-}
-
-// ResolveLocationByPavilionAndName finds a location ID by pavilion and name (case-insensitive)
-func (r *Repository) ResolveLocationByPavilionAndName(pavilion, name string) (*int, error) {
-	var locationID int
-
-	query := r.repo.GoquDBWrapper.
-		Select("id").
-		From("locations").
-		Where(
-			goqu.I("pavilion").ILike(pavilion),
-			goqu.I("name").ILike(name),
-		).
-		Order(goqu.I("id").Asc()).
-		Limit(1)
-
-	found, err := query.Executor().ScanVal(&locationID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve location: %w", err)
-	}
-	if !found {
-		return nil, nil
-	}
-
-	return &locationID, nil
-}
-
-// ResolveLocationByNameOnly finds a location ID by name only; returns result only if exactly one match.
-func (r *Repository) ResolveLocationByNameOnly(name string) (*int, error) {
-	var rows []struct {
-		ID int `db:"id"`
-	}
-
-	query := r.repo.GoquDBWrapper.
-		Select("id").
-		From("locations").
-		Where(goqu.I("name").ILike(name)).
-		Limit(2)
-
-	if err := query.Executor().ScanStructs(&rows); err != nil {
-		return nil, fmt.Errorf("failed to resolve location by name: %w", err)
-	}
-	if len(rows) != 1 {
-		return nil, nil
-	}
-	return &rows[0].ID, nil
-}
-
-// GetLocationMapping retrieves manual location mapping for pavilion + location_name
-func (r *Repository) GetLocationMapping(ctx context.Context, pavilion, locationName string) (*int, error) {
-	var mapping LocationMapping
-
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_location_mapping").
-		Where(
-			goqu.Ex{"pavilion": pavilion, "location_name": locationName},
-		)
-
-	found, err := query.Executor().ScanStruct(&mapping)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch location mapping: %w", err)
-	}
-	if !found {
-		return nil, nil
-	}
-	return &mapping.LocationID, nil
-}
-
-// CreateLocationMapping creates a manual location mapping and populates id, created_at on the struct
-func (r *Repository) CreateLocationMapping(ctx context.Context, mapping *LocationMapping) error {
-	record := goqu.Record{
-		"pavilion":      mapping.Pavilion,
-		"location_name": mapping.LocationName,
-		"location_id":   mapping.LocationID,
-	}
-
-	query := r.repo.GoquDBWrapper.
-		Insert("equipment_request_location_mapping").
-		Rows(record).
-		Returning("id", "created_at", "usage_count")
-
-	_, err := query.Executor().ScanStruct(mapping)
-	if err != nil {
-		return fmt.Errorf("failed to create location mapping: %w", err)
-	}
-	return nil
-}
-
-// ListLocationMappings returns all manual location mappings ordered by usage
-func (r *Repository) ListLocationMappings(ctx context.Context) ([]LocationMapping, error) {
-	var mappings []LocationMapping
-
-	query := r.repo.GoquDBWrapper.
-		Select("*").
-		From("equipment_request_location_mapping").
-		Order(
-			goqu.I("usage_count").Desc(),
-			goqu.I("created_at").Desc(),
-		)
-
-	if err := query.Executor().ScanStructs(&mappings); err != nil {
-		return nil, fmt.Errorf("failed to list location mappings: %w", err)
-	}
-	return mappings, nil
-}
-
-// DeleteLocationMapping removes a manual location mapping by ID
-func (r *Repository) DeleteLocationMapping(ctx context.Context, id int) error {
-	result, err := r.repo.GoquDBWrapper.
-		Delete("equipment_request_location_mapping").
-		Where(goqu.Ex{"id": id}).
-		Executor().Exec()
-
-	if err != nil {
-		return fmt.Errorf("failed to delete location mapping: %w", err)
-	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return fmt.Errorf("location mapping %d not found", id)
-	}
-	return nil
-}
-
-// IncrementLocationMappingUsage updates usage_count for a mapping
-func (r *Repository) IncrementLocationMappingUsage(ctx context.Context, pavilion, locationName string) error {
-	_, err := r.repo.GoquDBWrapper.
-		Update("equipment_request_location_mapping").
-		Set(goqu.Record{"usage_count": goqu.L("usage_count + 1")}).
-		Where(goqu.Ex{"pavilion": pavilion, "location_name": locationName}).
-		Executor().Exec()
-
-	if err != nil {
-		return fmt.Errorf("failed to increment location mapping usage: %w", err)
-	}
-	return nil
 }
 
 // UpdateQuestLocationResolution sets location_id and location_resolved for a quest

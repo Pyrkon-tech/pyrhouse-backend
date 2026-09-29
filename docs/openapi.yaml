@@ -29,7 +29,7 @@ tags:
   - name: users
     description: User account management and RBAC
   - name: equipment-requests
-    description: Equipment request form integration - Google Sheets sync and quest aggregation
+    description: Equipment request quests (dispatch, transfers from quests, budget)
   - name: origins
     description: Origin management — predefined and custom asset/stock sources
   - name: settings
@@ -1463,75 +1463,6 @@ paths:
         "500":
           $ref: "#/components/responses/DefaultError"
 
-  /equipment-requests/sync:
-    post:
-      tags:
-        - equipment-requests
-      summary: Manual sync from Google Sheets to database
-      description: |
-        Triggers manual synchronization from the equipment request Google Sheet.
-        Fetches all rows from the configured sheet, aggregates them into quests based on
-        destination, recipient, delivery date, and pickup time. Persists to database with upsert logic.
-
-        **Phase 2:** Database persistence with fuzzy category matching (Levenshtein distance).
-
-        Sync process:
-        1. Fetch from Google Sheets
-        2. Parse and aggregate into quests
-        3. Fuzzy match categories (manual > exact > fuzzy > none)
-        4. Upsert to database (create new or update existing)
-        5. Track sync statistics
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Sync completed successfully with statistics
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Sync completed successfully"
-                  stats:
-                    type: object
-                    properties:
-                      quests_created:
-                        type: integer
-                        example: 2
-                      quests_updated:
-                        type: integer
-                        example: 1
-                      quests_unchanged:
-                        type: integer
-                        example: 0
-                      items_added:
-                        type: integer
-                        example: 5
-                      items_removed:
-                        type: integer
-                        example: 2
-                  quests:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/EquipmentRequestQuest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "500":
-          description: Sync failed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "Failed to sync equipment requests"
-                  details:
-                    type: string
-                    example: "unable to read spreadsheet: API error"
-
   /equipment-requests/quests:
     get:
       tags:
@@ -1742,7 +1673,7 @@ paths:
                 to_location_id:
                   type: integer
                   nullable: true
-                  description: Destination location ID (auto-resolved from quest if not provided)
+                  description: Destination location ID (defaults to the quest's stored location_id; 422 if the quest has none)
                   example: 5
                 stock_items:
                   type: array
@@ -1879,7 +1810,7 @@ paths:
                         quantity:
                           type: integer
                           nullable: true
-                          description: Null when the item has no quantity in the sheet (reason "quantity not specified in sheet")
+                          description: Null when the item has no quantity (reason "quantity not specified")
                         category_id:
                           type: integer
                           nullable: true
@@ -1891,233 +1822,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           description: Quest not found
-
-  /equipment-requests/sync-log:
-    get:
-      tags:
-        - equipment-requests
-      summary: Get latest sync log
-      description: |
-        Returns the most recent sync operation log with statistics.
-
-        **Phase 2:** Tracks sync history including performance and errors.
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Latest sync log
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EquipmentRequestSyncLog"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: No sync log found
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "No sync log found"
-
-  /equipment-requests/category-mapping:
-    post:
-      tags:
-        - equipment-requests
-      summary: Create manual category mapping
-      description: |
-        Creates a manual override for item-to-category matching.
-        Manual mappings have highest priority in fuzzy matching algorithm.
-
-        **Phase 2:** Override fuzzy matching for specific items.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - form_item_name
-                - category_id
-              properties:
-                form_item_name:
-                  type: string
-                  description: Exact item name from form
-                  example: "Laptop Dell"
-                category_id:
-                  type: integer
-                  description: Target category ID
-                  example: 15
-                created_by:
-                  type: integer
-                  description: User ID who created mapping
-                  example: 1
-      responses:
-        "201":
-          description: Category mapping created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Category mapping created successfully"
-                  mapping:
-                    $ref: "#/components/schemas/EquipmentRequestCategoryMapping"
-        "400":
-          description: Invalid request
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "500":
-          $ref: "#/components/responses/DefaultError"
-
-  /equipment-requests/category-mappings:
-    get:
-      tags:
-        - equipment-requests
-      summary: List category mappings
-      description: Returns all manual item-to-category mappings ordered by usage frequency.
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: List of category mappings
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  count:
-                    type: integer
-                    example: 3
-                  mappings:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/EquipmentRequestCategoryMapping"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "500":
-          $ref: "#/components/responses/DefaultError"
-
-  /equipment-requests/category-mappings/{id}:
-    delete:
-      tags:
-        - equipment-requests
-      summary: Delete category mapping
-      description: Removes a manual category mapping by ID.
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-          description: Category mapping ID
-      responses:
-        "204":
-          description: Mapping deleted successfully
-        "400":
-          description: Invalid mapping ID
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Category mapping not found
-        "500":
-          $ref: "#/components/responses/DefaultError"
-
-  /equipment-requests/location-mappings:
-    get:
-      tags:
-        - equipment-requests
-      summary: List location mappings
-      description: Returns all manual pavilion+location_name → location_id mappings ordered by usage.
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: List of location mappings
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  count:
-                    type: integer
-                  mappings:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/LocationMapping"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-    post:
-      tags:
-        - equipment-requests
-      summary: Create location mapping
-      description: Creates a manual override for pavilion+location_name → location_id.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - pavilion
-                - location_name
-                - location_id
-              properties:
-                pavilion:
-                  type: string
-                  example: "6"
-                location_name:
-                  type: string
-                  example: "Magazyn Techniczny"
-                location_id:
-                  type: integer
-                  example: 3
-      responses:
-        "201":
-          description: Mapping created
-        "400":
-          description: Invalid request
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "500":
-          $ref: "#/components/responses/DefaultError"
-
-  /equipment-requests/location-mappings/{id}:
-    delete:
-      tags:
-        - equipment-requests
-      summary: Delete location mapping
-      description: Removes a manual location mapping by ID.
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "204":
-          description: Mapping deleted
-        "400":
-          description: Invalid mapping ID
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Location mapping not found
-        "500":
-          $ref: "#/components/responses/DefaultError"
 
   /equipment-requests/quests/unresolved-locations:
     get:
@@ -2151,7 +1855,7 @@ paths:
       tags:
         - equipment-requests
       summary: Manually assign location to quest
-      description: Assigns a location to a quest and optionally saves it as a mapping for future syncs.
+      description: Assigns a location to a quest (e.g. a historic sheet quest whose destination was never resolved).
       security:
         - bearerAuth: []
       parameters:
@@ -2173,10 +1877,6 @@ paths:
                 location_id:
                   type: integer
                   example: 3
-                save_mapping:
-                  type: boolean
-                  default: false
-                  description: If true, saves this assignment as a mapping for future syncs
       responses:
         "200":
           description: Location assigned successfully
@@ -2273,14 +1973,17 @@ paths:
       summary: Subscribe to real-time quest updates (SSE)
       description: |
         Opens a Server-Sent Events connection. The server pushes a `quest_update` event
-        whenever a sync completes (manual or scheduled). The frontend should refresh the
-        quest list on receiving this event.
+        when something the quest board depends on changes.
 
         **Event format:**
         ```
         event: quest_update
-        data: {"type":"sync_completed","stats":{"Created":2,"Updated":1,...}}
+        data: {"type":"stocks_changed","location_id":3,"action":"updated"}
         ```
+
+        | type | extra fields |
+        |---|---|
+        | `stocks_changed` | `location_id`, `action` (created/updated/deleted) |
 
         The connection stays open until the client disconnects.
       security:
@@ -2293,26 +1996,6 @@ paths:
               schema:
                 type: string
                 description: Newline-delimited SSE events
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  /equipment-requests/sync-status:
-    get:
-      tags:
-        - equipment-requests
-      summary: Get auto-sync scheduler status
-      description: |
-        Returns the current state of the auto-sync scheduler — whether it is enabled,
-        its interval, when the last sync occurred, and when the next one is expected.
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Scheduler status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SyncStatus"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -2529,48 +2212,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /equipment-requests/prices/sync:
-    post:
-      tags:
-        - equipment-requests
-      summary: Sync price list from Cennik sheet
-      description: |
-        **Requires admin role.**
-        Reads the Cennik sheet (configured via app setting `equipment_request.cennik_sheet_name`).
-
-        **Multi-supplier layout (recommended):** header row defines supplier columns.
-        ```
-        Rzeczy    Probis  Netland  Oki-event
-        Laptop    140     90       120
-        ```
-        Any number of supplier columns is supported.
-
-        **Legacy single-price layout:** col A = item name, col B or C = price (stored as supplier "Cennik").
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Sync result
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  updated:
-                    type: integer
-        "503":
-          description: Google Sheets not configured
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
   /origins:
     get:
       tags:
@@ -2764,7 +2405,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Setting key (e.g. "equipment_request.sheet_id")
+          description: Setting key (e.g. "scheduling.sheet_id")
       responses:
         "200":
           description: Setting found
@@ -3138,13 +2779,13 @@ components:
       properties:
         key:
           type: string
-          example: "equipment_request.sheet_id"
+          example: "scheduling.sheet_id"
         value:
           type: string
           example: "16BytrbWmyWeBGnlSIDZn1Lnb5rdspoQu_rpc5m5Vtbc"
         description:
           type: string
-          example: "Google Sheets document ID for equipment requests"
+          example: "Schedule - Google Sheets document ID"
         updated_at:
           type: string
           format: date-time
@@ -3153,10 +2794,10 @@ components:
       properties:
         key:
           type: string
-          example: "equipment_request.sheet_id"
+          example: "scheduling.sheet_id"
         description:
           type: string
-          example: "Google Sheets document ID for equipment requests"
+          example: "Schedule - Google Sheets document ID"
         updated_at:
           type: string
           format: date-time
@@ -3408,7 +3049,7 @@ components:
 
     EquipmentRequestQuest:
       type: object
-      description: Aggregated equipment request quest from Google Sheets form
+      description: Equipment request quest (historic quests were imported from the Google Sheets form)
       properties:
         id:
           type: string
@@ -3544,110 +3185,6 @@ components:
           description: Additional notes from requestor
           example: "Must have good battery life"
 
-    EquipmentRequestSyncLog:
-      type: object
-      description: Log entry for equipment request synchronization from Google Sheets
-      properties:
-        id:
-          type: integer
-          description: Log entry ID
-          example: 42
-        synced_at:
-          type: string
-          format: date-time
-          description: When the sync operation completed
-          example: "2026-02-16T14:30:00Z"
-        rows_processed:
-          type: integer
-          description: Total number of spreadsheet rows processed
-          example: 20
-        quests_created:
-          type: integer
-          description: Number of new quests created during sync
-          example: 5
-        quests_updated:
-          type: integer
-          description: Number of existing quests updated during sync
-          example: 3
-        quests_unchanged:
-          type: integer
-          description: Number of quests that remained unchanged
-          example: 12
-        items_added:
-          type: integer
-          description: Total number of items added across all quests
-          example: 8
-        items_removed:
-          type: integer
-          description: Total number of items removed across all quests
-          example: 2
-        success:
-          type: boolean
-          description: Whether the sync operation completed successfully
-          example: true
-        duration_ms:
-          type: integer
-          description: How long the sync operation took in milliseconds
-          example: 2350
-        sheet_id:
-          type: string
-          description: Google Sheets spreadsheet ID that was synced
-          example: "1abc123def456"
-        errors:
-          type: string
-          description: Error messages if sync failed (empty if successful)
-          example: ""
-
-    EquipmentRequestCategoryMapping:
-      type: object
-      description: Manual mapping from form item name to equipment category
-      properties:
-        id:
-          type: integer
-          description: Mapping ID
-          example: 15
-        form_item_name:
-          type: string
-          description: Item name as it appears in the Google Sheets form
-          example: "Laptop Dell"
-        category_id:
-          type: integer
-          description: ID of the equipment category this maps to
-          example: 123
-        created_by:
-          type: integer
-          nullable: true
-          description: User ID who created this mapping
-          example: 7
-        created_at:
-          type: string
-          format: date-time
-          description: When this mapping was created
-          example: "2026-02-16T10:15:00Z"
-
-    LocationMapping:
-      type: object
-      description: Manual mapping from pavilion+location_name (form values) to location_id
-      properties:
-        id:
-          type: integer
-          example: 1
-        pavilion:
-          type: string
-          example: "6"
-        location_name:
-          type: string
-          example: "Magazyn Techniczny"
-        location_id:
-          type: integer
-          example: 3
-        created_at:
-          type: string
-          format: date-time
-        usage_count:
-          type: integer
-          example: 5
-
     PriceListItem:
       type: object
       properties:
@@ -3752,36 +3289,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BudgetItem"
-
-    SyncStatus:
-      type: object
-      description: Current state of the auto-sync scheduler
-      properties:
-        enabled:
-          type: boolean
-          description: Whether the scheduler is currently running
-          example: true
-        interval:
-          type: string
-          description: Sync interval as Go duration string
-          example: "15m0s"
-        last_sync:
-          type: string
-          format: date-time
-          nullable: true
-          description: Timestamp of the last successful sync
-          example: "2026-02-19T12:00:00Z"
-        next_sync:
-          type: string
-          format: date-time
-          nullable: true
-          description: Estimated timestamp of the next sync (last_sync + interval)
-          example: "2026-02-19T12:15:00Z"
-        last_error:
-          type: string
-          nullable: true
-          description: Error message from the last failed sync, if any
-          example: "failed to fetch sheet: context deadline exceeded"
 
     # ── Service Desk ──────────────────────────────────────────────────────
 

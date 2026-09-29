@@ -1,7 +1,6 @@
 package budget
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -27,7 +26,6 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		g.GET("/prices", security.Authorize("admin"), h.ListPrices)
 		g.PUT("/prices", security.Authorize("admin"), h.UpsertPrice)
 		g.DELETE("/prices", security.Authorize("admin"), h.DeletePrice)
-		g.POST("/prices/sync", security.Authorize("admin"), h.SyncPricesFromSheet)
 	}
 }
 
@@ -102,21 +100,4 @@ func (h *Handler) DeletePrice(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Price deleted"})
-}
-
-// POST /equipment-requests/prices/sync
-func (h *Handler) SyncPricesFromSheet(c *gin.Context) {
-	if h.service.sheetReader == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Google Sheets integration not configured"})
-		return
-	}
-	updated, err := h.service.SyncPricesFromSheet(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sync prices from sheet", "details": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("Synced %d price entries from Cennik sheet", updated),
-		"updated": updated,
-	})
 }

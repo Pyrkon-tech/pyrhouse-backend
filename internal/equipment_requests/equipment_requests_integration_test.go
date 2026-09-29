@@ -2,7 +2,6 @@ package equipment_requests
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -18,40 +17,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"warehouse/internal/auditlog"
 	"warehouse/internal/inventory/assets"
-	"warehouse/internal/inventory/category"
 	inventorylog "warehouse/internal/inventory/inventory_log"
 	"warehouse/internal/inventory/stocks"
 	"warehouse/internal/inventory/transfers"
 	"warehouse/internal/repository"
-	"warehouse/internal/settings"
 	"warehouse/internal/users"
 )
-
-// ─────────────────────────────────────────────
-// Fake SheetReader — injects static rows
-// ─────────────────────────────────────────────
-
-type fakeSheetReader struct {
-	rows [][]string
-}
-
-func (f *fakeSheetReader) FetchSheet(_, _ string) ([][]string, error) {
-	return f.rows, nil
-}
-
-// sheetHeader returns the canonical Polish header row used by ColumnMapper.
-func sheetHeader() []string {
-	return []string{
-		"Rzeczy", "Ilość", "Pawilon", "Miejsce", "Stan",
-		"Godzina odbioru", "Dostawa do", "Osoba odpowiedzialna za budżet",
-		"Do kogo ma trafić", "UWAGI",
-	}
-}
-
-// sheetRow builds a data row matching the header order.
-func sheetRow(item, qty, pavilion, location, status, pickup, delivery, budget, recipient, notes string) []string {
-	return []string{item, qty, pavilion, location, status, pickup, delivery, budget, recipient, notes}
-}
 
 // ─────────────────────────────────────────────
 // DB helpers
@@ -76,8 +47,6 @@ func setupEQTestDB(t *testing.T) (*sql.DB, func()) {
 	}
 	cleanup := func() {
 		_, _ = db.Exec("DELETE FROM equipment_request_items WHERE quest_id IN (SELECT id FROM equipment_request_quests WHERE destination_pavilion LIKE '__TEST__%')")
-		_, _ = db.Exec("DELETE FROM equipment_request_category_mapping WHERE form_item_name LIKE '__TEST__%'")
-		_, _ = db.Exec("DELETE FROM equipment_request_location_mapping WHERE pavilion LIKE '__TEST__%'")
 
 		// transfers linked to test quests (via the quest_transfers join table)
 		linkedTransfers := `transfer_id IN (
@@ -140,17 +109,11 @@ func createEQFixtures(t *testing.T, db *sql.DB) eqFixtures {
 // Service & router builders
 // ─────────────────────────────────────────────
 
-func newEQService(db *sql.DB, reader SheetReader) *Service {
-	repo := repository.NewRepository(db)
-	questRepo := NewRepository(repo)
-	categoryRepo := category.NewCategoryRepository(repo)
-	settingsRepo := settings.NewRepository(repo)
-
-	svc := NewService(reader, categoryRepo, questRepo, settingsRepo, "fake-sheet-id", "Zamówienia", 3)
-	return svc
+func newEQService(db *sql.DB) *Service {
+	return NewService(NewRepository(repository.NewRepository(db)))
 }
 
-func newEQServiceWithTransfers(db *sql.DB, reader SheetReader) *Service {
+func newEQServiceWithTransfers(db *sql.DB) *Service {
 	repo := repository.NewRepository(db)
 
 	transferRepo := transfers.NewRepository(repo)
@@ -162,16 +125,16 @@ func newEQServiceWithTransfers(db *sql.DB, reader SheetReader) *Service {
 
 	transferSvc := transfers.NewService(repo, transferRepo, assetRepo, stockRepo, userRepo, il)
 
-	svc := newEQService(db, reader)
+	svc := newEQService(db)
 	svc.SetTransferCreator(transferSvc)
 	return svc
 }
 
-func newEQRouter(db *sql.DB, reader SheetReader) *gin.Engine {
+func newEQRouter(db *sql.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(func(c *gin.Context) { c.Set("role", "admin"); c.Next() })
-	h := NewHandler(newEQServiceWithTransfers(db, reader))
+	h := NewHandler(newEQServiceWithTransfers(db))
 	h.RegisterRoutes(r.Group("/"))
 	return r
 }
@@ -224,318 +187,6 @@ func getQuestDBID(t *testing.T, db *sql.DB, questID string) int {
 }
 
 // ─────────────────────────────────────────────
-// TestSync_ParsesAndPersistsQuests
-// ─────────────────────────────────────────────
-
-func TestSync_ParsesAndPersistsQuests(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-	db, cleanup := setupEQTestDB(t)
-	defer cleanup()
-
-	reader := &fakeSheetReader{rows: [][]string{
-		sheetHeader(),
-		// Quest 1 — two items, same destination/recipient/date
-		sheetRow("__TEST__Laptop", "2", "__TEST__pav", "__TEST__loc", "Zamówione", "", "2099-01-01", "", "Test Recipient", ""),
-		sheetRow("__TEST__Mouse", "3", "__TEST__pav", "__TEST__loc", "Zamówione", "", "2099-01-01", "", "Test Recipient", ""),
-		// Quest 2 — different recipient
-		sheetRow("__TEST__Projector", "1", "__TEST__pav", "__TEST__loc2", "Zamówione", "", "2099-01-01", "", "Other Recipient", ""),
-	}}
-
-	svc := newEQService(db, reader)
-	result, err := svc.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-
-	assert.Equal(t, 2, result.Stats.Created)
-	assert.Equal(t, 0, result.Stats.Updated)
-	assert.Equal(t, 3, result.Stats.ItemsAdded)
-	assert.Len(t, result.Quests, 2)
-
-	// verify quests are in DB
-	var count int
-	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM equipment_request_quests WHERE destination_pavilion = '__TEST__pav'").Scan(&count))
-	assert.Equal(t, 2, count)
-
-	// verify items
-	require.NoError(t, db.QueryRow(`
-		SELECT COUNT(*) FROM equipment_request_items
-		WHERE quest_id IN (SELECT id FROM equipment_request_quests WHERE destination_pavilion = '__TEST__pav')`).Scan(&count))
-	assert.Equal(t, 3, count)
-
-	// verify sync log was written
-	var logCount int
-	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM equipment_request_sync_log WHERE sheet_id = 'fake-sheet-id'").Scan(&logCount))
-	assert.GreaterOrEqual(t, logCount, 1)
-}
-
-// ─────────────────────────────────────────────
-// TestSync_Idempotent
-// ─────────────────────────────────────────────
-
-func TestSync_Idempotent(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-	db, cleanup := setupEQTestDB(t)
-	defer cleanup()
-
-	rows := [][]string{
-		sheetHeader(),
-		sheetRow("__TEST__Kabel", "5", "__TEST__pav", "__TEST__loc", "Zamówione", "", "2099-01-01", "", "Test Recipient", ""),
-	}
-	reader := &fakeSheetReader{rows: rows}
-	svc := newEQService(db, reader)
-
-	// first sync — creates
-	r1, err := svc.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, 1, r1.Stats.Created)
-	assert.Equal(t, 0, r1.Stats.Updated)
-
-	// second sync — same data → unchanged
-	r2, err := svc.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, 0, r2.Stats.Created)
-	assert.Equal(t, 0, r2.Stats.Updated)
-	assert.Equal(t, 1, r2.Stats.Unchanged)
-}
-
-// ─────────────────────────────────────────────
-// TestSync_SkipsQuestWithLinkedTransfer
-// ─────────────────────────────────────────────
-
-func TestSync_SkipsQuestWithLinkedTransfer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-	db, cleanup := setupEQTestDB(t)
-	defer cleanup()
-	fx := createEQFixtures(t, db)
-
-	// Insert a quest with a linked transfer directly (simulates in_progress state)
-	rows := [][]string{
-		sheetHeader(),
-		sheetRow("__TEST__Kabel2", "3", "__TEST__pav", "__TEST__loc", "Zamówione", "", "2099-01-02", "", "Test Recipient", ""),
-	}
-	svc := newEQService(db, reader(&fakeSheetReader{rows: rows}))
-
-	// first sync — creates quest
-	r1, err := svc.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, 1, r1.Stats.Created)
-	questID := r1.Quests[0].ID
-
-	// manually link a fake transfer to the quest
-	var dbQuestID int
-	require.NoError(t, db.QueryRow("SELECT id FROM equipment_request_quests WHERE quest_id = $1", questID).Scan(&dbQuestID))
-
-	var transferID int
-	require.NoError(t, db.QueryRow(`INSERT INTO transfers (from_location_id, to_location_id, status) VALUES ($1, $2, 'in_transit') RETURNING id`,
-		fx.fromLocID, fx.toLocID).Scan(&transferID))
-	_, err = db.Exec("INSERT INTO quest_transfers (quest_id, transfer_id) VALUES ($1, $2)", questID, transferID)
-	require.NoError(t, err)
-	_, err = db.Exec("UPDATE equipment_request_quests SET status = 'in_progress' WHERE id = $1", dbQuestID)
-	require.NoError(t, err)
-
-	// second sync — same rows, but quest has transfer_id → should be skipped
-	r2, err := svc.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, 0, r2.Stats.Created)
-	assert.Equal(t, 0, r2.Stats.Updated)
-	assert.Equal(t, 1, r2.Stats.Unchanged)
-
-	// status must still be in_progress (not overwritten by sync)
-	var status string
-	require.NoError(t, db.QueryRow("SELECT status FROM equipment_request_quests WHERE id = $1", dbQuestID).Scan(&status))
-	assert.Equal(t, "in_progress", status)
-}
-
-// ─────────────────────────────────────────────
-// TestSync_ReconcilesStalePendingDuplicate
-// ─────────────────────────────────────────────
-
-// Reproduces the production duplicate bug: a quest whose pickup time is edited in the
-// sheet used to leave the pre-edit row behind forever. With pickup normalisation +
-// reconciliation, the edited row replaces the old one instead of duplicating it.
-func TestSync_ReconcilesStalePendingDuplicate(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-	db, cleanup := setupEQTestDB(t)
-	defer cleanup()
-	_ = createEQFixtures(t, db)
-
-	const recipient = "Dedup Recipient"
-
-	// v1: pickup "10.00" (normalises to 10:00).
-	svc1 := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
-		sheetHeader(),
-		sheetRow("__TEST__Kabel", "2", "__TEST__pav", "__TEST__loc", "Nowe", "10.00", "2099-03-03", "", recipient, ""),
-	}}))
-	r1, err := svc1.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, 1, r1.Stats.Created)
-
-	// v2: same recipient/location/date, pickup edited to "12:00:00" → different quest_key.
-	svc2 := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
-		sheetHeader(),
-		sheetRow("__TEST__Kabel", "2", "__TEST__pav", "__TEST__loc", "Nowe", "12:00:00", "2099-03-03", "", recipient, ""),
-	}}))
-	r2, err := svc2.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, 1, r2.Stats.Created, "edited pickup time creates a new quest")
-	assert.Equal(t, 1, r2.Stats.Deleted, "the stale pre-edit quest is reconciled away")
-
-	// Exactly one quest remains for this recipient — no duplicate.
-	var count int
-	require.NoError(t, db.QueryRow(
-		"SELECT COUNT(*) FROM equipment_request_quests WHERE recipient = $1 AND destination_pavilion = '__TEST__pav'",
-		recipient,
-	).Scan(&count))
-	assert.Equal(t, 1, count)
-
-	// The survivor carries the normalised pickup time.
-	var pickup string
-	require.NoError(t, db.QueryRow(
-		"SELECT pickup_time FROM equipment_request_quests WHERE recipient = $1 AND destination_pavilion = '__TEST__pav'",
-		recipient,
-	).Scan(&pickup))
-	assert.Equal(t, "12:00", pickup)
-}
-
-// ─────────────────────────────────────────────
-// TestSync_ReconcileKeepsQuestWithTransfer
-// ─────────────────────────────────────────────
-
-// Reconciliation must never remove a quest that has a linked transfer or a non-pending
-// status, even when it no longer appears in the sheet.
-func TestSync_ReconcileKeepsQuestWithTransfer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-	db, cleanup := setupEQTestDB(t)
-	defer cleanup()
-	fx := createEQFixtures(t, db)
-
-	svc := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
-		sheetHeader(),
-		sheetRow("__TEST__Kabel", "1", "__TEST__pav", "__TEST__loc", "Nowe", "", "2099-04-04", "", "Linked Recipient", ""),
-	}}))
-	r1, err := svc.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, 1, r1.Stats.Created)
-	questID := r1.Quests[0].ID
-
-	var transferID int
-	require.NoError(t, db.QueryRow(`INSERT INTO transfers (from_location_id, to_location_id, status) VALUES ($1, $2, 'in_transit') RETURNING id`,
-		fx.fromLocID, fx.toLocID).Scan(&transferID))
-	_, err = db.Exec("INSERT INTO quest_transfers (quest_id, transfer_id) VALUES ($1, $2)", questID, transferID)
-	require.NoError(t, err)
-	_, err = db.Exec("UPDATE equipment_request_quests SET status = 'in_progress' WHERE quest_id = $1", questID)
-	require.NoError(t, err)
-
-	// Next sync with a completely different sheet — the linked quest is gone from it.
-	svc2 := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
-		sheetHeader(),
-		sheetRow("__TEST__Inny", "1", "__TEST__pav", "__TEST__loc", "Nowe", "", "2099-04-05", "", "Other Recipient", ""),
-	}}))
-	_, err = svc2.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-
-	// The quest with a transfer must survive reconciliation.
-	var status string
-	require.NoError(t, db.QueryRow("SELECT status FROM equipment_request_quests WHERE quest_id = $1", questID).Scan(&status))
-	assert.Equal(t, "in_progress", status)
-}
-
-// ─────────────────────────────────────────────
-// TestSync_KeepsItemWithoutQuantity
-// ─────────────────────────────────────────────
-
-// A sheet row with an item but a blank quantity must be imported (quantity NULL) instead of
-// being dropped, and the transfer preview must flag it so the dispatcher fills it in.
-func TestSync_KeepsItemWithoutQuantity(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-	db, cleanup := setupEQTestDB(t)
-	defer cleanup()
-	fx := createEQFixtures(t, db)
-
-	svc := newEQService(db, reader(&fakeSheetReader{rows: [][]string{
-		sheetHeader(),
-		sheetRow("__TEST__Kabel", "", "__TEST__pav", "__TEST__loc", "Nowe", "", "2099-05-05", "", "NoQty Recipient", ""),
-	}}))
-	r, err := svc.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, 1, r.Stats.Created)
-
-	// Item is persisted with NULL quantity (not dropped).
-	var rowCount int
-	var qty sql.NullInt64
-	require.NoError(t, db.QueryRow(`
-		SELECT COUNT(*), MAX(i.quantity) FROM equipment_request_items i
-		JOIN equipment_request_quests q ON q.id = i.quest_id
-		WHERE q.destination_pavilion = '__TEST__pav' AND i.item_name = '__TEST__Kabel'`,
-	).Scan(&rowCount, &qty))
-	assert.Equal(t, 1, rowCount, "item with no quantity must still be imported")
-	assert.False(t, qty.Valid, "quantity must be NULL when the sheet leaves it blank")
-
-	// API model exposes the quantity as nil.
-	require.Len(t, r.Quests, 1)
-	require.Len(t, r.Quests[0].Items, 1)
-	assert.Nil(t, r.Quests[0].Items[0].Quantity)
-
-	// Transfer preview flags it so the dispatcher must supply a quantity.
-	preview, err := svc.PreviewTransferFromQuest(context.Background(), r.Quests[0].ID, fx.fromLocID)
-	require.NoError(t, err)
-	require.Len(t, preview.UnresolvedItems, 1)
-	assert.Equal(t, "quantity not specified in sheet", preview.UnresolvedItems[0].Reason)
-	assert.Nil(t, preview.UnresolvedItems[0].Quantity)
-}
-
-// ─────────────────────────────────────────────
-// TestSync_CategoryExactMatch
-// ─────────────────────────────────────────────
-
-func TestSync_CategoryExactMatch(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-	db, cleanup := setupEQTestDB(t)
-	defer cleanup()
-	fx := createEQFixtures(t, db)
-
-	// Item name exactly matches the category label "__TEST__EQCat"
-	rows := [][]string{
-		sheetHeader(),
-		sheetRow("__TEST__EQCat", "2", "__TEST__pav", "__TEST__loc", "Zamówione", "", "2099-01-03", "", "Test Recipient", ""),
-	}
-	svc := newEQService(db, &fakeSheetReader{rows: rows})
-
-	result, err := svc.SyncQuestsToDatabase(context.Background())
-	require.NoError(t, err)
-	require.Len(t, result.Quests, 1)
-
-	// Verify category_id was resolved on the item
-	var catID *int
-	var matchType string
-	require.NoError(t, db.QueryRow(`
-		SELECT category_id, category_match_type
-		FROM equipment_request_items
-		WHERE quest_id IN (SELECT id FROM equipment_request_quests WHERE destination_pavilion = '__TEST__pav' AND delivery_date = '2099-01-03')
-		LIMIT 1`).Scan(&catID, &matchType))
-
-	require.NotNil(t, catID)
-	assert.Equal(t, fx.categoryID, *catID)
-	assert.Equal(t, "exact", matchType)
-}
-
-// helper avoids shadowing the local variable name in TestSync_SkipsQuestWithLinkedTransfer
-func reader(r *fakeSheetReader) *fakeSheetReader { return r }
-
-// ─────────────────────────────────────────────
 // TestListQuests_WithFilters
 // ─────────────────────────────────────────────
 
@@ -551,7 +202,7 @@ func TestListQuests_WithFilters(t *testing.T) {
 	insertTestQuest(t, db, &fx.toLocID, "completed")
 	insertTestQuest(t, db, nil, "pending")
 
-	router := newEQRouter(db, &fakeSheetReader{})
+	router := newEQRouter(db)
 
 	t.Run("no filter returns all test quests", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -621,7 +272,7 @@ func TestUpdateQuestStatus(t *testing.T) {
 	db, cleanup := setupEQTestDB(t)
 	defer cleanup()
 	fx := createEQFixtures(t, db)
-	router := newEQRouter(db, &fakeSheetReader{})
+	router := newEQRouter(db)
 
 	t.Run("manual status change succeeds when no transfer linked", func(t *testing.T) {
 		questID := insertTestQuest(t, db, &fx.toLocID, "pending")
@@ -684,7 +335,7 @@ func TestUpdateQuestLocation(t *testing.T) {
 	db, cleanup := setupEQTestDB(t)
 	defer cleanup()
 	fx := createEQFixtures(t, db)
-	router := newEQRouter(db, &fakeSheetReader{})
+	router := newEQRouter(db)
 
 	t.Run("sets location and marks resolved", func(t *testing.T) {
 		questID := insertTestQuest(t, db, nil, "pending")
@@ -692,7 +343,7 @@ func TestUpdateQuestLocation(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPatch,
 			"/equipment-requests/quests/"+questID+"/location",
-			eqJSON(t, map[string]any{"location_id": fx.toLocID, "save_mapping": false}))
+			eqJSON(t, map[string]any{"location_id": fx.toLocID}))
 		req.Header.Set("Content-Type", "application/json")
 		router.ServeHTTP(w, req)
 
@@ -704,109 +355,6 @@ func TestUpdateQuestLocation(t *testing.T) {
 		require.NotNil(t, locID)
 		assert.Equal(t, fx.toLocID, *locID)
 		assert.True(t, resolved)
-	})
-
-	t.Run("save_mapping=true creates location mapping", func(t *testing.T) {
-		questID := insertTestQuest(t, db, nil, "pending")
-
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPatch,
-			"/equipment-requests/quests/"+questID+"/location",
-			eqJSON(t, map[string]any{"location_id": fx.toLocID, "save_mapping": true}))
-		req.Header.Set("Content-Type", "application/json")
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-
-		var count int
-		require.NoError(t, db.QueryRow(`
-			SELECT COUNT(*) FROM equipment_request_location_mapping
-			WHERE pavilion = '__TEST__pav' AND location_name = '__TEST__loc' AND location_id = $1`,
-			fx.toLocID).Scan(&count))
-		assert.GreaterOrEqual(t, count, 1)
-	})
-}
-
-// ─────────────────────────────────────────────
-// TestCategoryMapping_CRUD
-// ─────────────────────────────────────────────
-
-func TestCategoryMapping_CRUD(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test")
-	}
-	db, cleanup := setupEQTestDB(t)
-	defer cleanup()
-	fx := createEQFixtures(t, db)
-	router := newEQRouter(db, &fakeSheetReader{})
-
-	t.Run("create mapping", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/equipment-requests/category-mapping",
-			eqJSON(t, map[string]any{"form_item_name": "__TEST__Przedłużacz", "category_id": fx.categoryID}))
-		req.Header.Set("Content-Type", "application/json")
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusCreated, w.Code)
-	})
-
-	t.Run("list mappings includes created", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/equipment-requests/category-mappings", nil)
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-		var resp struct {
-			Mappings []CategoryMapping `json:"mappings"`
-		}
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-		found := false
-		for _, m := range resp.Mappings {
-			if m.FormItemName == "__TEST__Przedłużacz" {
-				found = true
-				assert.Equal(t, fx.categoryID, m.CategoryID)
-			}
-		}
-		assert.True(t, found)
-	})
-
-	t.Run("sync picks up manual mapping", func(t *testing.T) {
-		// Row with exact item name matching the manual mapping
-		reader := &fakeSheetReader{rows: [][]string{
-			sheetHeader(),
-			sheetRow("__TEST__Przedłużacz", "4", "__TEST__pav", "__TEST__map_loc", "Zamówione", "", "2099-01-10", "", "Test Recipient", ""),
-		}}
-		svc := newEQService(db, reader)
-		result, err := svc.SyncQuestsToDatabase(context.Background())
-		require.NoError(t, err)
-		require.Len(t, result.Quests, 1)
-
-		var catID *int
-		var matchType string
-		require.NoError(t, db.QueryRow(`
-			SELECT category_id, category_match_type FROM equipment_request_items
-			WHERE quest_id IN (SELECT id FROM equipment_request_quests WHERE delivery_date = '2099-01-10')
-			LIMIT 1`).Scan(&catID, &matchType))
-
-		require.NotNil(t, catID)
-		assert.Equal(t, fx.categoryID, *catID)
-		assert.Equal(t, "manual", matchType)
-	})
-
-	t.Run("delete mapping", func(t *testing.T) {
-		// get the mapping id
-		var mappingID int
-		require.NoError(t, db.QueryRow("SELECT id FROM equipment_request_category_mapping WHERE form_item_name = '__TEST__Przedłużacz'").Scan(&mappingID))
-
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/equipment-requests/category-mappings/%d", mappingID), nil)
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusNoContent, w.Code)
-
-		var count int
-		require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM equipment_request_category_mapping WHERE id = $1", mappingID).Scan(&count))
-		assert.Equal(t, 0, count)
 	})
 }
 
@@ -821,7 +369,7 @@ func TestCreateTransferFromQuest_E2E(t *testing.T) {
 	db, cleanup := setupEQTestDB(t)
 	defer cleanup()
 	fx := createEQFixtures(t, db)
-	router := newEQRouter(db, &fakeSheetReader{})
+	router := newEQRouter(db)
 
 	t.Run("auto-resolves stock from quest items and creates transfer", func(t *testing.T) {
 		questID := insertTestQuest(t, db, &fx.toLocID, "pending")
@@ -928,7 +476,7 @@ func TestTransferCallback_QuestLifecycle(t *testing.T) {
 	defer cleanup()
 	fx := createEQFixtures(t, db)
 
-	svc := newEQServiceWithTransfers(db, &fakeSheetReader{})
+	svc := newEQServiceWithTransfers(db)
 
 	setupLinkedQuest := func(t *testing.T) (questID string, transferID int) {
 		t.Helper()
@@ -986,7 +534,7 @@ func TestPreviewTransferFromQuest(t *testing.T) {
 	db, cleanup := setupEQTestDB(t)
 	defer cleanup()
 	fx := createEQFixtures(t, db)
-	router := newEQRouter(db, &fakeSheetReader{})
+	router := newEQRouter(db)
 
 	questID := insertTestQuest(t, db, &fx.toLocID, "pending")
 	dbQuestID := getQuestDBID(t, db, questID)

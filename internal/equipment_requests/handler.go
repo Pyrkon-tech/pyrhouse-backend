@@ -2,7 +2,6 @@ package equipment_requests
 
 import (
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,19 +11,13 @@ import (
 )
 
 type Handler struct {
-	service   *Service
-	scheduler *Scheduler // optional — nil when auto-sync is disabled
+	service *Service
 }
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{
 		service: service,
 	}
-}
-
-// SetScheduler injects the scheduler after construction (avoids circular DI).
-func (h *Handler) SetScheduler(s *Scheduler) {
-	h.scheduler = s
 }
 
 // RegisterRoutes registers equipment request routes
@@ -36,46 +29,13 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	eq.GET("/quests/unresolved-locations", h.ListUnresolvedLocationQuests)
 	eq.GET("/quests/:id", h.GetQuest)
 	eq.GET("/quests/:id/transfer-preview", h.PreviewTransferFromQuest)
-	eq.GET("/sync-log", h.GetSyncLog)
-	eq.GET("/sync-status", h.GetSyncStatus)
 	eq.GET("/stream", h.StreamQuests)
-	eq.GET("/category-mappings", h.ListCategoryMappings)
-	eq.GET("/location-mappings", h.ListLocationMappings)
 
 	// Write operations — dispatcher and above
 	dispatch := eq.Group("", security.Authorize("dispatcher"))
-	dispatch.POST("/sync", h.ManualSync)
 	dispatch.PATCH("/quests/:id/status", h.UpdateQuestStatus)
 	dispatch.PATCH("/quests/:id/location", h.UpdateQuestLocation)
 	dispatch.POST("/quests/:id/transfer", h.CreateTransferFromQuest)
-	dispatch.POST("/category-mapping", h.CreateCategoryMapping)
-	dispatch.DELETE("/category-mappings/:id", h.DeleteCategoryMapping)
-	dispatch.POST("/location-mappings", h.CreateLocationMapping)
-	dispatch.DELETE("/location-mappings/:id", h.DeleteLocationMapping)
-}
-
-// ManualSync triggers manual sync from Google Sheets and persists to database
-func (h *Handler) ManualSync(c *gin.Context) {
-	result, err := h.service.SyncQuestsToDatabase(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to sync equipment requests",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Sync completed successfully",
-		"stats": gin.H{
-			"quests_created":   result.Stats.Created,
-			"quests_updated":   result.Stats.Updated,
-			"quests_unchanged": result.Stats.Unchanged,
-			"items_added":      result.Stats.ItemsAdded,
-			"items_removed":    result.Stats.ItemsRemoved,
-		},
-		"quests": result.Quests,
-	})
 }
 
 // ListQuests returns quests from database with filtering and pagination
@@ -256,58 +216,7 @@ func (h *Handler) PreviewTransferFromQuest(c *gin.Context) {
 	c.JSON(http.StatusOK, preview)
 }
 
-// GetSyncLog returns the most recent sync log
-func (h *Handler) GetSyncLog(c *gin.Context) {
-	log, err := h.service.questRepo.GetLatestSyncLog(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":   "No sync log found",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, log)
-}
-
-// CreateCategoryMapping creates a manual category mapping
-func (h *Handler) CreateCategoryMapping(c *gin.Context) {
-	var req struct {
-		FormItemName string `json:"form_item_name" binding:"required"`
-		CategoryID   int    `json:"category_id" binding:"required"`
-		CreatedBy    *int   `json:"created_by"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	mapping := &CategoryMapping{
-		FormItemName: req.FormItemName,
-		CategoryID:   req.CategoryID,
-		CreatedBy:    req.CreatedBy,
-	}
-
-	err := h.service.questRepo.CreateCategoryMapping(c.Request.Context(), mapping)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to create category mapping",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Category mapping created successfully",
-		"mapping": mapping,
-	})
-}
-
-// StreamQuests opens an SSE connection that receives events whenever quests are synced.
+// StreamQuests opens an SSE connection that receives quest-related events (e.g. stock changes).
 func (h *Handler) StreamQuests(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -336,170 +245,6 @@ func (h *Handler) StreamQuests(c *gin.Context) {
 	})
 }
 
-// GetSyncStatus returns the current state of the auto-sync scheduler.
-func (h *Handler) GetSyncStatus(c *gin.Context) {
-	if h.scheduler == nil {
-		c.JSON(http.StatusOK, SyncStatus{Enabled: false})
-		return
-	}
-
-	status := SyncStatus{
-		Enabled:  h.scheduler.IsEnabled(),
-		Interval: h.scheduler.GetInterval().String(),
-	}
-
-	if lastSync := h.scheduler.GetLastSync(); !lastSync.IsZero() {
-		status.LastSync = &lastSync
-		if status.Enabled {
-			nextSync := lastSync.Add(h.scheduler.GetInterval())
-			status.NextSync = &nextSync
-		}
-	}
-
-	if lastErr := h.scheduler.GetLastError(); lastErr != nil {
-		status.LastError = lastErr.Error()
-	}
-
-	c.JSON(http.StatusOK, status)
-}
-
-// ListCategoryMappings returns all manual category mappings.
-func (h *Handler) ListCategoryMappings(c *gin.Context) {
-	mappings, err := h.service.questRepo.ListCategoryMappings(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to fetch category mappings",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"count":    len(mappings),
-		"mappings": mappings,
-	})
-}
-
-// DeleteCategoryMapping removes a manual category mapping by ID.
-func (h *Handler) DeleteCategoryMapping(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid mapping ID",
-			"details": "ID must be a positive integer",
-		})
-		return
-	}
-
-	if err := h.service.questRepo.DeleteCategoryMapping(c.Request.Context(), id); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "Category mapping not found",
-				"details": err.Error(),
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to delete category mapping",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	c.AbortWithStatus(http.StatusNoContent)
-}
-
-// ListLocationMappings returns all manual location mappings.
-func (h *Handler) ListLocationMappings(c *gin.Context) {
-	mappings, err := h.service.questRepo.ListLocationMappings(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to fetch location mappings",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"count":    len(mappings),
-		"mappings": mappings,
-	})
-}
-
-// CreateLocationMapping creates a manual location mapping.
-func (h *Handler) CreateLocationMapping(c *gin.Context) {
-	var req struct {
-		Pavilion     string `json:"pavilion" binding:"required"`
-		LocationName string `json:"location_name" binding:"required"`
-		LocationID   int    `json:"location_id" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	mapping := &LocationMapping{
-		Pavilion:     req.Pavilion,
-		LocationName: req.LocationName,
-		LocationID:   req.LocationID,
-	}
-
-	err := h.service.questRepo.CreateLocationMapping(c.Request.Context(), mapping)
-	if err != nil {
-		status := http.StatusInternalServerError
-		errorMsg := "Failed to create location mapping"
-		if strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
-			status = http.StatusConflict
-			errorMsg = "Location mapping already exists for this pavilion and location name"
-		}
-		c.JSON(status, gin.H{
-			"error":   errorMsg,
-			"details": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Location mapping created successfully",
-		"mapping": mapping,
-	})
-}
-
-// DeleteLocationMapping removes a manual location mapping by ID.
-func (h *Handler) DeleteLocationMapping(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid mapping ID",
-			"details": "ID must be a positive integer",
-		})
-		return
-	}
-
-	if err := h.service.questRepo.DeleteLocationMapping(c.Request.Context(), id); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "Location mapping not found",
-				"details": err.Error(),
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to delete location mapping",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	c.AbortWithStatus(http.StatusNoContent)
-}
-
 // ListUnresolvedLocationQuests returns quests with location_resolved = false.
 func (h *Handler) ListUnresolvedLocationQuests(c *gin.Context) {
 	quests, err := h.service.questRepo.ListUnresolvedLocationQuests(c.Request.Context())
@@ -517,13 +262,12 @@ func (h *Handler) ListUnresolvedLocationQuests(c *gin.Context) {
 	})
 }
 
-// UpdateQuestLocation manually assigns a location to a quest. Optionally saves as mapping for future use.
+// UpdateQuestLocation manually assigns a location to a quest.
 func (h *Handler) UpdateQuestLocation(c *gin.Context) {
 	questID := c.Param("id")
 
 	var req struct {
-		LocationID  int  `json:"location_id" binding:"required"`
-		SaveMapping bool `json:"save_mapping"`
+		LocationID int `json:"location_id" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -534,8 +278,7 @@ func (h *Handler) UpdateQuestLocation(c *gin.Context) {
 		return
 	}
 
-	quest, err := h.service.questRepo.GetQuestByID(c.Request.Context(), questID)
-	if err != nil {
+	if _, err := h.service.questRepo.GetQuestByID(c.Request.Context(), questID); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":   "Quest not found",
 			"details": err.Error(),
@@ -549,17 +292,6 @@ func (h *Handler) UpdateQuestLocation(c *gin.Context) {
 			"details": err.Error(),
 		})
 		return
-	}
-
-	if req.SaveMapping {
-		mapping := &LocationMapping{
-			Pavilion:     quest.Destination.Pavilion,
-			LocationName: quest.Destination.Location,
-			LocationID:   req.LocationID,
-		}
-		if err := h.service.questRepo.CreateLocationMapping(c.Request.Context(), mapping); err != nil {
-			log.Printf("[equipment-requests] failed to save location mapping for quest %s: %v", questID, err)
-		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

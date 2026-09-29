@@ -66,8 +66,14 @@ DELETE FROM audit_logs WHERE id NOT IN (SELECT id FROM audit_logs ORDER BY creat
 
 -- Links to real documents and what syncing them logged
 UPDATE app_settings SET value = 'fixture-sheet-id' WHERE key LIKE '%sheet_id';
-UPDATE equipment_request_sync_log SET sheet_id = 'fixture-sheet-id', errors = NULL;
-DELETE FROM equipment_request_sync_log WHERE id NOT IN (SELECT id FROM equipment_request_sync_log ORDER BY synced_at DESC LIMIT 50);
+-- The sync log is gone since migration 000049; older dumps still carry it (they are anonymised before migrating).
+DO $$
+BEGIN
+  IF to_regclass('equipment_request_sync_log') IS NOT NULL THEN
+    UPDATE equipment_request_sync_log SET sheet_id = 'fixture-sheet-id', errors = NULL;
+    DELETE FROM equipment_request_sync_log WHERE id NOT IN (SELECT id FROM equipment_request_sync_log ORDER BY synced_at DESC LIMIT 50);
+  END IF;
+END $$;
 
 COMMIT;
 DROP EXTENSION pgcrypto;
