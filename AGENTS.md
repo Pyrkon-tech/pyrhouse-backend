@@ -215,6 +215,7 @@ Fields: `id`, `name` (auto-normalized), `label`, `pyr_id` (3-char auto-generated
 | `DISCORD_REDIRECT_URI` | — | Backend callback URL |
 | `FRONTEND_URL` | — | Frontend URL for OAuth redirects |
 | `SHOP_URL` | — | Organizer shop origin (e.g. `https://shop.pyrhouse.space`); added to CORS origins automatically |
+| `SHOP_JWT_EXPIRATION_HOURS` | `24` | Organizer shop token lifetime |
 
 ## Adding New Features — Guidelines
 
@@ -349,6 +350,22 @@ Quest is the **demand layer** (what, where, when). Transfer is the **operational
 - Budget tracking and approval workflow
 - Analytics dashboard (quest trends, popular items)
 - Multiple transfers per quest (partial fulfillment / split delivery)
+
+## Organizer Shop
+
+**Location:** `internal/shop/` (+ `internal/shop/access/`). Plan, decisions and progress: `docs/shop/PLAN.md` in the
+workspace repo.
+
+- Separate accounts (`shop_accounts`), never rows in `users`, and never a shop role in `roles.go`.
+- Separate tokens: `security.GenerateShopJWT` (aud `pyrhouse-shop`, `sub` = shop account ID) is the only issuer;
+  `ShopAuth` accepts only those, `JWTMiddleware` rejects them. One JWT secret for both — `aud` keeps them apart.
+- `/shop/*` (organizer) is registered on the engine, not the JWTMiddleware group; `/admin/shop/*` is on the
+  protected group with `Authorize("moderator")` (settings: admin).
+- Access policy chain in `internal/shop/access` (existing account → allowlist → invite → Workspace domain via the
+  Google `hd` claim), driven by `shop.*` app_settings.
+- Order state machine lives in `internal/shop/orders.go` (`transitions`); confirming an order creates a
+  `source='shop'` quest in the same transaction and broadcasts `quests_changed`.
+- With `shop.show_prices=false` the organizer API must not return prices anywhere (`present`).
 
 ## Testing
 

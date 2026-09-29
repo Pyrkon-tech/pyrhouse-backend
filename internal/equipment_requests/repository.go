@@ -173,6 +173,8 @@ func (r *Repository) UpdateQuest(ctx context.Context, questID string, quest *Que
 }
 
 // questBaseQuery returns the base SELECT with LEFT JOIN on locations for location_name.
+// It selects q.*, which goqu scans into QuestDB: every new column on equipment_request_quests
+// needs a QuestDB field, or all quest reads fail.
 func (r *Repository) questBaseQuery() *goqu.SelectDataset {
 	return r.repo.GoquDBWrapper.
 		Select(

@@ -42,6 +42,10 @@ tags:
     description: Permanent inventory releases — remove items from stock with a receipt for PDF generation
   - name: scheduling
     description: Volunteer schedule management — slots, day windows, assignments, and generation
+  - name: shop
+    description: Organizer shop (shop.pyrhouse.space) — shop tokens only, see shopBearerAuth
+  - name: shop-admin
+    description: Shop panel in the warehouse — products, windows, orders, accounts, invites (moderator; settings admin)
 
 paths:
   /health:
@@ -1983,6 +1987,7 @@ paths:
 
         | type | extra fields |
         |---|---|
+        | `quests_changed` | — (quests created or moved outside the board, e.g. a shop order confirmed) |
         | `stocks_changed` | `location_id`, `action` (created/updated/deleted) |
 
         The connection stays open until the client disconnects.
@@ -2740,6 +2745,778 @@ paths:
         "422":
           description: Provided user_id does not exist
 
+
+  # ==========================================================================
+  # Organizer shop (shop.pyrhouse.space) — shop tokens only (aud=pyrhouse-shop)
+  # ==========================================================================
+
+  /shop/auth/google/exchange:
+    post:
+      tags:
+        - shop
+      summary: Log into the shop with Google
+      description: |
+        Exchanges a Google authorization code for a shop token. `redirect_uri` must be exactly
+        `SHOP_URL + /auth/google/callback`. Access is decided by a policy chain: existing account →
+        allowlisted e-mail → invite (`invite_token`) → Google Workspace domain (`hd` claim, configured
+        in shop settings). Rate limited per IP (10 attempts / 5 min).
+
+        Error `code` values: `invalid_redirect_uri`, `google_exchange_failed`, `email_not_verified`,
+        `account_inactive`, `invite_invalid`, `access_denied`, `rate_limited`, `shop_login_unavailable`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, redirect_uri]
+              properties:
+                code:
+                  type: string
+                redirect_uri:
+                  type: string
+                  example: "https://shop.pyrhouse.space/auth/google/callback"
+                invite_token:
+                  type: string
+                  description: Plaintext token from an invite link (`/invite/<token>`)
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: Shop JWT (aud=pyrhouse-shop). Not accepted by warehouse endpoints.
+                  account:
+                    $ref: "#/components/schemas/ShopAccount"
+        "400":
+          $ref: "#/components/responses/ShopError"
+        "403":
+          $ref: "#/components/responses/ShopError"
+        "429":
+          $ref: "#/components/responses/ShopError"
+        "503":
+          $ref: "#/components/responses/ShopError"
+
+  /shop/me:
+    get:
+      tags:
+        - shop
+      summary: Current shop account
+      security:
+        - shopBearerAuth: []
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopAccount"
+        "401":
+          $ref: "#/components/responses/ShopError"
+        "403":
+          description: Account blocked (`account_inactive`) — checked on every request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopError"
+
+  /shop/config:
+    get:
+      tags:
+        - shop
+      summary: Shop configuration for organizers
+      security:
+        - shopBearerAuth: []
+      responses:
+        "200":
+          description: Configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  show_prices:
+                    type: boolean
+                  orders_open:
+                    type: boolean
+                    description: Whether orders can be submitted and edited right now (deadline already applied)
+                  orders_open_until:
+                    type: string
+                    format: date-time
+                    nullable: true
+
+  /shop/catalog:
+    get:
+      tags:
+        - shop
+      summary: Active products
+      description: Ordered by section, sort order and name. `price` is null for every product when prices are hidden.
+      security:
+        - shopBearerAuth: []
+      responses:
+        "200":
+          description: Products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShopProduct"
+
+  /shop/locations:
+    get:
+      tags:
+        - shop
+      summary: Delivery locations
+      security:
+        - shopBearerAuth: []
+      responses:
+        "200":
+          description: Locations (group by pavilion in the UI)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShopLocation"
+
+  /shop/delivery-windows:
+    get:
+      tags:
+        - shop
+      summary: Upcoming delivery and return windows
+      description: Active windows that have not ended yet, ordered by start.
+      security:
+        - shopBearerAuth: []
+      responses:
+        "200":
+          description: Windows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShopWindow"
+
+  /shop/orders:
+    get:
+      tags:
+        - shop
+      summary: My orders
+      security:
+        - shopBearerAuth: []
+      responses:
+        "200":
+          description: The account's orders, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShopOrder"
+    post:
+      tags:
+        - shop
+      summary: Submit an order
+      description: |
+        Validated on the server: orders open, products active, `max_per_order`, delivery window
+        active and in the future, return window active and not before the delivery window ends,
+        `return_date` (optional) within the return window, location exists.
+        Send an `Idempotency-Key` header; repeating it returns the original order with 200.
+      security:
+        - shopBearerAuth: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopOrderInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopOrder"
+        "200":
+          description: Same Idempotency-Key — the original order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopOrder"
+        "400":
+          $ref: "#/components/responses/ShopError"
+        "403":
+          description: Orders closed (`orders_closed`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopError"
+
+  /shop/orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ShopOrderID"
+    get:
+      tags:
+        - shop
+      summary: My order
+      description: Another account's order is a 404.
+      security:
+        - shopBearerAuth: []
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopOrder"
+        "404":
+          $ref: "#/components/responses/ShopError"
+    put:
+      tags:
+        - shop
+      summary: Edit my order
+      description: Only while `submitted`. `version` must match the current one (409 `version_conflict` otherwise).
+      security:
+        - shopBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/ShopOrderInput"
+                - type: object
+                  required: [version]
+                  properties:
+                    version:
+                      type: integer
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopOrder"
+        "400":
+          $ref: "#/components/responses/ShopError"
+        "404":
+          $ref: "#/components/responses/ShopError"
+        "409":
+          $ref: "#/components/responses/ShopError"
+
+  /shop/orders/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ShopOrderID"
+    post:
+      tags:
+        - shop
+      summary: Cancel my order
+      description: Only while `submitted`.
+      security:
+        - shopBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopVersionInput"
+      responses:
+        "200":
+          description: Cancelled order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopOrder"
+        "404":
+          $ref: "#/components/responses/ShopError"
+        "409":
+          $ref: "#/components/responses/ShopError"
+
+  # ==========================================================================
+  # Shop panel in the warehouse — warehouse JWT, moderator (settings: admin)
+  # ==========================================================================
+
+  /admin/shop/products:
+    get:
+      tags:
+        - shop-admin
+      summary: All products (including inactive)
+      responses:
+        "200":
+          description: Products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShopProduct"
+    post:
+      tags:
+        - shop-admin
+      summary: Create a product
+      description: The product is tied to an existing item category; create a new category with `POST /categories` first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopProductInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopProduct"
+        "400":
+          $ref: "#/components/responses/ShopError"
+
+  /admin/shop/products/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ShopResourceID"
+    put:
+      tags:
+        - shop-admin
+      summary: Update a product
+      description: There is no delete — set `active` to false. Existing orders keep their name/price snapshots.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopProductInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopProduct"
+        "400":
+          $ref: "#/components/responses/ShopError"
+        "404":
+          $ref: "#/components/responses/ShopError"
+
+  /admin/shop/delivery-windows:
+    get:
+      tags:
+        - shop-admin
+      summary: All delivery and return windows
+      responses:
+        "200":
+          description: Windows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShopWindow"
+    post:
+      tags:
+        - shop-admin
+      summary: Create a window
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopWindowInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopWindow"
+        "400":
+          $ref: "#/components/responses/ShopError"
+
+  /admin/shop/delivery-windows/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ShopResourceID"
+    put:
+      tags:
+        - shop-admin
+      summary: Update a window
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopWindowInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopWindow"
+        "404":
+          $ref: "#/components/responses/ShopError"
+    delete:
+      tags:
+        - shop-admin
+      summary: Delete a window
+      description: 409 `window_in_use` when orders use it — deactivate it instead.
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/ShopError"
+        "409":
+          $ref: "#/components/responses/ShopError"
+
+  /admin/shop/orders:
+    get:
+      tags:
+        - shop-admin
+      summary: All orders
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [submitted, confirmed, rejected, cancelled]
+      responses:
+        "200":
+          description: Orders, newest first (prices always included)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShopOrder"
+
+  /admin/shop/orders/summary:
+    get:
+      tags:
+        - shop-admin
+      summary: What to prepare — submitted and confirmed orders aggregated
+      parameters:
+        - in: query
+          name: group
+          schema:
+            type: string
+            enum: [product, day, location]
+            default: product
+      responses:
+        "200":
+          description: Rows grouped by the key and product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  group:
+                    type: string
+                  rows:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ShopSummaryRow"
+
+  /admin/shop/orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ShopOrderID"
+    get:
+      tags:
+        - shop-admin
+      summary: Order with its event log
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ShopOrder"
+                  - type: object
+                    properties:
+                      events:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ShopOrderEvent"
+        "404":
+          $ref: "#/components/responses/ShopError"
+    patch:
+      tags:
+        - shop-admin
+      summary: Correct an order
+      description: |
+        `items` only while `submitted` (moderators may use inactive products and exceed `max_per_order`).
+        `location_id` also after confirmation — the quest moves with it in the same transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+                location_id:
+                  type: integer
+                location_note:
+                  type: string
+                  nullable: true
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/ShopOrderItemInput"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopOrder"
+        "400":
+          $ref: "#/components/responses/ShopError"
+        "404":
+          $ref: "#/components/responses/ShopError"
+        "409":
+          $ref: "#/components/responses/ShopError"
+
+  /admin/shop/orders/{id}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/ShopOrderID"
+    post:
+      tags:
+        - shop-admin
+      summary: Confirm an order ("Zamówione")
+      description: |
+        In one transaction: status `confirmed`, a quest with `source: shop` (exact category and
+        location), an event. A second confirm is 409 `already_confirmed`. Broadcasts
+        `quests_changed` on `/equipment-requests/stream`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopVersionInput"
+      responses:
+        "200":
+          description: Confirmed order (`quest_id` set)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopOrder"
+        "404":
+          $ref: "#/components/responses/ShopError"
+        "409":
+          $ref: "#/components/responses/ShopError"
+
+  /admin/shop/orders/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/ShopOrderID"
+    post:
+      tags:
+        - shop-admin
+      summary: Reject an order
+      description: The reason is shown to the organizer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, reason]
+              properties:
+                version:
+                  type: integer
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Rejected order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopOrder"
+        "400":
+          $ref: "#/components/responses/ShopError"
+        "409":
+          $ref: "#/components/responses/ShopError"
+
+  /admin/shop/accounts:
+    get:
+      tags:
+        - shop-admin
+      summary: Shop accounts (including allowlist entries that never logged in)
+      responses:
+        "200":
+          description: Accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShopAccount"
+    post:
+      tags:
+        - shop-admin
+      summary: Add an e-mail to the allowlist
+      description: The first Google login with this e-mail binds the account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "201":
+          description: Allowlist entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopAccount"
+        "409":
+          $ref: "#/components/responses/ShopError"
+
+  /admin/shop/accounts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ShopResourceID"
+    patch:
+      tags:
+        - shop-admin
+      summary: Block or unblock an account
+      description: Takes effect on the account's next request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [active]
+              properties:
+                active:
+                  type: boolean
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopAccount"
+        "404":
+          $ref: "#/components/responses/ShopError"
+
+  /admin/shop/invites:
+    get:
+      tags:
+        - shop-admin
+      summary: Invites (tokens are never listed)
+      responses:
+        "200":
+          description: Invites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShopInvite"
+    post:
+      tags:
+        - shop-admin
+      summary: Create a one-time invite (valid 48 h)
+      description: The plaintext `token` and `url` are returned only here; the server stores a hash.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label:
+                  type: string
+                  example: "Jan — Gamesroom"
+      responses:
+        "201":
+          description: Invite
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invite:
+                    $ref: "#/components/schemas/ShopInvite"
+                  token:
+                    type: string
+                  url:
+                    type: string
+                    description: Present when SHOP_URL is configured
+                    example: "https://shop.pyrhouse.space/invite/abc…"
+
+  /admin/shop/invites/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ShopResourceID"
+    delete:
+      tags:
+        - shop-admin
+      summary: Revoke an invite
+      responses:
+        "204":
+          description: Revoked
+        "404":
+          $ref: "#/components/responses/ShopError"
+        "409":
+          description: Already used or revoked (`invite_closed`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopError"
+
+  /admin/shop/settings:
+    get:
+      tags:
+        - shop-admin
+      summary: Shop settings (admin)
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopSettings"
+    put:
+      tags:
+        - shop-admin
+      summary: Update shop settings (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopSettings"
+      responses:
+        "200":
+          description: Saved settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopSettings"
+        "400":
+          $ref: "#/components/responses/ShopError"
+
 servers:
   - url: https://pyrhouse-backend-f26ml.ondigitalocean.app/api
     description: Production
@@ -2753,8 +3530,34 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: JWT token obtained from /auth or /auth/discord/callback
+    shopBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Shop token (aud=pyrhouse-shop) from /shop/auth/google/exchange. Warehouse tokens are rejected on /shop/*, shop tokens everywhere else.
+
+  parameters:
+    ShopOrderID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Shop order ID
+    ShopResourceID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
 
   responses:
+    ShopError:
+      description: Shop error with a stable `code`
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ShopError"
     DefaultError:
       description: Internal server error
       content:
@@ -2774,6 +3577,396 @@ components:
                 example: "Invalid token"
 
   schemas:
+    ShopError:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable message (Polish)
+        code:
+          type: string
+          description: Stable machine code, e.g. `version_conflict`, `orders_closed`, `access_denied`
+          example: version_conflict
+        details:
+          type: string
+
+    ShopAccount:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        access_source:
+          type: string
+          enum: [domain, allowlist, invite]
+        logged_in:
+          type: boolean
+          description: false for an allowlist entry that has not logged in yet
+        created_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ShopProduct:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        image_url:
+          type: string
+          nullable: true
+        section:
+          type: string
+        sort_order:
+          type: integer
+        category_id:
+          type: integer
+        category_name:
+          type: string
+          description: Panel only
+        price:
+          type: number
+          nullable: true
+          description: Null when the product has no price or prices are hidden from organizers
+        max_per_order:
+          type: integer
+          nullable: true
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ShopProductInput:
+      type: object
+      required: [name, category_id]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        image_url:
+          type: string
+          nullable: true
+          description: Must start with https://
+        section:
+          type: string
+        sort_order:
+          type: integer
+        category_id:
+          type: integer
+        price:
+          type: number
+          nullable: true
+          minimum: 0
+        max_per_order:
+          type: integer
+          nullable: true
+          minimum: 1
+        active:
+          type: boolean
+          default: true
+
+    ShopWindow:
+      type: object
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+          enum: [delivery, return]
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        label:
+          type: string
+          example: "czw 15.07 16–20"
+        active:
+          type: boolean
+
+    ShopWindowInput:
+      type: object
+      required: [kind, starts_at, ends_at]
+      properties:
+        kind:
+          type: string
+          enum: [delivery, return]
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        label:
+          type: string
+        active:
+          type: boolean
+          default: true
+
+    ShopLocation:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        pavilion:
+          type: string
+          nullable: true
+
+    ShopOrderItemInput:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id:
+          type: integer
+        quantity:
+          type: integer
+          minimum: 1
+
+    ShopOrderInput:
+      type: object
+      required: [location_id, contact_name, delivery_window_id, return_window_id, items]
+      properties:
+        location_id:
+          type: integer
+        location_note:
+          type: string
+          nullable: true
+        contact_name:
+          type: string
+        contact_phone:
+          type: string
+          nullable: true
+        budget_owner:
+          type: string
+          nullable: true
+        delivery_window_id:
+          type: integer
+        return_window_id:
+          type: integer
+        return_date:
+          type: string
+          format: date
+          nullable: true
+          description: Optional exact return day; must fall within the return window (Europe/Warsaw days)
+        notes:
+          type: string
+          nullable: true
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ShopOrderItemInput"
+
+    ShopVersionInput:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: integer
+
+    ShopOrderItem:
+      type: object
+      properties:
+        product_id:
+          type: integer
+        product_name:
+          type: string
+          description: Snapshot taken when the order was submitted or edited
+        category_id:
+          type: integer
+        quantity:
+          type: integer
+        unit_price:
+          type: number
+          nullable: true
+          description: Price snapshot; null when the product had no price or prices are hidden
+
+    ShopOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        number:
+          type: string
+          example: "SKL-0042"
+        account_id:
+          type: integer
+        account_email:
+          type: string
+        location:
+          $ref: "#/components/schemas/ShopLocation"
+        location_note:
+          type: string
+          nullable: true
+        contact_name:
+          type: string
+        contact_phone:
+          type: string
+          nullable: true
+        budget_owner:
+          type: string
+          nullable: true
+        delivery_window:
+          $ref: "#/components/schemas/ShopWindow"
+        return_window:
+          $ref: "#/components/schemas/ShopWindow"
+        return_date:
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [submitted, confirmed, rejected, cancelled]
+        status_reason:
+          type: string
+          nullable: true
+          description: Rejection reason, shown to the organizer
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+        version:
+          type: integer
+          description: Optimistic lock — send it back with edits and decisions
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShopOrderItem"
+        total:
+          type: number
+          nullable: true
+          description: Sum of priced items; null when prices are hidden or nothing is priced
+        quest_id:
+          type: string
+          nullable: true
+          description: Quest created on confirmation
+        quest_status:
+          type: string
+          nullable: true
+          enum: [pending, in_progress, completed, cancelled, null]
+          description: Fulfillment after confirmation, derived from the quest
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ShopOrderEvent:
+      type: object
+      properties:
+        actor_kind:
+          type: string
+          enum: [account, user]
+        actor_id:
+          type: integer
+        type:
+          type: string
+          enum: [submitted, updated, cancelled, confirmed, rejected, items_changed, location_changed]
+        payload:
+          type: object
+        at:
+          type: string
+          format: date-time
+
+    ShopSummaryRow:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Product ID, YYYY-MM-DD (delivery day, Europe/Warsaw) or location ID
+        label:
+          type: string
+        product_id:
+          type: integer
+        product_name:
+          type: string
+        quantity:
+          type: integer
+        orders:
+          type: integer
+
+    ShopInvite:
+      type: object
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+        created_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        used_at:
+          type: string
+          format: date-time
+          nullable: true
+        used_by_email:
+          type: string
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [active, used, revoked, expired]
+
+    ShopSettings:
+      type: object
+      required: [show_prices, orders_open, domain_auto_join]
+      properties:
+        show_prices:
+          type: boolean
+          description: false = the organizer API returns no prices at all
+        orders_open:
+          type: boolean
+        orders_open_until:
+          type: string
+          format: date-time
+          nullable: true
+        domain_auto_join:
+          type: boolean
+        auto_domains:
+          type: array
+          items:
+            type: string
+          example: ["pyrkon.pl"]
+
     AppSetting:
       type: object
       properties:
@@ -3119,6 +4312,10 @@ components:
           description: Whether the destination location was successfully resolved
           default: false
           example: true
+        shop_order_id:
+          type: integer
+          nullable: true
+          description: Shop order this quest was confirmed from (source `shop`)
         source:
           type: string
           description: Where the quest came from — `sheet` (historic Google Sheets import) or `shop` (confirmed organizer shop order)
