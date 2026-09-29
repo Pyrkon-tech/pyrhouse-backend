@@ -1675,8 +1675,7 @@ paths:
                   description: Source warehouse location ID
                   example: 1
                 to_location_id:
-                  type: integer
-                  nullable: true
+                  type: [integer, "null"]
                   description: Destination location ID (defaults to the quest's stored location_id; 422 if the quest has none)
                   example: 5
                 stock_items:
@@ -1781,8 +1780,7 @@ paths:
                     type: integer
                     example: 1
                   to_location_id:
-                    type: integer
-                    nullable: true
+                    type: [integer, "null"]
                     example: 5
                   to_location_name:
                     type: string
@@ -1812,12 +1810,10 @@ paths:
                         item_name:
                           type: string
                         quantity:
-                          type: integer
-                          nullable: true
+                          type: [integer, "null"]
                           description: Null when the item has no quantity (reason "quantity not specified")
                         category_id:
-                          type: integer
-                          nullable: true
+                          type: [integer, "null"]
                         reason:
                           type: string
         "400":
@@ -2732,8 +2728,7 @@ paths:
                 notes:
                   type: string
                 user_id:
-                  type: integer
-                  nullable: true
+                  type: [integer, "null"]
                   description: Linked user account ID. Explicit null unlinks the user.
       responses:
         "200":
@@ -2845,17 +2840,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  show_prices:
-                    type: boolean
-                  orders_open:
-                    type: boolean
-                    description: Whether orders can be submitted and edited right now (deadline already applied)
-                  orders_open_until:
-                    type: string
-                    format: date-time
-                    nullable: true
+                $ref: "#/components/schemas/ShopConfig"
 
   /shop/catalog:
     get:
@@ -3249,14 +3234,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  group:
-                    type: string
-                  rows:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/ShopSummaryRow"
+                $ref: "#/components/schemas/ShopSummary"
 
   /admin/shop/orders/{id}:
     parameters:
@@ -3271,14 +3249,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: "#/components/schemas/ShopOrder"
-                  - type: object
-                    properties:
-                      events:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/ShopOrderEvent"
+                $ref: "#/components/schemas/ShopOrderDetail"
         "404":
           $ref: "#/components/responses/ShopError"
     patch:
@@ -3301,8 +3272,7 @@ paths:
                 location_id:
                   type: integer
                 location_note:
-                  type: string
-                  nullable: true
+                  type: [string, "null"]
                 items:
                   type: array
                   items:
@@ -3486,16 +3456,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  invite:
-                    $ref: "#/components/schemas/ShopInvite"
-                  token:
-                    type: string
-                  url:
-                    type: string
-                    description: Present when SHOP_URL is configured
-                    example: "https://shop.pyrhouse.space/invite/abc…"
+                $ref: "#/components/schemas/ShopInviteCreated"
 
   /admin/shop/invites/{id}:
     parameters:
@@ -3636,8 +3597,7 @@ components:
         capacity:
           type: integer
         label:
-          type: string
-          nullable: true
+          type: [string, "null"]
         volunteers:
           type: array
           items:
@@ -3660,13 +3620,11 @@ components:
         schedule_id:
           type: integer
         user_id:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
         nickname:
           type: string
         city:
-          type: string
-          nullable: true
+          type: [string, "null"]
         target_hours:
           type: integer
         available_from:
@@ -3676,13 +3634,11 @@ components:
           type: string
           format: date-time
         notes:
-          type: string
-          nullable: true
+          type: [string, "null"]
         assigned_hours:
           type: number
         discord_confirmed:
-          type: string
-          nullable: true
+          type: [string, "null"]
         slots:
           type: array
           items:
@@ -3718,9 +3674,8 @@ components:
         valid:
           type: boolean
         issues:
-          type: array
+          type: [array, "null"]
           description: May be null when there are no issues (Go nil slice)
-          nullable: true
           items:
             $ref: "#/components/schemas/ValidationIssue"
 
@@ -3745,11 +3700,9 @@ components:
         email:
           type: string
         display_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
         avatar_url:
-          type: string
-          nullable: true
+          type: [string, "null"]
         active:
           type: boolean
         access_source:
@@ -3762,9 +3715,8 @@ components:
           type: string
           format: date-time
         last_login_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         orders_count:
           type: integer
 
@@ -3776,11 +3728,9 @@ components:
         name:
           type: string
         description:
-          type: string
-          nullable: true
+          type: [string, "null"]
         image_url:
-          type: string
-          nullable: true
+          type: [string, "null"]
         section:
           type: string
         sort_order:
@@ -3788,15 +3738,13 @@ components:
         category_id:
           type: integer
         category_name:
-          type: string
-          description: Panel only
+          type: [string, "null"]
+          description: Panel only (null for organizers)
         price:
-          type: number
-          nullable: true
+          type: [number, "null"]
           description: Null when the product has no price or prices are hidden from organizers
         max_per_order:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
         active:
           type: boolean
         created_at:
@@ -3813,11 +3761,9 @@ components:
         name:
           type: string
         description:
-          type: string
-          nullable: true
+          type: [string, "null"]
         image_url:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Must start with https://
         section:
           type: string
@@ -3826,12 +3772,10 @@ components:
         category_id:
           type: integer
         price:
-          type: number
-          nullable: true
+          type: [number, "null"]
           minimum: 0
         max_per_order:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           minimum: 1
         active:
           type: boolean
@@ -3858,7 +3802,7 @@ components:
           type: boolean
         orders_count:
           type: integer
-          description: Panel only — submitted and confirmed orders using this window
+          description: Panel only — submitted and confirmed orders using this window (0 for organizers)
 
     ShopWindowInput:
       type: object
@@ -3887,8 +3831,7 @@ components:
         name:
           type: string
         pavilion:
-          type: string
-          nullable: true
+          type: [string, "null"]
 
     ShopOrderItemInput:
       type: object
@@ -3907,26 +3850,22 @@ components:
         location_id:
           type: integer
         location_note:
-          type: string
-          nullable: true
+          type: [string, "null"]
         contact_name:
           type: string
           description: Recipient; empty or missing = the account's Google name (else its e-mail)
         budget_owner:
-          type: string
-          nullable: true
+          type: [string, "null"]
         delivery_window_id:
           type: integer
         return_window_id:
           type: integer
         return_date:
-          type: string
+          type: [string, "null"]
           format: date
-          nullable: true
           description: Optional exact return day; must fall within the return window (Europe/Warsaw days)
         notes:
-          type: string
-          nullable: true
+          type: [string, "null"]
         items:
           type: array
           minItems: 1
@@ -3951,13 +3890,12 @@ components:
         category_id:
           type: integer
         category_name:
-          type: string
-          description: Panel only
+          type: [string, "null"]
+          description: Panel only (null for organizers)
         quantity:
           type: integer
         unit_price:
-          type: number
-          nullable: true
+          type: [number, "null"]
           description: Price snapshot; null when the product had no price or prices are hidden
 
     ShopOrder:
@@ -3973,40 +3911,34 @@ components:
         account_email:
           type: string
         account_name:
-          type: string
+          type: [string, "null"]
           description: Organizer's Google name, when known
         location:
           $ref: "#/components/schemas/ShopLocation"
         location_note:
-          type: string
-          nullable: true
+          type: [string, "null"]
         contact_name:
           type: string
         budget_owner:
-          type: string
-          nullable: true
+          type: [string, "null"]
         delivery_window:
           $ref: "#/components/schemas/ShopWindow"
         return_window:
           $ref: "#/components/schemas/ShopWindow"
         return_date:
-          type: string
+          type: [string, "null"]
           format: date
-          nullable: true
         notes:
-          type: string
-          nullable: true
+          type: [string, "null"]
         status:
           type: string
           enum: [submitted, confirmed, rejected, cancelled]
         status_reason:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Rejection reason, shown to the organizer
         decided_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         version:
           type: integer
           description: Optimistic lock — send it back with edits and decisions
@@ -4015,16 +3947,13 @@ components:
           items:
             $ref: "#/components/schemas/ShopOrderItem"
         total:
-          type: number
-          nullable: true
+          type: [number, "null"]
           description: Sum of priced items; null when prices are hidden or nothing is priced
         quest_id:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Quest created on confirmation
         quest_status:
-          type: string
-          nullable: true
+          type: [string, "null"]
           enum: [pending, in_progress, completed, cancelled, null]
           description: Fulfillment after confirmation, derived from the quest
         created_at:
@@ -4076,8 +4005,7 @@ components:
         label:
           type: string
         created_by:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
         created_at:
           type: string
           format: date-time
@@ -4085,23 +4013,69 @@ components:
           type: string
           format: date-time
         used_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         used_by_email:
-          type: string
-          nullable: true
+          type: [string, "null"]
         revoked_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         status:
           type: string
           enum: [active, used, revoked, expired]
 
+    ShopConfig:
+      type: object
+      description: What organizers may do right now (GET /shop/config)
+      properties:
+        show_prices:
+          type: boolean
+        orders_open:
+          type: boolean
+          description: Whether orders can be submitted and edited right now (deadline already applied)
+        orders_open_until:
+          type: [string, "null"]
+          format: date-time
+
+    ShopSummary:
+      type: object
+      properties:
+        group:
+          type: string
+          enum: [product, day, location]
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShopSummaryRow"
+
+    ShopInviteCreated:
+      type: object
+      required: [invite, token]
+      properties:
+        invite:
+          $ref: "#/components/schemas/ShopInvite"
+        token:
+          type: string
+          description: Plaintext invite token, returned only here
+        url:
+          type: string
+          description: Present when SHOP_URL is configured
+          example: "https://shop.pyrhouse.space/invite/abc…"
+
+    ShopOrderDetail:
+      allOf:
+        - $ref: "#/components/schemas/ShopOrder"
+        - type: object
+          required: [events]
+          properties:
+            events:
+              type: array
+              items:
+                $ref: "#/components/schemas/ShopOrderEvent"
+
     ShopSettings:
       type: object
-      required: [show_prices, orders_open, domain_auto_join]
+      required: [show_prices, orders_open, orders_open_until, domain_auto_join, auto_domains]
       properties:
         show_prices:
           type: boolean
@@ -4109,9 +4083,8 @@ components:
         orders_open:
           type: boolean
         orders_open_until:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         domain_auto_join:
           type: boolean
         auto_domains:
@@ -4362,18 +4335,15 @@ components:
           description: Whether the account is active
           example: true
         discord_id:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Discord user ID (if linked)
           example: "123456789012345678"
         discord_username:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Discord username (if linked)
           example: "user#1234"
         avatar_url:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Discord avatar URL (if linked)
           example: "https://cdn.discordapp.com/avatars/123/abc.png"
         auth_provider:
@@ -4413,14 +4383,12 @@ components:
           description: When equipment should be delivered
           example: "2025-06-13"
         return_date:
-          type: string
+          type: [string, "null"]
           format: date
-          nullable: true
           description: When the equipment comes back (null for sheet quests)
           example: "2025-06-16"
         pickup_time:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: When to pick up equipment (flexible format)
           example: "17-18"
         budget_owner:
@@ -4442,13 +4410,11 @@ components:
             - cancelled
           example: "pending"
         transfer_id:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: ID of the linked inventory transfer (set when transfer is created from quest)
           example: 42
         transfer_status:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Status of the linked transfer (derived from transfer, not stored on quest)
           enum:
             - in_transit
@@ -4456,8 +4422,7 @@ components:
             - cancelled
           example: "in_transit"
         location_id:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: Resolved location ID from pavilion+location (null if unresolved)
           example: 3
         location_resolved:
@@ -4466,8 +4431,7 @@ components:
           default: false
           example: true
         shop_order_id:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: Shop order this quest was confirmed from (source `shop`)
         source:
           type: string
@@ -4499,29 +4463,24 @@ components:
           description: Item name as ordered
           example: "Laptop"
         quantity:
-          type: integer
+          type: [integer, "null"]
           minimum: 1
-          nullable: true
           description: Quantity requested. Null when unknown (historic sheet items left it blank) — the dispatcher must supply a quantity before a transfer can be created.
           example: 4
         category_id:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: Item category ID (null only for historic sheet items that matched no category)
           example: 123
         category_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Category label (read-only)
           example: "Laptop"
         budget_owner:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Budget owner for this specific item (can differ from quest budget_owner)
           example: "Anna Nowak"
         notes:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Additional notes from requestor
           example: "Must have good battery life"
 
@@ -4659,13 +4618,11 @@ components:
           type: string
           example: "Jan Kowalski"
         location:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Free-text location. Mutually exclusive with location_id.
           example: "Pokój obok sali B"
         location_id:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: ID of a known location (from GET /locations). Mutually exclusive with location.
           example: 3
 
@@ -4691,13 +4648,11 @@ components:
         created_by:
           type: string
         location:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Resolved location display value — location name when location_id is set, free-text otherwise.
           example: "Sala A"
         location_id:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: ID of the linked location. Null when free-text was used.
           example: 3
         created_at:
@@ -4707,13 +4662,13 @@ components:
           type: string
           format: date-time
         created_by_user:
-          allOf:
+          oneOf:
             - $ref: '#/components/schemas/ServiceDeskUser'
-          nullable: true
+            - type: "null"
         assigned_to_user:
-          allOf:
+          oneOf:
             - $ref: '#/components/schemas/ServiceDeskUser'
-          nullable: true
+            - type: "null"
 
     ServiceDeskUser:
       type: object
@@ -4723,8 +4678,7 @@ components:
         username:
           type: string
         fullname:
-          type: string
-          nullable: true
+          type: [string, "null"]
 
     ServiceDeskComment:
       type: object
@@ -4765,16 +4719,13 @@ components:
           type: string
           example: kkowalczyk
         fullname:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "Katarzyna Kowalczyk"
         discord_username:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "Kasia#5678"
         avatar_url:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "https://cdn.discordapp.com/avatars/123/abc.png"
         status:
           type: string
@@ -4784,8 +4735,7 @@ components:
             `on_mission` when user is a participant in a transfer linked to an in_progress quest.
           example: on_mission
         current_mission:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Quest destination shown when status is on_mission.
           example: "Pawilon 5 - Sala A"
 
@@ -4800,8 +4750,7 @@ components:
           type: string
           example: mnowak
         fullname:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "Marek Nowak"
 
     Release:
@@ -4813,30 +4762,25 @@ components:
           type: string
           example: "WYD-2026-001"
         origin_id:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
         origin_label:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "probis"
         released_to:
           type: string
           example: "Probis Sp. z o.o."
         notes:
-          type: string
-          nullable: true
+          type: [string, "null"]
         status:
           type: string
           enum: [draft, completed]
         created_by:
           type: integer
         created_by_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
         completed_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -4870,23 +4814,18 @@ components:
         item_id:
           type: integer
         pyr_code:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "PYR-0042"
         item_serial:
-          type: string
-          nullable: true
+          type: [string, "null"]
         category_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "Mikser audio"
         origin_label:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "probis"
         location_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "Magazyn główny"
 
     ReleaseStock:
@@ -4899,19 +4838,16 @@ components:
         item_category_id:
           type: integer
         category_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "Kabel XLR 5m"
         quantity:
           type: integer
           example: 20
         origin_label:
-          type: string
-          nullable: true
+          type: [string, "null"]
           example: "probis"
         location_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
 
     SuggestResponse:
       type: object
@@ -4924,22 +4860,17 @@ components:
               id:
                 type: integer
               pyr_code:
-                type: string
-                nullable: true
+                type: [string, "null"]
               item_serial:
-                type: string
-                nullable: true
+                type: [string, "null"]
               status:
                 type: string
               category_name:
-                type: string
-                nullable: true
+                type: [string, "null"]
               origin_label:
-                type: string
-                nullable: true
+                type: [string, "null"]
               location_name:
-                type: string
-                nullable: true
+                type: [string, "null"]
         stocks:
           type: array
           items:
@@ -4950,14 +4881,11 @@ components:
               quantity:
                 type: integer
               category_name:
-                type: string
-                nullable: true
+                type: [string, "null"]
               origin_label:
-                type: string
-                nullable: true
+                type: [string, "null"]
               location_name:
-                type: string
-                nullable: true
+                type: [string, "null"]
 
     CreateReleaseRequest:
       type: object

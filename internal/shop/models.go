@@ -73,7 +73,7 @@ type Product struct {
 	Section      string    `json:"section"`
 	SortOrder    int       `json:"sort_order"`
 	CategoryID   int       `json:"category_id"`
-	CategoryName *string   `json:"category_name,omitempty"`
+	CategoryName *string   `json:"category_name"`
 	Price        *float64  `json:"price"` // nil = no price, or prices hidden from organizers
 	MaxPerOrder  *int      `json:"max_per_order"`
 	Active       bool      `json:"active"`
@@ -88,8 +88,8 @@ type Window struct {
 	EndsAt   time.Time `json:"ends_at"`
 	Label    string    `json:"label"`
 	Active   bool      `json:"active"`
-	// OrdersCount counts submitted and confirmed orders using the window (panel only).
-	OrdersCount int `json:"orders_count,omitempty"`
+	// OrdersCount counts submitted and confirmed orders using the window (panel only; 0 for organizers).
+	OrdersCount int `json:"orders_count"`
 }
 
 type Location struct {
@@ -102,7 +102,7 @@ type OrderItem struct {
 	ProductID    int      `json:"product_id"`
 	ProductName  string   `json:"product_name"`
 	CategoryID   int      `json:"category_id"`
-	CategoryName *string  `json:"category_name,omitempty"` // panel only
+	CategoryName *string  `json:"category_name"` // panel only; null for organizers
 	Quantity     int      `json:"quantity"`
 	UnitPrice    *float64 `json:"unit_price"` // snapshot; nil when the product had no price or prices are hidden
 }
@@ -111,8 +111,8 @@ type Order struct {
 	ID            int         `json:"id"`
 	Number        string      `json:"number"`
 	AccountID     int         `json:"account_id"`
-	AccountEmail  string      `json:"account_email,omitempty"`
-	AccountName   *string     `json:"account_name,omitempty"`
+	AccountEmail  string      `json:"account_email"`
+	AccountName   *string     `json:"account_name"`
 	Location      Location    `json:"location"`
 	LocationNote  *string     `json:"location_note"`
 	ContactName   string      `json:"contact_name"`
