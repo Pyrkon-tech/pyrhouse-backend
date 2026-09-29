@@ -15,6 +15,14 @@ type Config struct {
 	Sentry   SentryConfig
 	Discord  DiscordConfig
 	Google   GoogleConfig
+	Shop     ShopConfig
+}
+
+// ShopConfig configures the organizer shop (shop.pyrhouse.space), a separate frontend on this backend.
+type ShopConfig struct {
+	// URL is the shop frontend origin, e.g. https://shop.pyrhouse.space. It is added to the CORS
+	// origins and bounds the OAuth redirect URIs the shop may use. Empty = no shop origin in CORS.
+	URL string
 }
 
 type ServerConfig struct {
@@ -97,7 +105,7 @@ func Load() (*Config, error) {
 		CORS: CORSConfig{
 			AllowedOrigins:   getSliceEnv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://localhost:5000"}),
 			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With", "Cache-Control", "Last-Event-ID"},
+			AllowedHeaders:   []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With", "Cache-Control", "Last-Event-ID", "Idempotency-Key"},
 			ExposedHeaders:   []string{"Content-Length"},
 			AllowCredentials: true,
 			MaxAge:           getDurationEnv("CORS_MAX_AGE_HOURS", 12) * time.Hour,
@@ -114,9 +122,27 @@ func Load() (*Config, error) {
 			RedirectURI:  os.Getenv("GOOGLE_REDIRECT_URI"),
 			FrontendURL:  os.Getenv("FRONTEND_URL"),
 		},
+		Shop: ShopConfig{
+			URL: strings.TrimRight(os.Getenv("SHOP_URL"), "/"),
+		},
 	}
 
+	cfg.CORS.AllowedOrigins = withOrigin(cfg.CORS.AllowedOrigins, cfg.Shop.URL)
+
 	return cfg, nil
+}
+
+// withOrigin appends origin to origins unless it is empty or already present.
+func withOrigin(origins []string, origin string) []string {
+	if origin == "" {
+		return origins
+	}
+	for _, o := range origins {
+		if strings.TrimRight(o, "/") == origin {
+			return origins
+		}
+	}
+	return append(origins, origin)
 }
 
 // defaultEnvironment derives the Sentry environment from the Gin mode, so a
