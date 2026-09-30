@@ -16,13 +16,15 @@ stop: ## stop the app process then bring down postgres
 	-lsof -ti :$(APP_PORT) | xargs kill -SIGTERM 2>/dev/null || true
 	docker-compose stop
 
+# -p 1: integration tests of every package share one database and clean up by name prefix,
+# so packages running in parallel delete each other's fixtures.
 .PHONY: test
 test: _test-db-setup ## run all tests including integration (against pyrhouse_test)
-	TEST_DATABASE_URL="$(TEST_DB_URL)" go test ./... -count=1 -timeout=120s
+	TEST_DATABASE_URL="$(TEST_DB_URL)" go test ./... -p 1 -count=1 -timeout=300s
 
 .PHONY: test-ci
 test-ci: _test-db-setup ## run all tests then tear down postgres (for CI)
-	TEST_DATABASE_URL="$(TEST_DB_URL)" go test ./... -count=1 -timeout=120s; \
+	TEST_DATABASE_URL="$(TEST_DB_URL)" go test ./... -p 1 -count=1 -timeout=300s; \
 	  EXIT_CODE=$$?; \
 	  docker-compose down; \
 	  exit $$EXIT_CODE

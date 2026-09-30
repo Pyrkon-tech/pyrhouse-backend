@@ -76,11 +76,12 @@ func (r *LocationRepository) UpdateLocation(locationID string, req UpdateLocatio
 	if req.Name != nil {
 		updates["name"] = *req.Name
 	}
+	// An empty string clears the field (JSON null can't be told apart from "not sent" here).
 	if req.Details != nil {
-		updates["details"] = *req.Details
+		updates["details"] = nullIfEmpty(*req.Details)
 	}
 	if req.Pavilion != nil {
-		updates["pavilion"] = *req.Pavilion
+		updates["pavilion"] = nullIfEmpty(*req.Pavilion)
 	}
 	if len(updates) == 0 {
 		return models.Location{}, fmt.Errorf("no fields to update")
@@ -166,8 +167,9 @@ func (r *LocationRepository) getLocationAssets(locationID string) ([]models.Asse
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}
+	defer rows.Close()
 
-	var assets []models.Asset
+	assets := make([]models.Asset, 0)
 	for rows.Next() {
 		var asset models.Asset
 		if err := rows.Scan(
@@ -185,7 +187,7 @@ func (r *LocationRepository) getLocationAssets(locationID string) ([]models.Asse
 		assets = append(assets, asset)
 	}
 
-	return assets, nil
+	return assets, rows.Err()
 }
 
 func (r *LocationRepository) getLocationStock(locationID string) ([]models.StockItem, error) {
@@ -208,8 +210,9 @@ func (r *LocationRepository) getLocationStock(locationID string) ([]models.Stock
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}
+	defer rows.Close()
 
-	var stockItems []models.StockItem
+	stockItems := make([]models.StockItem, 0)
 	for rows.Next() {
 		var item models.StockItem
 		if err := rows.Scan(
@@ -224,7 +227,7 @@ func (r *LocationRepository) getLocationStock(locationID string) ([]models.Stock
 		stockItems = append(stockItems, item)
 	}
 
-	return stockItems, nil
+	return stockItems, rows.Err()
 }
 
 func (r *LocationRepository) SearchLocationItems(locationID string, searchQuery string) ([]models.Asset, error) {
@@ -263,8 +266,9 @@ func (r *LocationRepository) SearchLocationItems(locationID string, searchQuery 
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
 	}
+	defer rows.Close()
 
-	var assets []models.Asset
+	assets := make([]models.Asset, 0)
 	for rows.Next() {
 		var asset models.Asset
 		if err := rows.Scan(
@@ -282,7 +286,7 @@ func (r *LocationRepository) SearchLocationItems(locationID string, searchQuery 
 		assets = append(assets, asset)
 	}
 
-	return assets, nil
+	return assets, rows.Err()
 }
 
 func (r *LocationRepository) GetLocationDetails(locationID string) (*models.Location, error) {
@@ -301,4 +305,11 @@ func (r *LocationRepository) GetLocationDetails(locationID string) (*models.Loca
 	}
 
 	return &location, nil
+}
+
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

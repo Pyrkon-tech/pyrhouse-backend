@@ -384,27 +384,77 @@ paths:
                   description: "Origin string — validated against the origins table. Use GET /origins to list available values."
       responses:
         "201":
-          description: Assets created (may include partial errors)
+          description: All assets created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedAssets"
+        "400":
+          description: >-
+            Invalid request payload or category type, or some serials failed — then nothing is created and
+            `errors` lists the failures
           content:
             application/json:
               schema:
                 type: object
+                required: [error]
                 properties:
-                  created:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Item"
+                  error:
+                    type: string
+                  details:
+                    type: string
                   errors:
                     type: array
                     items:
                       type: string
-                    description: Errors for individual assets that failed creation
+
+  /assets/without-serial:
+    post:
+      tags:
+        - asset
+      summary: Create assets without serial numbers
+      description: Creates `quantity` assets of an asset-type category that have no serial number yet.
+      operationId: createAssetsWithoutSerial
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quantity
+                - category_id
+                - origin
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+                location_id:
+                  type: integer
+                  description: Location ID (defaults to 1)
+                status:
+                  type: string
+                  description: Asset status (defaults to "available")
+                category_id:
+                  type: integer
+                origin:
+                  type: string
+                  description: "Origin string — validated against the origins table. Use GET /origins to list available values."
+      responses:
+        "201":
+          description: Assets created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedAssets"
         "400":
           description: Invalid request payload or category type
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
 
   /assets/{assetID}:
     delete:
@@ -476,11 +526,29 @@ paths:
           $ref: "#/components/responses/DefaultError"
 
   /locations:
+    get:
+      tags:
+        - location
+      summary: List locations
+      description: Returns all locations ordered by ID. Public (no authentication).
+      operationId: listLocations
+      security: []
+      responses:
+        "200":
+          description: Locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Location"
+        "500":
+          $ref: "#/components/responses/DefaultError"
     post:
       tags:
         - location
       summary: Create a new location
-      description: Creates a new storage location.
+      description: Creates a new storage location. Requires moderator.
       operationId: createLocation
       requestBody:
         required: true
@@ -493,8 +561,12 @@ paths:
               properties:
                 name:
                   type: string
+                pavilion:
+                  type: [string, "null"]
+                details:
+                  type: [string, "null"]
       responses:
-        "200":
+        "201":
           description: Location created
           content:
             application/json:
@@ -525,20 +597,76 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  assets:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Item"
-                  stock_items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Stock"
+                $ref: "#/components/schemas/LocationEquipment"
         "500":
           $ref: "#/components/responses/DefaultError"
 
   /locations/{locationID}:
+    get:
+      tags:
+        - location
+      summary: Get a location
+      operationId: getLocation
+      parameters:
+        - in: path
+          name: locationID
+          schema:
+            type: integer
+          required: true
+          description: Location ID
+      responses:
+        "200":
+          description: Location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Location"
+        "404":
+          description: Location not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+    patch:
+      tags:
+        - location
+      summary: Update a location
+      description: Updates the given fields; at least one is required. An empty pavilion or details clears it. Requires moderator.
+      operationId: updateLocation
+      parameters:
+        - in: path
+          name: locationID
+          schema:
+            type: integer
+          required: true
+          description: Location ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: []
+              properties:
+                name:
+                  type: string
+                pavilion:
+                  type: string
+                details:
+                  type: string
+      responses:
+        "200":
+          description: Updated location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Location"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/DefaultError"
     delete:
       tags:
         - location
@@ -4089,19 +4217,22 @@ components:
           type: string
           example: "Schedule - Google Sheets document ID"
         updated_at:
-          type: string
+          type: [string, "null"]
           format: date-time
     AppSettingSummary:
       type: object
+      description: Settings list row — value is null unless the list was requested with ?prefix=
       properties:
         key:
           type: string
           example: "scheduling.sheet_id"
+        value:
+          type: [string, "null"]
         description:
           type: string
           example: "Schedule - Google Sheets document ID"
         updated_at:
-          type: string
+          type: [string, "null"]
           format: date-time
     Origin:
       type: object
@@ -4202,14 +4333,21 @@ components:
           type: integer
           example: 321
         serial:
-          type: string
+          type: [string, "null"]
           example: XYZ321
         pyrcode:
           type: string
           example: PYR-LT100
           description: Auto-generated barcode identifier
+        status:
+          type: string
+          example: available
+        origin:
+          type: string
+          example: pyrkon
         location:
           $ref: "#/components/schemas/Location"
+          description: Zero-valued in location listings (GET /locations/{id}/assets), where the location is implied
         category:
           $ref: "#/components/schemas/ItemCategory"
 
@@ -4232,8 +4370,41 @@ components:
           type: integer
         category:
           $ref: "#/components/schemas/ItemCategory"
+        location:
+          $ref: "#/components/schemas/Location"
+          description: Zero-valued in location listings (GET /locations/{id}/assets), where the location is implied
         quantity:
           type: integer
+        origin:
+          type: string
+        status:
+          type: string
+
+    CreatedAssets:
+      type: object
+      required: [created]
+      properties:
+        created:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+        errors:
+          type: array
+          items:
+            type: string
+          description: Per-asset failures, when some were not created
+
+    LocationEquipment:
+      type: object
+      properties:
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+        stock_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Stock"
 
     ItemCategory:
       type: object
@@ -4252,6 +4423,10 @@ components:
           type: string
           example: Laptop
           description: Human-readable display label
+        pyr_id:
+          type: string
+          example: LAP
+          description: PYR code prefix for this category
 
     Location:
       type: object
@@ -4262,6 +4437,11 @@ components:
         name:
           type: string
           example: Gzdaczroom
+        pavilion:
+          type: [string, "null"]
+          example: "5"
+        details:
+          type: [string, "null"]
 
     Transfer:
       type: object

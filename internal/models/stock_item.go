@@ -1,12 +1,12 @@
 package models
 
 type StockItem struct { // Non-Serializied Item
-	ID       int          `json:"id,omitempty" db:"asset_id"`
+	ID       int          `json:"id" db:"asset_id"`
 	Category ItemCategory `json:"category" db:"category"`
-	Location Location     `json:"location,omitempty"`
+	Location Location     `json:"location"`
 	Quantity int          `json:"quantity" db:"quantity"`
 	Origin   string       `json:"origin"`
-	Status   string       `json:"status,omitempty" db:"status"`
+	Status   string       `json:"status" db:"status"`
 }
 
 func (a StockItem) CreateLogView() AuditLog {

@@ -233,6 +233,16 @@ func TestLocations_Update(t *testing.T) {
 			},
 		},
 		{
+			name:       "empty pavilion clears it",
+			payload:    map[string]any{"pavilion": ""},
+			wantStatus: http.StatusOK,
+			checkFn: func(t *testing.T, body []byte) {
+				var loc models.Location
+				require.NoError(t, json.Unmarshal(body, &loc))
+				assert.Nil(t, loc.Pavilion)
+			},
+		},
+		{
 			name:       "empty payload returns 400",
 			payload:    map[string]any{},
 			wantStatus: http.StatusBadRequest,
@@ -314,4 +324,26 @@ func TestLocations_Delete(t *testing.T) {
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
+}
+
+// TestLocations_GetItems_EmptyLocation covers GET /locations/:id/assets for a location with nothing in it:
+// both lists must be JSON arrays, not null.
+func TestLocations_GetItems_EmptyLocation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+	db, cleanup := setupLocationsTestDB(t)
+	defer cleanup()
+
+	id := createTestLocation(t, db, "__TEST__Items_Empty")
+
+	repo := NewLocationRepository(repository.NewRepository(db))
+	router := newLocationsRouter(NewLocationHandler(repo))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/locations/%d/assets", id), nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"assets":[],"stock_items":[]}`, w.Body.String())
 }

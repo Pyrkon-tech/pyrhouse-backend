@@ -75,11 +75,6 @@ func (h *LocationHandler) SearchLocationItems(c *gin.Context) {
 		return
 	}
 
-	if len(items) == 0 {
-		c.JSON(http.StatusOK, []interface{}{})
-		return
-	}
-
 	c.JSON(http.StatusOK, items)
 }
 
@@ -109,6 +104,7 @@ func (h *LocationHandler) UpdateLocation(c *gin.Context) {
 			"error":   "Unable to update location, critical error",
 			"details": err.Error(),
 		})
+		return
 	}
 
 	c.JSON(http.StatusOK, loc)
