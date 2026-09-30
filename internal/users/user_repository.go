@@ -14,7 +14,7 @@ type UserRepository interface {
 	PersistUser(req models.CreateUserRequest, hashedPassword []byte) error
 	GetUser(id int) (*models.User, error)
 	IsUsernameUnique(username string) (bool, error)
-	GetUsers() ([]models.User, error)
+	GetUsers() ([]models.UserListItem, error)
 	AddUserPoints(id int, points int) error
 	UpdateUser(id int, changes *models.UserChanges) error
 	DeleteUser(id int) error
@@ -57,10 +57,11 @@ func (r *userRepositoryImpl) PersistUser(req models.CreateUserRequest, hashedPas
 	return nil
 }
 
-func (r *userRepositoryImpl) GetUsers() ([]models.User, error) {
-	var users []models.User
+func (r *userRepositoryImpl) GetUsers() ([]models.UserListItem, error) {
+	users := make([]models.UserListItem, 0)
 	query := r.repository.GoquDBWrapper.Select("id", "username", "fullname", "role", "points", "active", "discord_username", "auth_provider").
-		From("users")
+		From("users").
+		Order(goqu.C("id").Asc())
 
 	err := query.Executor().ScanStructs(&users)
 

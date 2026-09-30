@@ -100,13 +100,13 @@ func TestUsers_PublicRegister(t *testing.T) {
 	}{
 		{
 			name:       "valid registration creates inactive user",
-			payload:    map[string]any{"username": "__test_usr_reg1", "password": "password123"},
+			payload:    map[string]any{"username": "__test_usr_reg1", "password": "password123", "points": 9999},
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "duplicate username returns 500",
+			name:       "duplicate username returns 409",
 			payload:    map[string]any{"username": "__test_usr_reg1", "password": "password123"},
-			wantStatus: http.StatusInternalServerError,
+			wantStatus: http.StatusConflict,
 		},
 		{
 			name:       "missing username returns 400",
@@ -131,15 +131,17 @@ func TestUsers_PublicRegister(t *testing.T) {
 	}
 
 	// Confirm the registered user is indeed inactive with role=user
-	t.Run("registered user is inactive with role user", func(t *testing.T) {
+	t.Run("registered user is inactive with role user and no self-assigned points", func(t *testing.T) {
 		var active bool
 		var role string
+		var points int
 		err := db.QueryRow(
-			"SELECT active, role FROM users WHERE username = '__test_usr_reg1'",
-		).Scan(&active, &role)
+			"SELECT active, role, points FROM users WHERE username = '__test_usr_reg1'",
+		).Scan(&active, &role, &points)
 		require.NoError(t, err)
 		assert.False(t, active)
 		assert.Equal(t, "user", role)
+		assert.Zero(t, points)
 	})
 }
 
@@ -646,6 +648,55 @@ func TestUsers_AddPoints(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("unknown user returns 404", func(t *testing.T) {
+		router := newUsersRouter(db, "admin", adminID)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/users/999999999/points", toJSON(t, map[string]any{"points": 1}))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+// ── response shapes (contract with the frontend) ────────────────────────────
+
+func TestUsers_ResponseShapes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+	db, cleanup := setupUsersTestDB(t)
+	defer cleanup()
+
+	userID := insertUser(t, db, "__test_usr_shape", "user", true)
+	router := newUsersRouter(db, "admin", userID)
+
+	t.Run("detail always carries OAuth fields, null when unlinked", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/users/%d", userID), nil))
+		require.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		for _, k := range []string{"discord_id", "discord_username", "avatar_url", "google_id", "google_email"} {
+			v, ok := body[k]
+			assert.True(t, ok, "missing %s", k)
+			assert.Nil(t, v, k)
+		}
+		assert.Equal(t, "local", body["auth_provider"])
+	})
+
+	t.Run("list rows have no OAuth identifiers", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/users", nil))
+		require.Equal(t, http.StatusOK, w.Code)
+		var rows []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rows))
+		require.NotEmpty(t, rows)
+		for _, k := range []string{"discord_id", "google_id", "google_email", "avatar_url"} {
+			assert.NotContains(t, rows[0], k)
+		}
+		assert.Contains(t, rows[0], "discord_username")
+	})
 }
 
 // ── DELETE /users/:id ─────────────────────────────────────────────────────────

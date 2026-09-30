@@ -11,13 +11,25 @@ type User struct {
 	Points       int        `json:"points" db:"points"`
 	Active       bool       `json:"active" db:"active"`
 	// Discord OAuth fields
-	DiscordID       *string `json:"discord_id,omitempty" db:"discord_id"`
-	DiscordUsername *string `json:"discord_username,omitempty" db:"discord_username"`
-	AvatarURL       *string `json:"avatar_url,omitempty" db:"avatar_url"`
+	DiscordID       *string `json:"discord_id" db:"discord_id"`
+	DiscordUsername *string `json:"discord_username" db:"discord_username"`
+	AvatarURL       *string `json:"avatar_url" db:"avatar_url"`
 	AuthProvider    *string `json:"auth_provider" db:"auth_provider"`
 	// Google OAuth fields
-	GoogleID    *string `json:"google_id,omitempty" db:"google_id"`
-	GoogleEmail *string `json:"google_email,omitempty" db:"google_email"`
+	GoogleID    *string `json:"google_id" db:"google_id"`
+	GoogleEmail *string `json:"google_email" db:"google_email"`
+}
+
+// UserListItem is a row of GET /users (no OAuth identifiers).
+type UserListItem struct {
+	ID              int        `json:"id" db:"id"`
+	Username        string     `json:"username" db:"username"`
+	Fullname        *string    `json:"fullname" db:"fullname"`
+	Role            roles.Role `json:"role" db:"role"`
+	Points          int        `json:"points" db:"points"`
+	Active          bool       `json:"active" db:"active"`
+	DiscordUsername *string    `json:"discord_username" db:"discord_username"`
+	AuthProvider    string     `json:"auth_provider" db:"auth_provider"`
 }
 
 type CreateUserRequest struct {

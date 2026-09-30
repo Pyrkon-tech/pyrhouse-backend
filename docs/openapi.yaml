@@ -1298,7 +1298,7 @@ paths:
       tags:
         - users
       summary: Create a user
-      description: Creates a new user account. Requires admin role.
+      description: Creates an active user account. Requires admin role.
       operationId: createUser
       security:
         - bearerAuth: []
@@ -1311,38 +1311,26 @@ paths:
               required:
                 - username
                 - password
-                - role
               properties:
                 username:
                   type: string
-                  example: johndoe
                 password:
                   type: string
-                  example: password123
                 fullname:
                   type: string
-                  example: John Doe
                 role:
                   $ref: "#/components/schemas/Role"
+                points:
+                  type: integer
       responses:
         "200":
           description: User created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: User registered successfully
+                $ref: "#/components/schemas/Message"
         "400":
           description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "401":
-          description: Unauthorized
           content:
             application/json:
               schema:
@@ -1353,13 +1341,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "409":
+          description: Username already taken (code USERNAME_TAKEN)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/DefaultError"
     get:
       tags:
         - users
       summary: List all users
-      description: Returns a list of all users. Requires moderator role or higher.
+      description: Returns all users ordered by ID. Requires dispatcher role or higher.
       operationId: listUsers
       security:
         - bearerAuth: []
@@ -1371,15 +1365,57 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/User"
-        "401":
-          description: Unauthorized
+                  $ref: "#/components/schemas/UserListItem"
+        "403":
+          description: Forbidden - insufficient permissions
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "403":
-          description: Forbidden - insufficient permissions
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /users/register:
+    post:
+      tags:
+        - users
+      summary: Self-register
+      description: >-
+        Public. Creates an inactive account with role `user` and no points (any `role`, `points` or `active` in
+        the body is ignored); a moderator activates it.
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                fullname:
+                  type: string
+      responses:
+        "200":
+          description: Account created (inactive)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Username already taken (code USERNAME_TAKEN)
           content:
             application/json:
               schema:
@@ -1395,12 +1431,11 @@ paths:
         required: true
         schema:
           type: integer
-          format: int64
     get:
       tags:
         - users
       summary: Get user by ID
-      description: Returns a single user. Requires user role or higher.
+      description: Own account, or any account for moderator+.
       operationId: getUser
       security:
         - bearerAuth: []
@@ -1410,21 +1445,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/UserDetails"
         "400":
           description: Invalid user ID
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
         "403":
-          description: Forbidden - insufficient permissions
+          description: Forbidden - not your account
           content:
             application/json:
               schema:
@@ -1441,7 +1470,9 @@ paths:
       tags:
         - users
       summary: Update a user
-      description: Updates an existing user. Requires admin role.
+      description: >-
+        Updates the given fields. Owners may change their own fullname, username and password; moderators may
+        also (de)activate plain users; admins may change everything including role and points.
       operationId: updateUser
       security:
         - bearerAuth: []
@@ -1451,30 +1482,132 @@ paths:
           application/json:
             schema:
               type: object
+              required: []
               properties:
                 fullname:
                   type: string
-                  example: John Doe Updated
+                username:
+                  type: string
                 password:
                   type: string
-                  example: newpassword123
                 role:
                   $ref: "#/components/schemas/Role"
+                points:
+                  type: integer
+                active:
+                  type: boolean
       responses:
         "200":
-          description: User updated
+          description: Updated user
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/UserDetails"
         "400":
           description: Invalid request payload or user ID
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "401":
-          description: Unauthorized
+        "403":
+          description: Forbidden - insufficient permissions for a field
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+    delete:
+      tags:
+        - users
+      summary: Delete a user
+      description: Requires admin role. 409 when the user still has linked records.
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: Invalid user ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: User has linked records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /users/{id}/points:
+    parameters:
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: integer
+    post:
+      tags:
+        - users
+      summary: Adjust user points
+      description: Adds (positive) or subtracts (negative) points. Requires admin role.
+      operationId: adjustUserPoints
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - points
+              properties:
+                points:
+                  type: integer
+                  description: Points to add (positive) or subtract (negative)
+      responses:
+        "200":
+          description: Points adjusted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  points:
+                    type: integer
+                    description: Current points after adjustment
+        "400":
+          description: Invalid request payload
           content:
             application/json:
               schema:
@@ -1494,7 +1627,7 @@ paths:
         "500":
           $ref: "#/components/responses/DefaultError"
 
-  /users/{id}/points:
+  /users/{id}/merge-discord:
     parameters:
       - name: id
         in: path
@@ -1502,13 +1635,14 @@ paths:
         required: true
         schema:
           type: integer
-          format: int64
-    patch:
+    post:
       tags:
         - users
-      summary: Set user points
-      description: Sets the absolute points value for a user. Requires admin role.
-      operationId: setUserPoints
+      summary: Merge a Discord ghost account
+      description: >-
+        Moves the Discord identity of `source_user_id` (an account created by Discord login) onto this user.
+        The source is deleted, or deactivated when it still has linked records. Requires moderator role.
+      operationId: mergeDiscord
       security:
         - bearerAuth: []
       requestBody:
@@ -1517,16 +1651,13 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - points
+              required: [source_user_id]
               properties:
-                points:
+                source_user_id:
                   type: integer
-                  description: New absolute points value
-                  example: 100
       responses:
         "200":
-          description: Points updated
+          description: Merged
           content:
             application/json:
               schema:
@@ -1534,33 +1665,44 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: User points updated successfully
+                  source_deleted:
+                    type: boolean
+                    description: false = the source was deactivated instead of deleted
         "400":
-          description: Invalid request payload
+          description: Same user, or the source has no Discord account
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "401":
-          description: Unauthorized
+        "404":
+          description: Source or target not found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "403":
-          description: Forbidden - insufficient permissions
+        "409":
+          description: Target already has a Discord account
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/DefaultError"
+
+  /users/{id}/link-google:
+    parameters:
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: integer
     post:
       tags:
         - users
-      summary: Adjust user points
-      description: Adds or subtracts points from a user. Use positive values to add, negative to subtract. Requires admin role.
-      operationId: adjustUserPoints
+      summary: Link Google account
+      description: Links a Google account (authorization code from the Google OAuth flow). Owner or admin.
+      operationId: linkGoogle
       security:
         - bearerAuth: []
       requestBody:
@@ -1569,42 +1711,33 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - points
+              required: [code, redirect_uri]
               properties:
-                points:
-                  type: integer
-                  description: Points to add (positive) or subtract (negative)
-                  example: 10
+                code:
+                  type: string
+                redirect_uri:
+                  type: string
       responses:
         "200":
-          description: Points adjusted
+          description: Google account linked
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: User points updated successfully
-                  points:
-                    type: integer
-                    description: Current points after adjustment
-                    example: 110
+                $ref: "#/components/schemas/Message"
         "400":
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "401":
-          description: Unauthorized
+          description: Invalid request or code exchange failed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "403":
-          description: Forbidden - insufficient permissions
+          description: Not your account, or the Google domain is not allowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Google account already linked to another user
           content:
             application/json:
               schema:
@@ -4601,18 +4734,43 @@ components:
                 - type: "null"
               description: Last reported GPS position, null until one is reported
 
-    User:
+    AuthProvider:
+      type: string
+      description: How the account was created
+      enum: [local, discord, google]
+
+    UserListItem:
+      type: object
+      description: A row of GET /users (no OAuth identifiers)
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        fullname:
+          type: [string, "null"]
+        role:
+          $ref: "#/components/schemas/Role"
+        points:
+          type: integer
+        active:
+          type: boolean
+        discord_username:
+          type: [string, "null"]
+        auth_provider:
+          $ref: "#/components/schemas/AuthProvider"
+
+    UserDetails:
       type: object
       properties:
         id:
           type: integer
-          format: int64
           example: 1
         username:
           type: string
           example: johndoe
         fullname:
-          type: string
+          type: [string, "null"]
           example: John Doe
         role:
           $ref: "#/components/schemas/Role"
@@ -4627,28 +4785,27 @@ components:
         discord_id:
           type: [string, "null"]
           description: Discord user ID (if linked)
-          example: "123456789012345678"
         discord_username:
           type: [string, "null"]
           description: Discord username (if linked)
-          example: "user#1234"
         avatar_url:
           type: [string, "null"]
-          description: Discord avatar URL (if linked)
-          example: "https://cdn.discordapp.com/avatars/123/abc.png"
+          description: Avatar URL from Discord or Google (if linked)
+        google_id:
+          type: [string, "null"]
+          description: Google account ID (if linked)
+        google_email:
+          type: [string, "null"]
+          description: Google account e-mail (if linked)
         auth_provider:
-          type: string
-          description: Authentication method
-          enum:
-            - local
-            - discord
-          example: local
+          $ref: "#/components/schemas/AuthProvider"
 
     Role:
       type: string
-      description: User permission level (hierarchical)
+      description: "User permission level (hierarchical: user < dispatcher < moderator < admin)"
       enum:
         - user
+        - dispatcher
         - moderator
         - admin
       example: user

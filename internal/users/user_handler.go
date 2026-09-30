@@ -1,6 +1,7 @@
 package users
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -43,13 +44,12 @@ func (h *UsersHandler) RegisterPublicUser(c *gin.Context) {
 		return
 	}
 
+	// Self-registration: inactive until a moderator activates it, plain user, no points.
 	req.Active = false
 	userRole := roles.Role("user")
 	req.Role = &userRole
-	err := h.createUser(req)
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user", "details": err.Error()})
+	req.Points = 0
+	if !h.respondCreateUser(c, req) {
 		return
 	}
 
@@ -66,16 +66,38 @@ func (h *UsersHandler) RegisterUser(c *gin.Context) {
 
 	req.Active = true
 
-	err := h.createUser(req)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user", "details": err.Error()})
+	if !h.respondCreateUser(c, req) {
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
 }
 
+var errUsernameTaken = errors.New("username taken")
+
+// respondCreateUser creates the user and writes the error response itself; false means it did.
+func (h *UsersHandler) respondCreateUser(c *gin.Context, req models.CreateUserRequest) bool {
+	err := h.createUser(req)
+	switch {
+	case errors.Is(err, errUsernameTaken):
+		c.JSON(http.StatusConflict, gin.H{"error": "Username already taken", "code": "USERNAME_TAKEN"})
+		return false
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user", "details": err.Error()})
+		return false
+	}
+	return true
+}
+
 func (h *UsersHandler) createUser(req models.CreateUserRequest) error {
+	unique, err := h.Repository.IsUsernameUnique(req.Username)
+	if err != nil {
+		return err
+	}
+	if !unique {
+		return errUsernameTaken
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -350,6 +372,14 @@ func (h *UsersHandler) AddUserPoints(c *gin.Context) {
 
 	if err = c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload", "details": err.Error()})
+		return
+	}
+
+	if existing, err := h.Repository.GetUser(userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user", "details": err.Error()})
+		return
+	} else if existing == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Unable to find user", "code": "USER_NOT_FOUND"})
 		return
 	}
 
