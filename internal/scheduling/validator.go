@@ -8,7 +8,7 @@ import (
 
 // Validate checks the schedule assignments against all constraints and returns issues found.
 func Validate(slots []Slot, volunteers []Volunteer, assignments []Assignment) *ValidationResult {
-	result := &ValidationResult{Valid: true}
+	result := &ValidationResult{Valid: true, Issues: []ValidationIssue{}}
 
 	// Build lookup maps
 	slotMap := make(map[int]Slot)

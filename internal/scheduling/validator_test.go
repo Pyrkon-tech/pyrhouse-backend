@@ -1,10 +1,12 @@
 package scheduling
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var utc = time.UTC
@@ -259,4 +261,12 @@ func TestCheckContinuousAndBreaks_ChainStartAfterReport(t *testing.T) {
 	}
 	// Both chains independently exceed 6h → 2 separate reports
 	assert.Equal(t, 2, consecutive, "expected two separate consecutive_over_6h issues, one per chain")
+}
+
+// A clean schedule must serialize issues as [] (not null) — the frontend iterates it directly.
+func TestValidate_NoIssuesIsEmptyArray(t *testing.T) {
+	result := Validate(nil, nil, nil)
+	b, err := json.Marshal(result)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"valid":true,"issues":[]}`, string(b))
 }

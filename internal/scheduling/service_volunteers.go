@@ -107,7 +107,7 @@ func (s *Service) ImportVolunteersFromSheet(req ImportFromSheetRequest) (*Import
 	}
 
 	var volunteers []Volunteer
-	var parseErrors []string
+	parseErrors := []string{}
 	skipped := 0
 	updated := 0
 

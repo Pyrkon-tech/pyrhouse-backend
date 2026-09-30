@@ -3323,14 +3323,824 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /schedule:
+    post:
+      tags: [scheduling]
+      summary: Create the active schedule
+      description: |
+        Creates a schedule, makes it the active one and generates montage/festival/demontage slots.
+        Requires moderator role.
+      operationId: createSchedule
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScheduleRequest"
+      responses:
+        "201":
+          description: Created schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleDetail"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+    get:
+      tags: [scheduling]
+      summary: Get the active schedule
+      description: |
+        Slots with their volunteers, volunteers with their slots, validation and day windows.
+        Requires user role.
+      operationId: getSchedule
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleDetail"
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/{id}:
+    delete:
+      tags: [scheduling]
+      summary: Delete a schedule
+      description: |
+        Only after the event has ended (409 before).
+        Requires admin role.
+      operationId: deleteSchedule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Schedule ID
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: Schedule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "409":
+          description: Event has not ended yet (event_not_ended)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/volunteers:
+    post:
+      tags: [scheduling]
+      summary: Import volunteers
+      description: |
+        Upserts by nickname into the active schedule.
+        Requires moderator role.
+      operationId: importVolunteers
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportVolunteersRequest"
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+    get:
+      tags: [scheduling]
+      summary: List volunteers of the active schedule
+      description: |
+        Requires user role.
+      operationId: listScheduleVolunteers
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Volunteers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScheduleVolunteer"
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/volunteers/import-sheet:
+    post:
+      tags: [scheduling]
+      summary: Import volunteers from Google Sheets
+      description: |
+        Row-level parse problems are returned in `errors`; the rest is imported.
+        Requires moderator role.
+      operationId: importVolunteersFromSheet
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportFromSheetRequest"
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSheetResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "503":
+          description: Google Sheets integration not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/volunteers/me:
+    get:
+      tags: [scheduling]
+      summary: My duty schedule
+      description: |
+        The volunteer linked to the caller's account in the active schedule, with their slots.
+        Requires user role.
+      operationId: getMySchedule
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: My schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MySchedule"
+        "404":
+          description: No active schedule, or the caller is not linked to a volunteer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/volunteers/{vid}:
+    patch:
+      tags: [scheduling]
+      summary: Update a volunteer
+      description: |
+        Only fields present in the body change. Send user_id null to unlink the account; omit it to keep the link.
+        Requires moderator role.
+      operationId: updateScheduleVolunteer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vid
+          in: path
+          required: true
+          description: Volunteer ID
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVolunteerRequest"
+      responses:
+        "200":
+          description: Updated volunteer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleVolunteer"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: Volunteer not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "422":
+          description: user_id does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+    delete:
+      tags: [scheduling]
+      summary: Delete a volunteer
+      description: |
+        Requires admin role.
+      operationId: deleteScheduleVolunteer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vid
+          in: path
+          required: true
+          description: Volunteer ID
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: Volunteer not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/generate:
+    post:
+      tags: [scheduling]
+      summary: Auto-assign volunteers
+      description: |
+        Runs the solver over the active schedule. 409 lists volunteers whose availability blocks generation.
+        Requires admin role.
+      operationId: generateSchedule
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Schedule after generation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleDetail"
+        "409":
+          description: Generation blocked (details.volunteers)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/assignments:
+    post:
+      tags: [scheduling]
+      summary: Assign a volunteer to a slot
+      description: |
+        Requires moderator role.
+      operationId: addAssignment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddAssignmentRequest"
+      responses:
+        "201":
+          description: Assignment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignmentDetail"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "409":
+          description: Already assigned to this slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/assignments/{aid}:
+    delete:
+      tags: [scheduling]
+      summary: Remove an assignment
+      description: |
+        Idempotent: an unknown ID also returns 204.
+        Requires moderator role.
+      operationId: deleteAssignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: aid
+          in: path
+          required: true
+          description: Assignment ID
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/assignments/move:
+    post:
+      tags: [scheduling]
+      summary: Move an assignment to another slot
+      description: |
+        Requires moderator role.
+      operationId: moveAssignment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveAssignmentRequest"
+      responses:
+        "200":
+          description: Moved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoveResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: Assignment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "409":
+          description: Already assigned to the target slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/assignments/swap:
+    post:
+      tags: [scheduling]
+      summary: Swap two assignments
+      description: |
+        Requires moderator role.
+      operationId: swapAssignments
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwapRequest"
+      responses:
+        "200":
+          description: Swapped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwapResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: One or both assignments not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/slots:
+    post:
+      tags: [scheduling]
+      summary: Create a slot
+      description: |
+        Requires moderator role.
+      operationId: createSlot
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSlotRequest"
+      responses:
+        "201":
+          description: Slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleSlot"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/slots/{sid}:
+    patch:
+      tags: [scheduling]
+      summary: Update a slot
+      description: |
+        The type of a festival slot cannot change (422).
+        Requires moderator role.
+      operationId: updateSlot
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sid
+          in: path
+          required: true
+          description: Slot ID
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSlotRequest"
+      responses:
+        "200":
+          description: Slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleSlot"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: Slot not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "422":
+          description: Cannot change the type of a festival slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+    delete:
+      tags: [scheduling]
+      summary: Delete a slot
+      description: |
+        Festival slots cannot be deleted (403).
+        Requires moderator role.
+      operationId: deleteSlot
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sid
+          in: path
+          required: true
+          description: Slot ID
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "403":
+          description: Festival slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: Slot not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/draft:
+    put:
+      tags: [scheduling]
+      summary: Save the whole schedule
+      description: |
+        Replaces slots and assignments in one transaction. `version` from the last read enables the conflict check (409); 0 skips it. New slots use `temp_id`, mapped to real IDs in `created_slots`.
+        Requires moderator role.
+      operationId: saveDraft
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveDraftRequest"
+      responses:
+        "200":
+          description: Saved schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveDraftResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "409":
+          description: Version conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/validate:
+    get:
+      tags: [scheduling]
+      summary: Validate the active schedule
+      description: |
+        Requires user role.
+      operationId: validateSchedule
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Validation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+    post:
+      tags: [scheduling]
+      summary: Validate a draft without saving
+      description: |
+        Requires moderator role.
+      operationId: validateDraft
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveDraftRequest"
+      responses:
+        "200":
+          description: Validation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/export/csv:
+    get:
+      tags: [scheduling]
+      summary: Export the schedule as CSV
+      description: |
+        Requires moderator role.
+      operationId: exportScheduleCsv
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/export/sheets:
+    post:
+      tags: [scheduling]
+      summary: Export the schedule to Google Sheets
+      description: |
+        Requires moderator role.
+      operationId: exportScheduleSheets
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Rows written
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows_written:
+                    type: integer
+        "404":
+          description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "503":
+          description: Google Sheets integration not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
+  /schedule/on-duty:
+    get:
+      tags: [scheduling]
+      summary: Volunteers on duty
+      description: |
+        Volunteers assigned to a slot active at `at` (default now); `status` is `on_mission` while they carry an in-progress quest transfer.
+        Requires user role.
+      operationId: getOnDuty
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: at
+          in: query
+          description: RFC 3339 time
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: On-duty volunteers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnDutyEntry"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
+
   /schedule/day-windows:
     put:
       tags: [scheduling]
-      summary: Upsert day window
+      summary: Upsert a day window
       description: |
-        Creates or updates the operating time window for a specific calendar date.
-        Montage/demontage slots for that date will use this window when regenerated.
-        If a window already exists for the date it is overwritten.
+        Operating window for montage/demontage slots on one date (default 08:00–20:00). Takes effect on the next slot regeneration.
+        Requires moderator role.
+      operationId: upsertDayWindow
       security:
         - bearerAuth: []
       requestBody:
@@ -3347,15 +4157,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/DayWindow"
         "400":
-          $ref: "#/components/responses/DefaultError"
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
         "404":
           description: No active schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
 
   /schedule/day-windows/{date}:
     delete:
       tags: [scheduling]
-      summary: Delete day window
-      description: Removes the custom window for the given date. The next slot regeneration will use the default 08:00–20:00 window for that day.
+      summary: Delete a day window
+      description: |
+        Requires moderator role.
+      operationId: deleteDayWindow
       security:
         - bearerAuth: []
       parameters:
@@ -3371,84 +4193,41 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
+                $ref: "#/components/schemas/Message"
         "404":
           description: Window not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
 
   /schedule/regenerate-slots:
     post:
       tags: [scheduling]
       summary: Regenerate montage/demontage slots
       description: |
-        Deletes all non-festival slots for the active schedule and re-creates them
-        using the current day windows. Festival slots and their assignments are preserved.
-        All non-festival assignments are removed. Bumps the schedule version.
+        Recreates non-festival slots from the day windows; their assignments are removed, festival slots stay. Bumps the version.
         Requires admin role.
+      operationId: regenerateSlots
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: Schedule detail after regeneration
+          description: Schedule
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScheduleDetail"
         "404":
           description: No active schedule
-
-  /schedule/volunteers/{vid}:
-    patch:
-      tags: [scheduling]
-      summary: Update volunteer
-      description: |
-        Partially updates a volunteer. Only fields present in the request body are changed.
-        Send `"user_id": null` to unlink the volunteer from a user account;
-        omit the field to leave the link unchanged. Requires moderator role.
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: vid
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                nickname:
-                  type: string
-                city:
-                  type: string
-                hours:
-                  type: integer
-                  description: Target hours
-                available_from:
-                  type: string
-                  example: "2026-06-16 08:00"
-                available_to:
-                  type: string
-                  example: "2026-06-16 20:00"
-                notes:
-                  type: string
-                user_id:
-                  type: [integer, "null"]
-                  description: Linked user account ID. Explicit null unlinks the user.
-      responses:
-        "200":
-          description: Updated volunteer
-        "400":
-          $ref: "#/components/responses/DefaultError"
-        "404":
-          description: Volunteer not found
-        "422":
-          description: Provided user_id does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleError"
+        "500":
+          $ref: "#/components/responses/ScheduleInternalError"
 
 
   # ==========================================================================
@@ -4254,6 +5033,12 @@ components:
         type: integer
 
   responses:
+    ScheduleInternalError:
+      description: Unexpected error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ScheduleError"
     BadRequest:
       description: Invalid request
       content:
@@ -4285,110 +5070,6 @@ components:
                 example: "Invalid token"
 
   schemas:
-    SlotWithVolunteers:
-      type: object
-      description: Schedule slot with the volunteers assigned to it (internal/scheduling SlotWithVolunteers)
-      properties:
-        id:
-          type: integer
-        schedule_id:
-          type: integer
-        type:
-          type: string
-          enum: [montage, festival, demontage]
-        start:
-          type: string
-          format: date-time
-        end:
-          type: string
-          format: date-time
-        credit_hours:
-          type: number
-        capacity:
-          type: integer
-        label:
-          type: [string, "null"]
-        volunteers:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: integer
-                description: Assignment ID
-              volunteer_id:
-                type: integer
-              nickname:
-                type: string
-
-    VolunteerWithSlots:
-      type: object
-      description: Schedule volunteer with the IDs of the slots they are assigned to (internal/scheduling VolunteerWithSlots)
-      properties:
-        id:
-          type: integer
-        schedule_id:
-          type: integer
-        user_id:
-          type: [integer, "null"]
-        nickname:
-          type: string
-        city:
-          type: [string, "null"]
-        target_hours:
-          type: integer
-        available_from:
-          type: string
-          format: date-time
-        available_to:
-          type: string
-          format: date-time
-        notes:
-          type: [string, "null"]
-        assigned_hours:
-          type: number
-        discord_confirmed:
-          type: [string, "null"]
-        slots:
-          type: array
-          items:
-            type: integer
-
-    ValidationIssue:
-      type: object
-      properties:
-        type:
-          type: string
-        severity:
-          type: string
-        volunteer:
-          type: string
-        volunteer_id:
-          type: integer
-        slot:
-          type: string
-        slot_id:
-          type: integer
-        assigned:
-          type: integer
-        target:
-          type: integer
-        capacity:
-          type: integer
-        message:
-          type: string
-
-    ValidationResult:
-      type: object
-      properties:
-        valid:
-          type: boolean
-        issues:
-          type: [array, "null"]
-          description: May be null when there are no issues (Go nil slice)
-          items:
-            $ref: "#/components/schemas/ValidationIssue"
-
     ShopError:
       type: object
       properties:
@@ -5154,6 +5835,566 @@ components:
         category:
           type: string
 
+    # ── Scheduling (duty roster) ──────────────────────────────────────────
+
+    ScheduleError:
+      type: object
+      required: [error, message]
+      description: Error body of /schedule endpoints (`error` is a machine slug, `message` is for the user)
+      properties:
+        error:
+          type: string
+          example: not_found
+        message:
+          type: string
+        details: {}
+
+    SlotType:
+      type: string
+      enum: [montage, festival, demontage]
+
+    Schedule:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        event_start:
+          type: string
+          format: date-time
+          description: Whole event including montage
+        event_end:
+          type: string
+          format: date-time
+          description: Whole event including demontage
+        festival_start:
+          type: string
+          format: date-time
+        festival_end:
+          type: string
+          format: date-time
+        status:
+          type: string
+          example: active
+        version:
+          type: integer
+          description: Bumped on every save; send back in PUT /schedule/draft for the conflict check
+        created_at:
+          type: string
+          format: date-time
+
+    ScheduleSlot:
+      type: object
+      properties:
+        id:
+          type: integer
+        schedule_id:
+          type: integer
+        type:
+          $ref: "#/components/schemas/SlotType"
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        credit_hours:
+          type: number
+          description: Hours credited to each volunteer (not necessarily the slot length)
+        capacity:
+          type: integer
+        label:
+          type: [string, "null"]
+
+    SlotVolunteer:
+      type: object
+      description: A volunteer assigned to a slot; `id` is the assignment ID
+      properties:
+        id:
+          type: integer
+        volunteer_id:
+          type: integer
+        nickname:
+          type: string
+
+    SlotWithVolunteers:
+      allOf:
+        - $ref: "#/components/schemas/ScheduleSlot"
+        - type: object
+          required: [volunteers]
+          properties:
+            volunteers:
+              type: array
+              items:
+                $ref: "#/components/schemas/SlotVolunteer"
+
+    ScheduleVolunteer:
+      type: object
+      properties:
+        id:
+          type: integer
+        schedule_id:
+          type: integer
+        user_id:
+          type: [integer, "null"]
+          description: Linked warehouse account; null = volunteer without an account
+        nickname:
+          type: string
+        city:
+          type: [string, "null"]
+        target_hours:
+          type: integer
+        available_from:
+          type: string
+          format: date-time
+        available_to:
+          type: string
+          format: date-time
+        notes:
+          type: [string, "null"]
+        assigned_hours:
+          type: number
+        discord_confirmed:
+          type: [string, "null"]
+
+    VolunteerWithSlots:
+      allOf:
+        - $ref: "#/components/schemas/ScheduleVolunteer"
+        - type: object
+          required: [slots]
+          properties:
+            slots:
+              type: array
+              description: IDs of the slots the volunteer is assigned to
+              items:
+                type: integer
+
+    ValidationIssue:
+      type: object
+      required: [type, severity, message]
+      description: Only the fields relevant to the issue type are present.
+      properties:
+        type:
+          type: string
+          enum:
+            - under_hours
+            - over_hours
+            - no_festival_shifts
+            - slot_understaffed
+            - insufficient_break
+            - double_booked
+            - outside_availability
+        severity:
+          type: string
+          enum: [error, warning]
+        volunteer:
+          type: string
+          description: Volunteer nickname
+        volunteer_id:
+          type: integer
+        slot:
+          type: string
+          description: Slot description
+        slot_id:
+          type: integer
+        assigned:
+          type: integer
+        target:
+          type: integer
+        capacity:
+          type: integer
+        message:
+          type: string
+
+    ValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          description: false when any issue has severity error
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+
+    DayWindow:
+      type: object
+      properties:
+        id:
+          type: integer
+        schedule_id:
+          type: integer
+        date:
+          type: string
+          example: "2026-06-16"
+        window_start:
+          type: string
+          example: "10:00"
+        window_end:
+          type: string
+          example: "18:00"
+
+    UpsertDayWindowRequest:
+      type: object
+      required: [date, window_start, window_end]
+      properties:
+        date:
+          type: string
+          example: "2026-06-16"
+        window_start:
+          type: string
+          example: "10:00"
+        window_end:
+          type: string
+          example: "18:00"
+
+    ScheduleDetail:
+      allOf:
+        - $ref: "#/components/schemas/Schedule"
+        - type: object
+          required: [slots, volunteers, validation, day_windows]
+          properties:
+            slots:
+              type: array
+              items:
+                $ref: "#/components/schemas/SlotWithVolunteers"
+            volunteers:
+              type: array
+              items:
+                $ref: "#/components/schemas/VolunteerWithSlots"
+            validation:
+              $ref: "#/components/schemas/ValidationResult"
+            day_windows:
+              type: array
+              items:
+                $ref: "#/components/schemas/DayWindow"
+
+    CreateScheduleRequest:
+      type: object
+      required: [name, event_start, event_end, festival_start, festival_end]
+      properties:
+        name:
+          type: string
+        event_start:
+          type: string
+          example: "2026-06-14"
+        event_end:
+          type: string
+          example: "2026-06-23"
+        festival_start:
+          type: string
+          example: "2026-06-18 10:00"
+        festival_end:
+          type: string
+          example: "2026-06-21 18:00"
+
+    VolunteerInput:
+      type: object
+      required: [nickname, hours, available_from, available_to]
+      properties:
+        nickname:
+          type: string
+        city:
+          type: [string, "null"]
+        hours:
+          type: integer
+          description: Target hours (14 standard, 18 extended)
+        available_from:
+          type: string
+          example: "2026-06-16 08:00"
+        available_to:
+          type: string
+          example: "2026-06-22 20:00"
+        notes:
+          type: [string, "null"]
+        user_id:
+          type: [integer, "null"]
+
+    ImportVolunteersRequest:
+      type: object
+      required: [volunteers]
+      properties:
+        volunteers:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/VolunteerInput"
+
+    ImportFromSheetRequest:
+      type: object
+      required: [sheet_id, sheet_name]
+      properties:
+        sheet_id:
+          type: string
+        sheet_name:
+          type: string
+
+    ImportResult:
+      type: object
+      properties:
+        imported:
+          type: integer
+        updated:
+          type: integer
+        skipped:
+          type: integer
+
+    ImportSheetResult:
+      allOf:
+        - $ref: "#/components/schemas/ImportResult"
+        - type: object
+          required: [errors]
+          properties:
+            errors:
+              type: array
+              description: Rows that could not be parsed
+              items:
+                type: string
+
+    UpdateVolunteerRequest:
+      type: object
+      required: []
+      properties:
+        nickname:
+          type: string
+        city:
+          type: string
+        hours:
+          type: integer
+          description: Target hours
+        available_from:
+          type: string
+          example: "2026-06-16 08:00"
+        available_to:
+          type: string
+          example: "2026-06-16 20:00"
+        notes:
+          type: string
+        user_id:
+          type: [integer, "null"]
+          description: Linked account; explicit null unlinks, omitted keeps the link
+
+    MySchedule:
+      type: object
+      properties:
+        volunteer:
+          $ref: "#/components/schemas/ScheduleVolunteer"
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/MyScheduleSlot"
+
+    MyScheduleSlot:
+      type: object
+      properties:
+        assignment_id:
+          type: integer
+        slot_id:
+          type: integer
+        slot_type:
+          $ref: "#/components/schemas/SlotType"
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        credit_hours:
+          type: number
+        label:
+          type: [string, "null"]
+
+    AddAssignmentRequest:
+      type: object
+      required: [volunteer_id, slot_id]
+      properties:
+        volunteer_id:
+          type: integer
+        slot_id:
+          type: integer
+
+    AssignmentDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        slot_id:
+          type: integer
+        volunteer_id:
+          type: integer
+        nickname:
+          type: string
+
+    MoveAssignmentRequest:
+      type: object
+      required: [assignment_id, to_slot_id]
+      properties:
+        assignment_id:
+          type: integer
+        to_slot_id:
+          type: integer
+
+    MoveResponse:
+      type: object
+      properties:
+        deleted_assignment_id:
+          type: integer
+        created_assignment:
+          $ref: "#/components/schemas/AssignmentDetail"
+
+    SwapRequest:
+      type: object
+      required: [assignment_a, assignment_b]
+      properties:
+        assignment_a:
+          type: integer
+        assignment_b:
+          type: integer
+
+    SwapResponse:
+      type: object
+      properties:
+        assignment_a:
+          $ref: "#/components/schemas/AssignmentDetail"
+        assignment_b:
+          $ref: "#/components/schemas/AssignmentDetail"
+
+    CreateSlotRequest:
+      type: object
+      required: [type, start, end]
+      properties:
+        type:
+          $ref: "#/components/schemas/SlotType"
+        start:
+          type: string
+        end:
+          type: string
+        capacity:
+          type: integer
+        label:
+          type: [string, "null"]
+
+    UpdateSlotRequest:
+      type: object
+      required: []
+      properties:
+        type:
+          $ref: "#/components/schemas/SlotType"
+        start:
+          type: string
+        end:
+          type: string
+        capacity:
+          type: integer
+        label:
+          type: [string, "null"]
+
+    DraftSlot:
+      type: object
+      required: [type, start, end]
+      description: Existing slot (`id`) or a new one (`temp_id`)
+      properties:
+        id:
+          type: integer
+        temp_id:
+          type: string
+        type:
+          $ref: "#/components/schemas/SlotType"
+        start:
+          type: string
+        end:
+          type: string
+        capacity:
+          type: integer
+        label:
+          type: [string, "null"]
+
+    DraftAssignment:
+      type: object
+      required: [volunteer_id]
+      description: Refers to a slot by `slot_id` or, for a new slot, `slot_temp_id`
+      properties:
+        volunteer_id:
+          type: integer
+        slot_id:
+          type: integer
+        slot_temp_id:
+          type: string
+
+    SaveDraftRequest:
+      type: object
+      required: [slots, assignments]
+      properties:
+        version:
+          type: integer
+          description: Version from the last read; 0 skips the conflict check
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/DraftSlot"
+        assignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/DraftAssignment"
+
+    SaveDraftResponse:
+      type: object
+      properties:
+        schedule:
+          $ref: "#/components/schemas/ScheduleDetail"
+        created_slots:
+          type: array
+          items:
+            type: object
+            properties:
+              temp_id:
+                type: string
+              id:
+                type: integer
+        validation:
+          $ref: "#/components/schemas/ValidationResult"
+
+    OnDutyUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        fullname:
+          type: [string, "null"]
+        avatar_url:
+          type: [string, "null"]
+        discord_username:
+          type: [string, "null"]
+
+    OnDutyEntry:
+      type: object
+      properties:
+        volunteer_id:
+          type: integer
+        nickname:
+          type: string
+        slot_id:
+          type: integer
+        slot_label:
+          type: [string, "null"]
+        slot_end:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [available, on_mission]
+        current_mission:
+          type: [string, "null"]
+        user_id:
+          type: [integer, "null"]
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/OnDutyUser"
+            - type: "null"
+
     Message:
       type: object
       properties:
@@ -5793,77 +7034,3 @@ components:
                 minimum: 1
 
 
-    DayWindow:
-      type: object
-      properties:
-        id:
-          type: integer
-        schedule_id:
-          type: integer
-        date:
-          type: string
-          example: "2026-06-16"
-        window_start:
-          type: string
-          example: "10:00"
-        window_end:
-          type: string
-          example: "18:00"
-
-    UpsertDayWindowRequest:
-      type: object
-      required: [date, window_start, window_end]
-      properties:
-        date:
-          type: string
-          example: "2026-06-16"
-        window_start:
-          type: string
-          example: "10:00"
-        window_end:
-          type: string
-          example: "18:00"
-
-    ScheduleDetail:
-      type: object
-      description: Full schedule state including slots, volunteers, validation, and day windows.
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
-        event_start:
-          type: string
-          format: date-time
-        event_end:
-          type: string
-          format: date-time
-        festival_start:
-          type: string
-          format: date-time
-        festival_end:
-          type: string
-          format: date-time
-        status:
-          type: string
-          enum: [draft, active, archived]
-        version:
-          type: integer
-        created_at:
-          type: string
-          format: date-time
-        slots:
-          type: array
-          items:
-            $ref: "#/components/schemas/SlotWithVolunteers"
-        volunteers:
-          type: array
-          items:
-            $ref: "#/components/schemas/VolunteerWithSlots"
-        validation:
-          $ref: "#/components/schemas/ValidationResult"
-        day_windows:
-          type: array
-          description: Custom operating windows per calendar date. Empty = all days use default 08:00–20:00.
-          items:
-            $ref: "#/components/schemas/DayWindow"

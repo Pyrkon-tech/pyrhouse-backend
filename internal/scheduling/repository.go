@@ -236,7 +236,7 @@ func (r *Repository) FindConfirmedVolunteer(discordUsername string) (nickname st
 }
 
 func (r *Repository) GetVolunteers(scheduleID int) ([]Volunteer, error) {
-	var volunteers []Volunteer
+	volunteers := make([]Volunteer, 0)
 	query := r.repo.GoquDBWrapper.From("schedule_volunteers").
 		Where(goqu.Ex{"schedule_id": scheduleID}).
 		Order(goqu.C("nickname").Asc())
