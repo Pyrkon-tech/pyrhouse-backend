@@ -2257,6 +2257,348 @@ paths:
         "500":
           $ref: "#/components/responses/DefaultError"
 
+  /service-desk/requests:
+    post:
+      tags:
+        - service-desk
+      summary: Submit a request
+      description: >-
+        Public (the reporting form). Anonymous callers are rate-limited per IP (15/min); with a valid warehouse
+        token the request is linked to that user. New requests are always `new` and unassigned.
+      operationId: createServiceDeskRequest
+      security:
+        - {}
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceDeskRequest"
+      responses:
+        "201":
+          description: Request created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceDeskRequest"
+        "400":
+          description: Invalid payload (unknown type/priority, missing title, both location and location_id)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded (anonymous)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+    get:
+      tags:
+        - service-desk
+      summary: List requests
+      operationId: listServiceDeskRequests
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Comma-separated statuses
+          schema:
+            type: string
+            example: new,in_progress
+        - name: location_id
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Requests, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceDeskRequest"
+        "400":
+          description: Invalid location_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /service-desk/requests/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - service-desk
+      summary: Get a request
+      operationId: getServiceDeskRequest
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceDeskRequest"
+        "400":
+          description: Invalid ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /service-desk/requests/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags:
+        - service-desk
+      summary: Change status
+      operationId: changeServiceDeskStatus
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: "#/components/schemas/ServiceDeskStatus"
+      responses:
+        "200":
+          description: Status changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: Invalid status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /service-desk/requests/{id}/assign:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags:
+        - service-desk
+      summary: Assign to a user
+      operationId: assignServiceDeskRequest
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assigned_to_id]
+              properties:
+                assigned_to_id:
+                  type: integer
+      responses:
+        "200":
+          description: Assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /service-desk/requests/{id}/priority:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags:
+        - service-desk
+      summary: Change priority
+      operationId: changeServiceDeskPriority
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [priority]
+              properties:
+                priority:
+                  $ref: "#/components/schemas/ServiceDeskPriority"
+      responses:
+        "200":
+          description: Priority changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: Invalid priority
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /service-desk/requests/{id}/comments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - service-desk
+      summary: List comments
+      operationId: listServiceDeskComments
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Comments, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceDeskComment"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+    post:
+      tags:
+        - service-desk
+      summary: Add a comment
+      operationId: addServiceDeskComment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        "200":
+          description: The new comment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceDeskComment"
+        "400":
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /service-desk/request-types:
+    get:
+      tags:
+        - service-desk
+      summary: Request types
+      operationId: listServiceDeskRequestTypes
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Types with labels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceDeskRequestType"
+
   /service-desk/stream:
     get:
       tags:
@@ -4700,6 +5042,118 @@ components:
         details:
           type: [string, "null"]
 
+    ServiceDeskStatus:
+      type: string
+      enum: [new, in_progress, waiting, resolved, closed]
+
+    ServiceDeskPriority:
+      type: string
+      enum: [low, medium, high]
+
+    ServiceDeskType:
+      type: string
+      enum: [hardware_issue, replacement, technical_problem, other]
+
+    ServiceDeskUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        fullname:
+          type: [string, "null"]
+
+    ServiceDeskRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: "#/components/schemas/ServiceDeskType"
+        status:
+          $ref: "#/components/schemas/ServiceDeskStatus"
+        priority:
+          $ref: "#/components/schemas/ServiceDeskPriority"
+        created_by:
+          type: string
+          description: Reporter name as typed in the form
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        location:
+          type: [string, "null"]
+          description: Name of the linked location, or the free-text location
+        location_id:
+          type: [integer, "null"]
+        created_by_user:
+          description: Account that submitted it, null for anonymous reports
+          oneOf:
+            - $ref: "#/components/schemas/ServiceDeskUser"
+            - type: "null"
+        assigned_to_user:
+          oneOf:
+            - $ref: "#/components/schemas/ServiceDeskUser"
+            - type: "null"
+
+    CreateServiceDeskRequest:
+      type: object
+      required: [title, type]
+      description: Give at most one of `location` / `location_id`.
+      properties:
+        title:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        type:
+          $ref: "#/components/schemas/ServiceDeskType"
+        priority:
+          $ref: "#/components/schemas/ServiceDeskPriority"
+        created_by:
+          type: string
+          maxLength: 128
+          description: Reporter name
+        location:
+          type: string
+          maxLength: 128
+        location_id:
+          type: integer
+
+    ServiceDeskComment:
+      type: object
+      properties:
+        id:
+          type: integer
+        request_id:
+          type: integer
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/ServiceDeskUser"
+
+    ServiceDeskRequestType:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+
     Message:
       type: object
       properties:
@@ -5102,123 +5556,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BudgetItem"
-
-    # ── Service Desk ──────────────────────────────────────────────────────
-
-    ServiceDeskRequest:
-      type: object
-      required:
-        - title
-        - description
-        - type
-        - priority
-        - created_by
-      properties:
-        title:
-          type: string
-          example: "Zepsuta drukarka"
-        description:
-          type: string
-          example: "Drukarka w sali A przestała działać"
-        type:
-          type: string
-          enum: [hardware_issue, replacement, technical_problem, other]
-          example: hardware_issue
-        priority:
-          type: string
-          enum: [low, medium, high, urgent]
-          example: medium
-        created_by:
-          type: string
-          example: "Jan Kowalski"
-        location:
-          type: [string, "null"]
-          description: Free-text location. Mutually exclusive with location_id.
-          example: "Pokój obok sali B"
-        location_id:
-          type: [integer, "null"]
-          description: ID of a known location (from GET /locations). Mutually exclusive with location.
-          example: 3
-
-    ServiceDeskRequestResponse:
-      type: object
-      properties:
-        id:
-          type: integer
-          example: 42
-        title:
-          type: string
-        description:
-          type: string
-        type:
-          type: string
-          enum: [hardware_issue, replacement, technical_problem, other]
-        status:
-          type: string
-          enum: [new, in_progress, waiting, resolved, closed]
-        priority:
-          type: string
-          enum: [low, medium, high, urgent]
-        created_by:
-          type: string
-        location:
-          type: [string, "null"]
-          description: Resolved location display value — location name when location_id is set, free-text otherwise.
-          example: "Sala A"
-        location_id:
-          type: [integer, "null"]
-          description: ID of the linked location. Null when free-text was used.
-          example: 3
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        created_by_user:
-          oneOf:
-            - $ref: '#/components/schemas/ServiceDeskUser'
-            - type: "null"
-        assigned_to_user:
-          oneOf:
-            - $ref: '#/components/schemas/ServiceDeskUser'
-            - type: "null"
-
-    ServiceDeskUser:
-      type: object
-      properties:
-        id:
-          type: integer
-        username:
-          type: string
-        fullname:
-          type: [string, "null"]
-
-    ServiceDeskComment:
-      type: object
-      properties:
-        id:
-          type: integer
-        request_id:
-          type: integer
-        content:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        user:
-          $ref: '#/components/schemas/ServiceDeskUser'
-
-    ServiceDeskRequestType:
-      type: object
-      properties:
-        id:
-          type: string
-          enum: [hardware_issue, replacement, technical_problem, other]
-        name:
-          type: string
-        description:
-          type: string
 
     # ── Dispatch ──────────────────────────────────────────────────────────
 

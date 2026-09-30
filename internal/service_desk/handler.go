@@ -1,6 +1,7 @@
 package service_desk
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -120,9 +121,12 @@ func (h *Handler) getRequest(c *gin.Context) {
 	}
 
 	req, err := h.repository.GetRequest(idInt)
-
+	if errors.Is(err, ErrRequestNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Zgłoszenie nie znalezione"})
+		return
+	}
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Zgłoszenie nie znalezione", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching request", "details": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, req)
@@ -147,15 +151,28 @@ func (h *Handler) createRequest(c *gin.Context) {
 		}
 	}
 
-	var req Request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format"})
+	var in CreateRequestInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid data format", "details": err.Error()})
 		return
 	}
 
-	if req.Location != nil && req.LocationID != nil {
+	if in.Location != nil && in.LocationID != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Provide either location or location_id, not both"})
 		return
+	}
+	if in.Priority == "" {
+		in.Priority = PriorityMedium
+	}
+
+	req := Request{
+		Title:       in.Title,
+		Description: in.Description,
+		Type:        in.Type,
+		Priority:    in.Priority,
+		CreatedBy:   in.CreatedBy,
+		Location:    in.Location,
+		LocationID:  in.LocationID,
 	}
 
 	if userID != "" {
@@ -172,7 +189,12 @@ func (h *Handler) createRequest(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, req)
+	created, err := h.repository.GetRequest(req.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Request created but could not be read back", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, created)
 }
 
 func (h *Handler) getComments(c *gin.Context) {
@@ -209,7 +231,16 @@ func (h *Handler) changeStatus(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.ChangeStatus(id, req.Status); err != nil {
+	err = h.service.ChangeStatus(id, req.Status)
+	switch {
+	case errors.Is(err, ErrRequestNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "Request not found"})
+		return
+	case errors.Is(err, ErrInvalidStatus):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status"})
+		return
+	}
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error changing status", "details": err.Error()})
 		return
 	}

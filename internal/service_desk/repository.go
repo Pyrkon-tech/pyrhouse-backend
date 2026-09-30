@@ -91,7 +91,7 @@ func (r *ServiceDeskRepository) GetRequest(id int) (*RequestResponse, error) {
 	}
 
 	if !ok {
-		return nil, fmt.Errorf("request not found")
+		return nil, ErrRequestNotFound
 	}
 
 	return requestResponse, nil

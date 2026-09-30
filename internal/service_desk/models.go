@@ -11,6 +11,18 @@ type RequestType struct {
 	Category    string `json:"category"`
 }
 
+// CreateRequestInput is the body of POST /service-desk/requests. The endpoint is public, so it only accepts
+// what a reporter may set; the author (created_by_id) comes from the token and assignment is staff-only.
+type CreateRequestInput struct {
+	Title       string  `json:"title" binding:"required,max=255"`
+	Description string  `json:"description"`
+	Type        string  `json:"type" binding:"required,oneof=hardware_issue replacement technical_problem other"`
+	Priority    string  `json:"priority" binding:"omitempty,oneof=low medium high"`
+	CreatedBy   string  `json:"created_by" binding:"max=128"`
+	Location    *string `json:"location" binding:"omitempty,max=128"`
+	LocationID  *int    `json:"location_id"`
+}
+
 type Request struct {
 	ID          int       `json:"id,omitempty"`
 	Title       string    `json:"title"`
@@ -54,19 +66,19 @@ type FlatComment struct {
 }
 
 type RequestResponse struct {
-	ID             int       `json:"id,omitempty"`
+	ID             int       `json:"id"`
 	Title          string    `json:"title"`
 	Description    string    `json:"description"`
 	Status         string    `json:"status"`
 	CreatedBy      string    `json:"created_by"`
 	Type           string    `json:"type"`
-	CreatedAt      time.Time `json:"created_at,omitempty"`
-	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 	Priority       string    `json:"priority"`
-	Location       *string   `json:"location,omitempty"`
-	LocationID     *int      `json:"location_id,omitempty"`
-	CreatedByUser  *User     `json:"created_by_user,omitempty"`
-	AssignedToUser *User     `json:"assigned_to_user,omitempty"`
+	Location       *string   `json:"location"`
+	LocationID     *int      `json:"location_id"`
+	CreatedByUser  *User     `json:"created_by_user"`
+	AssignedToUser *User     `json:"assigned_to_user"`
 }
 
 type User struct {
