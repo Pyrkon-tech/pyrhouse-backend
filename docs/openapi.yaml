@@ -2813,6 +2813,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuggestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
 
   /releases:
     post:
@@ -2832,8 +2834,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReleaseDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "409":
           description: Validation error (asset in_transit, in another draft, insufficient stock)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     get:
       tags: [releases]
       summary: List releases
@@ -2886,11 +2894,20 @@ paths:
           required: true
           schema:
             type: integer
+      description: Only drafts can be deleted. Requires moderator role.
       responses:
         "200":
           description: Release deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
         "409":
-          description: Release not in draft status
+          description: Release not found or not in draft status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /releases/{id}/items:
     put:
@@ -2916,8 +2933,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReleaseDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Release not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
-          description: Validation error
+          description: Release is not a draft, or item validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /releases/{id}/confirm:
     post:
@@ -2925,7 +2954,7 @@ paths:
       summary: Confirm and execute release
       description: |
         Permanently removes assets from inventory and decreases stock quantities.
-        Refreshes snapshots with latest data before deletion. Requires admin role.
+        Refreshes snapshots with latest data before deletion. Requires moderator role.
       parameters:
         - name: id
           in: path
@@ -2939,8 +2968,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReleaseDetail"
+        "404":
+          description: Release not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
-          description: Validation error (items changed since draft creation)
+          description: Release is not a draft, or items changed since draft creation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /schedule/day-windows:
     put:
@@ -4713,6 +4752,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/TransferSummary"
         - type: object
+          required: [assets, stock_items, users, delivery_location]
           properties:
             assets:
               type: array
@@ -5236,13 +5276,11 @@ components:
           type: string
           example: "WYD-2026-001"
         origin_id:
-          type: [integer, "null"]
+          type: integer
         origin_label:
           type: [string, "null"]
+          description: Origin slug
           example: "probis"
-        released_to:
-          type: string
-          example: "Probis Sp. z o.o."
         notes:
           type: [string, "null"]
         status:
@@ -5263,6 +5301,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/Release"
         - type: object
+          required: [assets, stocks, summary]
           properties:
             assets:
               type: array
@@ -5273,12 +5312,15 @@ components:
               items:
                 $ref: "#/components/schemas/ReleaseStock"
             summary:
-              type: object
-              properties:
-                total_assets:
-                  type: integer
-                total_stock_quantity:
-                  type: integer
+              $ref: "#/components/schemas/ReleaseSummary"
+
+    ReleaseSummary:
+      type: object
+      properties:
+        total_assets:
+          type: integer
+        total_stock_quantity:
+          type: integer
 
     ReleaseAsset:
       type: object
@@ -5329,50 +5371,54 @@ components:
         assets:
           type: array
           items:
-            type: object
-            properties:
-              id:
-                type: integer
-              pyr_code:
-                type: [string, "null"]
-              item_serial:
-                type: [string, "null"]
-              status:
-                type: string
-              category_name:
-                type: [string, "null"]
-              origin_label:
-                type: [string, "null"]
-              location_name:
-                type: [string, "null"]
+            $ref: "#/components/schemas/SuggestedAsset"
         stocks:
           type: array
           items:
-            type: object
-            properties:
-              id:
-                type: integer
-              quantity:
-                type: integer
-              category_name:
-                type: [string, "null"]
-              origin_label:
-                type: [string, "null"]
-              location_name:
-                type: [string, "null"]
+            $ref: "#/components/schemas/SuggestedStock"
+
+    SuggestedAsset:
+      type: object
+      properties:
+        id:
+          type: integer
+        pyr_code:
+          type: [string, "null"]
+        item_serial:
+          type: [string, "null"]
+        status:
+          type: string
+        category_name:
+          type: [string, "null"]
+        origin_label:
+          type: [string, "null"]
+        location_name:
+          type: [string, "null"]
+
+    SuggestedStock:
+      type: object
+      properties:
+        id:
+          type: integer
+        quantity:
+          type: integer
+        category_name:
+          type: [string, "null"]
+        origin_label:
+          type: [string, "null"]
+        location_name:
+          type: [string, "null"]
 
     CreateReleaseRequest:
       type: object
-      required: [released_to]
+      required: [origin_id]
+      description: At least one of `assets` / `stocks` is required.
       properties:
         origin_id:
           type: integer
-          description: Optional origin to tag this release
-        released_to:
-          type: string
-          example: "Probis Sp. z o.o."
+          description: Origin (owner) the items are released back to
         notes:
-          type: string
+          type: [string, "null"]
         assets:
           type: array
           items:

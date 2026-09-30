@@ -3,16 +3,16 @@ package releases
 import "time"
 
 type Release struct {
-	ID          int        `json:"id" db:"id"`
-	Reference   string     `json:"reference" db:"reference"`
-	OriginID    int        `json:"origin_id" db:"origin_id"`
-	OriginLabel *string    `json:"origin_label,omitempty" db:"origin_label"`
-	Notes       *string    `json:"notes" db:"notes"`
-	Status      string     `json:"status" db:"status"`
-	CreatedBy   int        `json:"created_by" db:"created_by"`
-	CreatedByName *string  `json:"created_by_name,omitempty" db:"created_by_name"`
-	CompletedAt *time.Time `json:"completed_at" db:"completed_at"`
-	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
+	ID            int        `json:"id" db:"id"`
+	Reference     string     `json:"reference" db:"reference"`
+	OriginID      int        `json:"origin_id" db:"origin_id"`
+	OriginLabel   *string    `json:"origin_label" db:"origin_label"`
+	Notes         *string    `json:"notes" db:"notes"`
+	Status        string     `json:"status" db:"status"`
+	CreatedBy     int        `json:"created_by" db:"created_by"`
+	CreatedByName *string    `json:"created_by_name" db:"created_by_name"`
+	CompletedAt   *time.Time `json:"completed_at" db:"completed_at"`
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
 }
 
 type ReleaseDetail struct {
@@ -23,7 +23,7 @@ type ReleaseDetail struct {
 }
 
 type ReleaseSummary struct {
-	TotalAssets       int `json:"total_assets"`
+	TotalAssets        int `json:"total_assets"`
 	TotalStockQuantity int `json:"total_stock_quantity"`
 }
 
@@ -52,10 +52,10 @@ type ReleaseStock struct {
 // API request/response types
 
 type CreateReleaseRequest struct {
-	OriginID   int               `json:"origin_id" binding:"required"`
-	Notes      *string           `json:"notes"`
-	Assets     []int             `json:"assets"`
-	Stocks     []StockReleaseReq `json:"stocks"`
+	OriginID int               `json:"origin_id" binding:"required"`
+	Notes    *string           `json:"notes"`
+	Assets   []int             `json:"assets"`
+	Stocks   []StockReleaseReq `json:"stocks"`
 }
 
 type StockReleaseReq struct {

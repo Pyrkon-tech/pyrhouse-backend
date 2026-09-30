@@ -1,6 +1,7 @@
 package releases
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"warehouse/internal/security"
@@ -72,12 +73,12 @@ func (h *Handler) create(c *gin.Context) {
 		return
 	}
 
-	userIDStr, err := security.GetUserIDFromToken(c)
-	if err != nil {
+	// Set by the JWT middleware from the already validated token.
+	userID, err := strconv.Atoi(c.GetString("userID"))
+	if err != nil || userID == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to get user ID"})
 		return
 	}
-	userID, _ := strconv.Atoi(userIDStr)
 
 	release, err := h.service.CreateRelease(req, userID)
 	if err != nil {
@@ -152,6 +153,10 @@ func (h *Handler) updateItems(c *gin.Context) {
 	}
 
 	release, err := h.service.UpdateItems(id, req)
+	if errors.Is(err, ErrReleaseNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Release not found"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "Failed to update items", "details": err.Error()})
 		return
@@ -168,6 +173,10 @@ func (h *Handler) confirm(c *gin.Context) {
 	}
 
 	release, err := h.service.Confirm(id)
+	if errors.Is(err, ErrReleaseNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Release not found"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "Failed to confirm release", "details": err.Error()})
 		return

@@ -1,6 +1,7 @@
 package releases
 
 import (
+	"errors"
 	"fmt"
 	"warehouse/internal/auditlog"
 	"warehouse/internal/repository"
@@ -23,6 +24,9 @@ func NewService(repo *Repository, baseRepo *repository.Repository, auditLog *aud
 }
 
 // Suggest returns assets and stocks for a given origin (and optional location).
+// ErrReleaseNotFound is returned for an unknown release ID.
+var ErrReleaseNotFound = errors.New("release not found")
+
 func (s *Service) Suggest(originID int, locationID *int) (*SuggestResponse, error) {
 	assets, err := s.repo.SuggestAssets(originID, locationID)
 	if err != nil {
@@ -82,7 +86,7 @@ func (s *Service) UpdateItems(releaseID int, req UpdateItemsRequest) (*ReleaseDe
 		return nil, err
 	}
 	if release == nil {
-		return nil, fmt.Errorf("release not found")
+		return nil, ErrReleaseNotFound
 	}
 	if release.Status != "draft" {
 		return nil, fmt.Errorf("can only update items in draft releases")
@@ -121,7 +125,7 @@ func (s *Service) Confirm(releaseID int) (*ReleaseDetail, error) {
 		return nil, err
 	}
 	if release == nil {
-		return nil, fmt.Errorf("release not found")
+		return nil, ErrReleaseNotFound
 	}
 	if release.Status != "draft" {
 		return nil, fmt.Errorf("can only confirm draft releases")
