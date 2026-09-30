@@ -26,7 +26,7 @@ type TransferRepository interface {
 	RemoveStockItemsTransferRecords(tx *goqu.TxDatabase, transferID int) error
 	HasStockItemsInTransfer(tx *goqu.TxDatabase, transferID int) (bool, error)
 	InsertTransferUsers(tx *goqu.TxDatabase, transferID int, users []models.TransferUser) error
-	GetTransferUsers(transferID int) ([]models.User, error)
+	GetTransferUsers(transferID int) ([]models.TransferParticipant, error)
 	UpdateDeliveryLocation(transferID int, latitude float64, longitude float64, timestamp time.Time) error
 	UpdateStockItemsTransferStatus(tx *goqu.TxDatabase, transferID int, status string) error
 	SetTransferUsers(transferID int, userIDs []int) error
@@ -92,6 +92,40 @@ type FlatTransfer struct {
 	DeliveryTimestamp    *time.Time     `db:"delivery_timestamp"`
 }
 
+func nullableString(s sql.NullString) *string {
+	if !s.Valid {
+		return nil
+	}
+	return &s.String
+}
+
+func (f FlatTransfer) summary() models.TransferSummary {
+	return models.TransferSummary{
+		ID: f.ID,
+		FromLocation: models.Location{
+			ID:       f.FromLocationID,
+			Name:     f.FromLocationName,
+			Pavilion: nullableString(f.FromLocationPavilion),
+		},
+		ToLocation: models.Location{
+			ID:       f.ToLocationID,
+			Name:     f.ToLocationName,
+			Pavilion: nullableString(f.ToLocationPavilion),
+		},
+		TransferDate: f.TransferDate,
+		Status:       f.Status,
+	}
+}
+
+// summaries maps rows to API summaries; an empty result is [] rather than null.
+func summaries(rows []FlatTransfer) []models.TransferSummary {
+	out := make([]models.TransferSummary, 0, len(rows))
+	for _, f := range rows {
+		out = append(out, f.summary())
+	}
+	return out
+}
+
 func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, error) {
 	var transfer FlatTransfer
 
@@ -121,9 +155,12 @@ func (r *transferRepository) GetTransferRow(transferID int) (*FlatTransfer, erro
 		).
 		Where(goqu.Ex{"t.id": transferID})
 
-	_, err := query.Executor().ScanStruct(&transfer)
+	found, err := query.Executor().ScanStruct(&transfer)
 	if err != nil {
 		return nil, fmt.Errorf("error executing SQL statement: %w", err)
+	}
+	if !found {
+		return nil, sql.ErrNoRows
 	}
 
 	return &transfer, nil
@@ -367,13 +404,14 @@ func (r *transferRepository) InsertTransferUsers(tx *goqu.TxDatabase, transferID
 	return nil
 }
 
-func (r *transferRepository) GetTransferUsers(transferID int) ([]models.User, error) {
-	var users []models.User
+func (r *transferRepository) GetTransferUsers(transferID int) ([]models.TransferParticipant, error) {
+	users := make([]models.TransferParticipant, 0)
 
 	query := r.Repo.GoquDBWrapper.
 		Select(
 			"users.id",
 			"users.username",
+			"users.fullname",
 		).
 		From("transfer_users").
 		Join(goqu.T("users"), goqu.On(goqu.Ex{"transfer_users.user_id": goqu.I("users.id")})).

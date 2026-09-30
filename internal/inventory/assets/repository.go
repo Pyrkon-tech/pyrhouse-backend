@@ -340,10 +340,9 @@ func (r *AssetsRepository) GetTransferAssets(transferID int) (*[]models.Asset, e
 		return nil, fmt.Errorf("error executing SQL statement for assets: %w", err)
 	}
 
-	var assets []models.Asset
+	assets := make([]models.Asset, 0, len(flatAssets))
 	for _, flatAsset := range flatAssets {
-		asset := flatAsset.TransformToAsset()
-		assets = append(assets, asset)
+		assets = append(assets, flatAsset.TransformToAsset())
 	}
 
 	return &assets, nil

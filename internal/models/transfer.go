@@ -4,16 +4,29 @@ import (
 	"time"
 )
 
+// TransferSummary is a transfer without its items, as returned by list endpoints.
+type TransferSummary struct {
+	ID           int       `json:"id"`
+	FromLocation Location  `json:"from_location"`
+	ToLocation   Location  `json:"to_location"`
+	TransferDate time.Time `json:"transfer_date"`
+	Status       string    `json:"status"`
+}
+
+// Transfer is the full transfer (GET /transfers/:id); every collection is sent, empty or not.
 type Transfer struct {
-	ID           int      `json:"id"`
-	FromLocation Location `json:"from_location"`
-	ToLocation   Location `json:"to_location"`
-	AssetsCollection     []Asset           `json:"assets,omitempty"`
-	StockItemsCollection []StockItem       `json:"stock_items,omitempty"`
-	TransferDate         time.Time         `json:"transfer_date"`
-	Status               string            `json:"status"`
-	Users                []User            `json:"users,omitempty"`
-	DeliveryLocation     *DeliveryLocation `json:"delivery_location,omitempty"`
+	TransferSummary
+	AssetsCollection     []Asset               `json:"assets"`
+	StockItemsCollection []StockItem           `json:"stock_items"`
+	Users                []TransferParticipant `json:"users"`
+	DeliveryLocation     *DeliveryLocation     `json:"delivery_location"`
+}
+
+// TransferParticipant is a user assigned to carry out a transfer.
+type TransferParticipant struct {
+	ID       int     `json:"id" db:"id"`
+	Username string  `json:"username" db:"username"`
+	Fullname *string `json:"fullname" db:"fullname"`
 }
 
 type DeliveryLocation struct {

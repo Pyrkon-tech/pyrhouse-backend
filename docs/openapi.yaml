@@ -742,9 +742,22 @@ paths:
     get:
       tags:
         - transfer
-      summary: List all transfers
-      description: Returns a list of all transfers in the system.
+      summary: List transfers
+      description: Returns transfers (without their items), optionally filtered.
       operationId: listTransfers
+      parameters:
+        - in: query
+          name: from_location_id
+          schema:
+            type: integer
+        - in: query
+          name: to_location_id
+          schema:
+            type: integer
+        - in: query
+          name: status
+          schema:
+            $ref: "#/components/schemas/TransferStatus"
       responses:
         "200":
           description: List of transfers
@@ -753,14 +766,16 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Transfer"
+                  $ref: "#/components/schemas/TransferSummary"
         "500":
           $ref: "#/components/responses/DefaultError"
     post:
       tags:
         - transfer
       summary: Create a new transfer
-      description: Creates a new transfer of assets and stock items between locations.
+      description: >-
+        Creates a new transfer of assets and stock items between locations. At least one of `assets` / `stocks`
+        is required; source and destination must differ.
       operationId: createTransfer
       requestBody:
         required: true
@@ -780,30 +795,40 @@ paths:
                   type: integer
                   example: 2
                   description: Destination location ID
-                asset_item_collection:
+                assets:
                   type: array
-                  description: Collection of serialized assets to transfer
+                  description: Serialized assets to transfer
                   items:
                     type: object
+                    required: [id]
                     properties:
                       id:
                         type: integer
-                        format: int64
                         description: Asset ID
-                stock_item_collection:
+                stocks:
                   type: array
-                  description: Collection of stock items to transfer
+                  description: Stock items to transfer
                   items:
                     type: object
+                    required: [id, quantity]
                     properties:
                       id:
                         type: integer
-                        format: int64
                         description: Stock item ID
                       quantity:
                         type: integer
-                        format: int32
+                        minimum: 1
                         description: Quantity to transfer
+                users:
+                  type: array
+                  description: Users carrying out the transfer
+                  items:
+                    type: object
+                    required: [id]
+                    properties:
+                      id:
+                        type: integer
+                        description: User ID
       responses:
         "201":
           description: Transfer created
@@ -861,6 +886,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "404":
+          description: Transfer not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/DefaultError"
 
@@ -884,17 +915,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  transfer_id:
-                    type: integer
-                    example: 3
-                  status:
-                    type: string
-                    example: completed
-                  message:
-                    type: string
-                    example: Transfer confirmed successfully
+                $ref: "#/components/schemas/Message"
         "500":
           description: Unable to confirm transfer
           content:
@@ -907,7 +928,9 @@ paths:
       tags:
         - transfer
       summary: Cancel a transfer
-      description: Cancels a transfer and restores all assets and stock items to their original location.
+      description: >-
+        Cancels an in-transit transfer and restores all assets and stock items to their original location.
+        400 when the transfer is already completed or cancelled.
       operationId: cancelTransfer
       parameters:
         - in: path
@@ -922,17 +945,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  transfer_id:
-                    type: integer
-                    example: 3
-                  status:
-                    type: string
-                    example: cancelled
-                  message:
-                    type: string
-                    example: Transfer cancelled successfully
+                $ref: "#/components/schemas/Message"
         "500":
           description: Unable to cancel transfer
           content:
@@ -1106,13 +1119,85 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: Delivery location updated successfully
+                $ref: "#/components/schemas/Message"
         "400":
           description: Invalid request (only in-transit or completed transfers can be updated)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /transfers/{transferID}/users:
+    put:
+      tags:
+        - transfer
+      summary: Replace transfer users
+      description: Sets the users carrying out the transfer (replaces the previous list).
+      operationId: updateTransferUsers
+      parameters:
+        - in: path
+          name: transferID
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [users]
+              properties:
+                users:
+                  type: array
+                  description: User IDs
+                  items:
+                    type: integer
+      responses:
+        "200":
+          description: Users updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /transfers/users/{userID}:
+    get:
+      tags:
+        - transfer
+      summary: Transfers of a user
+      description: Transfers the user is assigned to, in the given status. Own transfers, or any user's for moderator+.
+      operationId: listUserTransfers
+      parameters:
+        - in: path
+          name: userID
+          schema:
+            type: integer
+          required: true
+        - in: query
+          name: status
+          required: true
+          schema:
+            $ref: "#/components/schemas/TransferStatus"
+      responses:
+        "200":
+          description: Transfers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransferSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Another user's transfers without moderator role
           content:
             application/json:
               schema:
@@ -4443,36 +4528,78 @@ components:
         details:
           type: [string, "null"]
 
-    Transfer:
+    Message:
       type: object
+      properties:
+        message:
+          type: string
+
+    TransferStatus:
+      type: string
+      enum: [in_transit, completed, cancelled]
+
+    TransferSummary:
+      type: object
+      description: A transfer without its items (list endpoints)
       properties:
         id:
           type: integer
-          format: int64
         from_location:
           $ref: "#/components/schemas/Location"
         to_location:
           $ref: "#/components/schemas/Location"
-        assets_collection:
-          type: array
-          description: Serialized assets in the transfer
-          items:
-            $ref: "#/components/schemas/Item"
-        stock_items_collection:
-          type: array
-          description: Stock items in the transfer
-          items:
-            $ref: "#/components/schemas/Stock"
         transfer_date:
           type: string
           format: date-time
         status:
+          $ref: "#/components/schemas/TransferStatus"
+
+    TransferParticipant:
+      type: object
+      description: A user assigned to carry out a transfer
+      properties:
+        id:
+          type: integer
+        username:
           type: string
-          description: Transfer status
-          enum:
-            - in_transit
-            - completed
-            - cancelled
+        fullname:
+          type: [string, "null"]
+
+    DeliveryLocation:
+      type: object
+      properties:
+        lat:
+          type: number
+        lng:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    Transfer:
+      allOf:
+        - $ref: "#/components/schemas/TransferSummary"
+        - type: object
+          properties:
+            assets:
+              type: array
+              description: Serialized assets in the transfer
+              items:
+                $ref: "#/components/schemas/Item"
+            stock_items:
+              type: array
+              description: Stock items in the transfer (id is the transfer line, location the destination)
+              items:
+                $ref: "#/components/schemas/Stock"
+            users:
+              type: array
+              items:
+                $ref: "#/components/schemas/TransferParticipant"
+            delivery_location:
+              oneOf:
+                - $ref: "#/components/schemas/DeliveryLocation"
+                - type: "null"
+              description: Last reported GPS position, null until one is reported
 
     User:
       type: object

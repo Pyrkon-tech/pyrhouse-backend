@@ -300,6 +300,21 @@ func TestTransfer_GetSingle(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &tr))
 		assert.Equal(t, transfer.ID, tr.ID)
 		assert.Equal(t, "in_transit", tr.Status)
+
+		// The contract: collections are always arrays and unset fields are null, never missing.
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
+		assert.JSONEq(t, `[]`, string(raw["stock_items"]))
+		assert.NotEqual(t, `null`, string(raw["assets"]))
+		assert.JSONEq(t, `[]`, string(raw["users"]))
+		assert.JSONEq(t, `null`, string(raw["delivery_location"]))
+	})
+
+	t.Run("unknown id returns 404", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/transfers/999999999", nil)
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
 	t.Run("invalid id returns 400", func(t *testing.T) {
@@ -853,6 +868,24 @@ func TestTransfer_GetByUserAndStatus(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+		// Same summary shape as GET /transfers (snake_case, nested locations), not the raw DB row.
+		var got []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+		require.Len(t, got, 1)
+		assert.EqualValues(t, transfer.ID, got[0]["id"])
+		assert.Equal(t, "in_transit", got[0]["status"])
+		from, ok := got[0]["from_location"].(map[string]any)
+		require.True(t, ok, "from_location object: %s", w.Body.String())
+		assert.Equal(t, "__TEST__TransferFrom", from["name"])
+		assert.Nil(t, from["pavilion"])
+	})
+
+	t.Run("user without transfers gets []", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/transfers/users/%d?status=completed", fx.userID), nil)
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `[]`, w.Body.String())
 	})
 
 	t.Run("invalid status returns 400", func(t *testing.T) {

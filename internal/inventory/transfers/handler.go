@@ -1,6 +1,8 @@
 package transfers
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -63,6 +65,10 @@ func (h *TransferHandler) GetTransfer(c *gin.Context) {
 	}
 
 	transfer, err := h.Service.GetTransfer(transferID)
+	if errors.Is(err, sql.ErrNoRows) {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Transfer not found"})
+		return
+	}
 	if err != nil {
 		log.Println("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to get transfer", "details": err.Error()})
@@ -84,11 +90,6 @@ func (h *TransferHandler) RetrieveTransferList(c *gin.Context) {
 	if err != nil {
 		log.Println("Error executing SQL statement: ", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unable to get transfer", "details": err.Error()})
-		return
-	}
-
-	if len(*transfers) == 0 {
-		c.JSON(http.StatusOK, []models.Transfer{})
 		return
 	}
 
@@ -249,11 +250,6 @@ func (h *TransferHandler) GetTransfersByUserAndStatus(c *gin.Context) {
 	if err != nil {
 		log.Printf("Unable to get transfers: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nie można pobrać transferów", "details": err.Error()})
-		return
-	}
-
-	if len(transfers) == 0 {
-		c.JSON(http.StatusOK, []models.Transfer{})
 		return
 	}
 

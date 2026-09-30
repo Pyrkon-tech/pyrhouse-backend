@@ -22,13 +22,13 @@ type TransferStatusCallback interface {
 }
 
 type TransferService struct {
-	r                *repository.Repository
-	tr               TransferRepository
-	ar               *assets.AssetsRepository
-	stockRepo        *stocks.StockRepository
-	ur               users.UserRepository
-	il               *inventorylog.InventoryLog
-	statusCallbacks  []TransferStatusCallback
+	r               *repository.Repository
+	tr              TransferRepository
+	ar              *assets.AssetsRepository
+	stockRepo       *stocks.StockRepository
+	ur              users.UserRepository
+	il              *inventorylog.InventoryLog
+	statusCallbacks []TransferStatusCallback
 }
 
 type ValidationError struct {
@@ -117,31 +117,7 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 		return nil, err
 	}
 
-	var pavilionFrom *string
-	if flatTransfer.FromLocationPavilion.Valid {
-		pavilionFrom = &flatTransfer.FromLocationPavilion.String
-	}
-
-	var pavilionTo *string
-	if flatTransfer.ToLocationPavilion.Valid {
-		pavilionTo = &flatTransfer.ToLocationPavilion.String
-	}
-
-	transfer := &models.Transfer{
-		ID: flatTransfer.ID,
-		FromLocation: models.Location{
-			ID:       flatTransfer.FromLocationID,
-			Name:     flatTransfer.FromLocationName,
-			Pavilion: pavilionFrom,
-		},
-		ToLocation: models.Location{
-			ID:       flatTransfer.ToLocationID,
-			Name:     flatTransfer.ToLocationName,
-			Pavilion: pavilionTo,
-		},
-		Status:       flatTransfer.Status,
-		TransferDate: flatTransfer.TransferDate,
-	}
+	transfer := &models.Transfer{TransferSummary: flatTransfer.summary()}
 
 	if flatTransfer.DeliveryLatitude != nil && flatTransfer.DeliveryLongitude != nil && flatTransfer.DeliveryTimestamp != nil {
 		transfer.DeliveryLocation = &models.DeliveryLocation{
@@ -175,40 +151,13 @@ func (s *TransferService) GetTransfer(transferID int) (*models.Transfer, error) 
 	return transfer, nil
 }
 
-func (s *TransferService) GetTransfers(req models.RetrieveTransferListQuery) (*[]models.Transfer, error) {
-	log.Printf("GetTransfers called with query: %+v", req)
-
-	conditions := s.buildTransferConditions(req)
-	log.Printf("Built conditions: %+v", conditions)
-
-	flatTransfers, err := s.tr.GetTransferRows(conditions)
+func (s *TransferService) GetTransfers(req models.RetrieveTransferListQuery) ([]models.TransferSummary, error) {
+	flatTransfers, err := s.tr.GetTransferRows(s.buildTransferConditions(req))
 	if err != nil {
-		log.Printf("Error getting transfer rows: %v", err)
 		return nil, err
 	}
 
-	var transfers []models.Transfer
-
-	for _, flatTransfer := range *flatTransfers {
-		transfers = append(transfers, models.Transfer{
-			ID: flatTransfer.ID,
-			FromLocation: models.Location{
-				ID:       flatTransfer.FromLocationID,
-				Name:     flatTransfer.FromLocationName,
-				Pavilion: &flatTransfer.FromLocationPavilion.String,
-			},
-			ToLocation: models.Location{
-				ID:       flatTransfer.ToLocationID,
-				Name:     flatTransfer.ToLocationName,
-				Pavilion: &flatTransfer.ToLocationPavilion.String,
-			},
-			TransferDate: flatTransfer.TransferDate,
-			Status:       flatTransfer.Status,
-		})
-	}
-
-	log.Printf("Returning %d transfers", len(transfers))
-	return &transfers, nil
+	return summaries(*flatTransfers), nil
 }
 
 func (s *TransferService) RemoveStockItemFromTransfer(transferReq models.RemoveStockItemFromTransferRequest) error {
@@ -433,13 +382,13 @@ func (s *TransferService) CancelTransfer(transfer *models.Transfer) error {
 	return nil
 }
 
-func (s *TransferService) GetTransfersByUserAndStatus(userID int, status string) ([]FlatTransfer, error) {
+func (s *TransferService) GetTransfersByUserAndStatus(userID int, status string) ([]models.TransferSummary, error) {
 	transfers, err := s.tr.GetTransfersByUserAndStatus(userID, status)
 	if err != nil {
 		return nil, fmt.Errorf("error getting transfers by user and status: %w", err)
 	}
 
-	return transfers, nil
+	return summaries(transfers), nil
 }
 
 func (s *TransferService) UpdateDeliveryLocation(transferID int, latitude float64, longitude float64, timestamp time.Time) error {
