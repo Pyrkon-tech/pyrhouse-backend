@@ -13,7 +13,6 @@ const (
 	defaultShiftHours  = 4
 )
 
-
 // volState tracks assignment state per volunteer during solving.
 type volState struct {
 	assignedHours float64

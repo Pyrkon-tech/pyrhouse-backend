@@ -39,17 +39,17 @@ type Schedule struct {
 }
 
 type Volunteer struct {
-	ID                int       `json:"id" db:"id"`
-	ScheduleID        int       `json:"schedule_id" db:"schedule_id"`
-	UserID            *int      `json:"user_id" db:"user_id"`
-	Nickname          string    `json:"nickname" db:"nickname"`
-	City              *string   `json:"city" db:"city"`
-	TargetHours       int       `json:"target_hours" db:"target_hours"`
-	AvailableFrom     time.Time `json:"available_from" db:"available_from"`
-	AvailableTo       time.Time `json:"available_to" db:"available_to"`
-	Notes             *string   `json:"notes" db:"notes"`
-	AssignedHours     float64   `json:"assigned_hours" db:"assigned_hours"`
-	DiscordConfirmed  *string   `json:"discord_confirmed" db:"discord_confirmed"`
+	ID               int       `json:"id" db:"id"`
+	ScheduleID       int       `json:"schedule_id" db:"schedule_id"`
+	UserID           *int      `json:"user_id" db:"user_id"`
+	Nickname         string    `json:"nickname" db:"nickname"`
+	City             *string   `json:"city" db:"city"`
+	TargetHours      int       `json:"target_hours" db:"target_hours"`
+	AvailableFrom    time.Time `json:"available_from" db:"available_from"`
+	AvailableTo      time.Time `json:"available_to" db:"available_to"`
+	Notes            *string   `json:"notes" db:"notes"`
+	AssignedHours    float64   `json:"assigned_hours" db:"assigned_hours"`
+	DiscordConfirmed *string   `json:"discord_confirmed" db:"discord_confirmed"`
 }
 
 type Slot struct {
@@ -174,8 +174,8 @@ type SaveDraftRequest struct {
 }
 
 type SaveDraftResponse struct {
-	Schedule     ScheduleDetail  `json:"schedule"`
-	CreatedSlots []TempIDMapping `json:"created_slots"`
+	Schedule     ScheduleDetail    `json:"schedule"`
+	CreatedSlots []TempIDMapping   `json:"created_slots"`
 	Validation   *ValidationResult `json:"validation"`
 }
 
@@ -189,7 +189,7 @@ type TempIDMapping struct {
 // SlotVolunteer represents a volunteer assigned to a slot.
 // ID is the assignment ID (used for DELETE and move/swap operations).
 type SlotVolunteer struct {
-	ID          int    `json:"id"`           // assignment_id
+	ID          int    `json:"id"` // assignment_id
 	VolunteerID int    `json:"volunteer_id"`
 	Nickname    string `json:"nickname"`
 }
@@ -287,7 +287,7 @@ type UserInfo struct {
 type DayWindow struct {
 	ID          int    `json:"id" db:"id"`
 	ScheduleID  int    `json:"schedule_id" db:"schedule_id"`
-	Date        string `json:"date" db:"date"`         // "2025-06-18"
+	Date        string `json:"date" db:"date"`                 // "2025-06-18"
 	WindowStart string `json:"window_start" db:"window_start"` // "10:00"
 	WindowEnd   string `json:"window_end" db:"window_end"`     // "18:00"
 }

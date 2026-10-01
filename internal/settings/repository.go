@@ -66,7 +66,7 @@ func (r *Repository) GetByPrefix(prefix string) ([]AppSettings, error) {
 		"key", "value", "description", "updated_at",
 	).
 		From("app_settings").
-		Where(goqu.C("key").Like(prefix+"%")).
+		Where(goqu.C("key").Like(prefix + "%")).
 		Order(goqu.C("key").Asc()).
 		Executor().ScanStructs(&settings)
 	if err != nil {

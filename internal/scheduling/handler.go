@@ -312,7 +312,6 @@ func (h *Handler) validate(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-
 func (h *Handler) export(c *gin.Context) {
 	csv, schedule, err := h.service.ExportCSV()
 	if err != nil {

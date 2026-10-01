@@ -156,14 +156,14 @@ func TestSolve_RespectsMinBreak(t *testing.T) {
 	// Slot A then slot B with only 4h gap (< 8h required)
 	slotA := Slot{
 		ID: 1, ScheduleID: 1, SlotType: SlotTypeFestival,
-		StartTime: time.Date(2025, 6, 20, 8, 0, 0, 0, time.UTC),
-		EndTime:   time.Date(2025, 6, 20, 10, 0, 0, 0, time.UTC),
+		StartTime:   time.Date(2025, 6, 20, 8, 0, 0, 0, time.UTC),
+		EndTime:     time.Date(2025, 6, 20, 10, 0, 0, 0, time.UTC),
 		CreditHours: 2, Capacity: 1,
 	}
 	slotB := Slot{
 		ID: 2, ScheduleID: 1, SlotType: SlotTypeFestival,
-		StartTime: time.Date(2025, 6, 20, 14, 0, 0, 0, time.UTC),
-		EndTime:   time.Date(2025, 6, 20, 16, 0, 0, 0, time.UTC),
+		StartTime:   time.Date(2025, 6, 20, 14, 0, 0, 0, time.UTC),
+		EndTime:     time.Date(2025, 6, 20, 16, 0, 0, 0, time.UTC),
 		CreditHours: 2, Capacity: 1,
 	}
 

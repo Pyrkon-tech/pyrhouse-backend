@@ -8,9 +8,9 @@ import (
 
 // StockService reprezentuje serwis dla operacji na elementach magazynowych
 type StockService struct {
-	repository    *repository.Repository
-	stockRepo     *StockRepository
-	auditLog      *auditlog.Auditlog
+	repository     *repository.Repository
+	stockRepo      *StockRepository
+	auditLog       *auditlog.Auditlog
 	OnStockChanged func(locationID int, action string) // optional — wired by DI container
 }
 

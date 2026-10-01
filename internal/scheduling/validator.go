@@ -123,7 +123,6 @@ func Validate(slots []Slot, volunteers []Volunteer, assignments []Assignment) *V
 			})
 		}
 
-
 	}
 
 	// Set Valid based on error-severity issues

@@ -191,14 +191,14 @@ func (r *Repository) InsertVolunteers(scheduleID int, volunteers []Volunteer) er
 	rows := make([]goqu.Record, len(volunteers))
 	for i, v := range volunteers {
 		rows[i] = goqu.Record{
-			"schedule_id":      scheduleID,
-			"user_id":          v.UserID,
-			"nickname":         v.Nickname,
-			"city":             v.City,
-			"target_hours":     v.TargetHours,
-			"available_from":   v.AvailableFrom,
-			"available_to":     v.AvailableTo,
-			"notes":            v.Notes,
+			"schedule_id":       scheduleID,
+			"user_id":           v.UserID,
+			"nickname":          v.Nickname,
+			"city":              v.City,
+			"target_hours":      v.TargetHours,
+			"available_from":    v.AvailableFrom,
+			"available_to":      v.AvailableTo,
+			"notes":             v.Notes,
 			"discord_confirmed": v.DiscordConfirmed,
 		}
 	}
