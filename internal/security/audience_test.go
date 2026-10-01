@@ -58,7 +58,7 @@ func TestWarehouseAudience(t *testing.T) {
 	}{
 		{"warehouse audience", withAud(AudienceWarehouse), true},
 		{"warehouse audience as list", withAud([]string{AudienceWarehouse}), true},
-		{"legacy token without aud", baseClaims(), true},
+		{"token without aud (pre-2026-09-29)", baseClaims(), false},
 		{"shop audience", withAud(AudienceShop), false},
 		{"shop audience in list with warehouse", withAud([]string{AudienceWarehouse, AudienceShop}), false},
 		{"unknown audience", withAud("something-else"), false},

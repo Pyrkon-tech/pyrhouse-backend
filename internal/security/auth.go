@@ -102,7 +102,7 @@ func ParseShopToken(tokenString string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err := checkExclusiveAudience(token, AudienceShop, false); err != nil {
+	if err := checkExclusiveAudience(token, AudienceShop); err != nil {
 		return 0, err
 	}
 	sub, err := token.Claims.GetSubject()
