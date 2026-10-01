@@ -538,7 +538,9 @@ const orderSelect = `
 	       dw.id, dw.kind, dw.starts_at, dw.ends_at, dw.label, dw.active,
 	       rw.id, rw.kind, rw.starts_at, rw.ends_at, rw.label, rw.active,
 	       to_char(o.return_date, 'YYYY-MM-DD'), o.notes, o.status, o.status_reason, o.decided_by, o.decided_at,
-	       o.version, o.created_at, o.updated_at, q.quest_id, q.status
+	       o.version, o.created_at, o.updated_at, q.quest_id, q.status,
+	       EXISTS (SELECT 1 FROM shop_order_events e WHERE e.order_id = o.id AND e.actor_kind = 'user'
+	               AND e.type IN ('items_changed', 'location_changed'))
 	FROM shop_orders o
 	JOIN shop_accounts a ON a.id = o.account_id
 	JOIN locations l ON l.id = o.location_id
@@ -554,7 +556,7 @@ func scanOrder(row interface{ Scan(...any) error }) (*Order, error) {
 		&o.Delivery.ID, &o.Delivery.Kind, &o.Delivery.StartsAt, &o.Delivery.EndsAt, &o.Delivery.Label, &o.Delivery.Active,
 		&o.Return.ID, &o.Return.Kind, &o.Return.StartsAt, &o.Return.EndsAt, &o.Return.Label, &o.Return.Active,
 		&o.ReturnDate, &o.Notes, &o.Status, &o.StatusReason, &o.decidedBy, &o.DecidedAt,
-		&o.Version, &o.CreatedAt, &o.UpdatedAt, &o.QuestID, &o.QuestStatus)
+		&o.Version, &o.CreatedAt, &o.UpdatedAt, &o.QuestID, &o.QuestStatus, &o.ChangedByWarehouse)
 	return &o, err
 }
 

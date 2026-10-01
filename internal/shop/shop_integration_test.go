@@ -440,12 +440,14 @@ func TestShop_OrderLifecycle(t *testing.T) {
 	// Confirmed orders are locked for the organizer…
 	locked := e.do(http.MethodPost, path+"/cancel", token, map[string]any{"version": 3})
 	assert.Equal(t, http.StatusConflict, locked.Code)
+	assert.Equal(t, false, e.do(http.MethodGet, path, token, nil).Body["changed_by_warehouse"])
 	// …but the warehouse can still move them, and the quest follows.
 	moved := e.do(http.MethodPatch, adminPath, e.modToken, map[string]any{"version": 3, "location_id": e.location2})
 	require.Equal(t, http.StatusOK, moved.Code, string(moved.Raw))
 	require.NoError(t, e.db.QueryRow(`SELECT location_id, destination_location FROM equipment_request_quests WHERE quest_id = $1`, questID).Scan(&locID, &dest))
 	assert.Equal(t, e.location2, locID)
 	assert.Equal(t, "__TEST__ShopStage", dest)
+	assert.Equal(t, true, e.do(http.MethodGet, path, token, nil).Body["changed_by_warehouse"], "organizer sees the warehouse change")
 	itemsAfterConfirm := e.do(http.MethodPatch, adminPath, e.modToken, map[string]any{"version": 4, "items": []map[string]any{{"product_id": e.products[1], "quantity": 1}}})
 	assert.Equal(t, http.StatusConflict, itemsAfterConfirm.Code)
 

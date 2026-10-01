@@ -6198,6 +6198,9 @@ components:
           type: [string, "null"]
           enum: [pending, in_progress, completed, cancelled, null]
           description: Fulfillment after confirmation, derived from the quest
+        changed_by_warehouse:
+          type: boolean
+          description: The warehouse changed the items or the location after submission (see the order events)
         created_at:
           type: string
           format: date-time

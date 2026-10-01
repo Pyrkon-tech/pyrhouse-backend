@@ -108,31 +108,33 @@ type OrderItem struct {
 }
 
 type Order struct {
-	ID            int         `json:"id"`
-	Number        string      `json:"number"`
-	AccountID     int         `json:"account_id"`
-	AccountEmail  string      `json:"account_email"`
-	AccountName   *string     `json:"account_name"`
-	Location      Location    `json:"location"`
-	LocationNote  *string     `json:"location_note"`
-	ContactName   string      `json:"contact_name"`
-	BudgetOwner   *string     `json:"budget_owner"`
-	Delivery      Window      `json:"delivery_window"`
-	Return        Window      `json:"return_window"`
-	ReturnDate    *string     `json:"return_date"` // YYYY-MM-DD
-	Notes         *string     `json:"notes"`
-	Status        string      `json:"status"`
-	StatusReason  *string     `json:"status_reason"`
-	DecidedAt     *time.Time  `json:"decided_at"`
-	Version       int         `json:"version"`
-	Items         []OrderItem `json:"items"`
-	Total         *float64    `json:"total"` // sum of priced items; nil when prices are hidden
-	QuestID       *string     `json:"quest_id"`
-	QuestStatus   *string     `json:"quest_status"` // fulfillment after confirmation, derived from the quest
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
-	decidedBy     *int
-	idempotentHit bool
+	ID           int         `json:"id"`
+	Number       string      `json:"number"`
+	AccountID    int         `json:"account_id"`
+	AccountEmail string      `json:"account_email"`
+	AccountName  *string     `json:"account_name"`
+	Location     Location    `json:"location"`
+	LocationNote *string     `json:"location_note"`
+	ContactName  string      `json:"contact_name"`
+	BudgetOwner  *string     `json:"budget_owner"`
+	Delivery     Window      `json:"delivery_window"`
+	Return       Window      `json:"return_window"`
+	ReturnDate   *string     `json:"return_date"` // YYYY-MM-DD
+	Notes        *string     `json:"notes"`
+	Status       string      `json:"status"`
+	StatusReason *string     `json:"status_reason"`
+	DecidedAt    *time.Time  `json:"decided_at"`
+	Version      int         `json:"version"`
+	Items        []OrderItem `json:"items"`
+	Total        *float64    `json:"total"` // sum of priced items; nil when prices are hidden
+	QuestID      *string     `json:"quest_id"`
+	QuestStatus  *string     `json:"quest_status"` // fulfillment after confirmation, derived from the quest
+	// The warehouse changed the items or the location after the order was submitted
+	ChangedByWarehouse bool      `json:"changed_by_warehouse"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+	decidedBy          *int
+	idempotentHit      bool
 }
 
 type Event struct {
