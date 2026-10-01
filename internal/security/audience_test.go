@@ -187,7 +187,7 @@ func TestParseShopToken_Rejects(t *testing.T) {
 		token string
 	}{
 		{"warehouse token", warehouseToken},
-		{"legacy token without aud", signTestToken(t, baseClaims())},
+		{"warehouse token without aud", signTestToken(t, baseClaims())},
 		{"shop token without aud", mutate(func(c jwt.MapClaims) { delete(c, "aud") })},
 		{"both audiences", mutate(func(c jwt.MapClaims) { c["aud"] = []string{AudienceShop, AudienceWarehouse} })},
 		{"expired", mutate(func(c jwt.MapClaims) { c["exp"] = time.Now().Add(-time.Minute).Unix() })},
