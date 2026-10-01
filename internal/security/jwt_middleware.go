@@ -127,30 +127,6 @@ func IsOwnerOrAllowed(c *gin.Context, resourceUserID int, requiredRole string) b
 	return IsAllowed(c, requiredRole)
 }
 
-func RequireRole(requiredRole roles.Role) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		role, exists := c.Get("role")
-		if !exists {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
-			return
-		}
-
-		userRole, ok := role.(string)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid role format"})
-			return
-		}
-
-		roleType := roles.Role(userRole)
-		if !roleType.HasPermission(requiredRole) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Forbidden: insufficient permissions"})
-			return
-		}
-
-		c.Next()
-	}
-}
-
 func getTokenFromContext(c *gin.Context) (*jwt.Token, error) {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {

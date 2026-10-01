@@ -189,10 +189,6 @@ func (s *AssetService) FindByPyrCode(pyrCode string) (*models.Asset, error) {
 	return s.assetsRepo.FindItemByPyrCode(pyrCode)
 }
 
-func (s *AssetService) GetAsset(id int) (*models.Asset, error) {
-	return s.assetsRepo.GetAsset(id)
-}
-
 func (s *AssetService) CreateAsset(req models.ItemRequest) (*models.Asset, error) {
 	asset, err := s.assetsRepo.PersistItem(req)
 	if err != nil {

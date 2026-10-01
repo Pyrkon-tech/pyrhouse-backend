@@ -169,28 +169,6 @@ func (r *Repository) Update(_ context.Context, id int, req UpdateRequest) (*Orig
 	return r.GetByID(context.Background(), id)
 }
 
-func (r *Repository) Deactivate(_ context.Context, id int) error {
-	query := r.repo.GoquDBWrapper.
-		Update("origins").
-		Set(goqu.Record{"active": false}).
-		Where(goqu.Ex{"id": id})
-
-	result, err := query.Executor().Exec()
-	if err != nil {
-		return fmt.Errorf("failed to deactivate origin: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		return fmt.Errorf("origin not found")
-	}
-
-	return nil
-}
-
 func (r *Repository) HasAssignedEquipment(_ context.Context, id int) (bool, error) {
 	var itemCount int
 	found, err := r.repo.GoquDBWrapper.

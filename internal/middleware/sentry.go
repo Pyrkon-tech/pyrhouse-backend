@@ -59,11 +59,6 @@ func InitSentry(opts SentryOptions) error {
 	return nil
 }
 
-// SentryEnabled reports whether error reporting is active.
-func SentryEnabled() bool {
-	return sentryEnabled
-}
-
 // FlushSentry waits for queued events to be delivered. Call it before exiting.
 func FlushSentry() {
 	if sentryEnabled {

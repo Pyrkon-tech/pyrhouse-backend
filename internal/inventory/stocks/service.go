@@ -73,16 +73,6 @@ func (s *StockService) UpdateStockItem(req *models.PatchStockItemRequest) (*mode
 	return updatedStock, nil
 }
 
-// GetStockItems pobiera listę elementów magazynowych
-func (s *StockService) GetStockItems() (*[]models.StockItem, error) {
-	return s.stockRepo.GetStockItems()
-}
-
-// GetStockItemByID pobiera element magazynowy po ID
-func (s *StockService) GetStockItemByID(id int) (*models.StockItem, error) {
-	return s.stockRepo.GetStockItem(id)
-}
-
 // GetStockItemsBy pobiera elementy magazynowe spełniające warunki
 func (s *StockService) GetStockItemsBy(conditions repository.QueryBuilder) (*[]models.StockItem, error) {
 	return s.stockRepo.GetStockItemsBy(conditions)

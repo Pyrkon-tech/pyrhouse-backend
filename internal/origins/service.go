@@ -47,14 +47,6 @@ func (s *Service) ResolveOrigin(ctx context.Context, value string) (*OriginResol
 	return nil, fmt.Errorf("invalid origin: %s", value)
 }
 
-// FormatOriginDisplay reconstructs the display string from origin slug + suffix.
-func FormatOriginDisplay(slug string, suffix *string) string {
-	if suffix != nil && *suffix != "" {
-		return slug + "-" + *suffix
-	}
-	return slug
-}
-
 func normalizeOrigin(value string) string {
 	return strings.Replace(strings.ToLower(strings.TrimSpace(value)), " ", "-", -1)
 }

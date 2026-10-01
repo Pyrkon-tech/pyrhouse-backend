@@ -47,18 +47,3 @@ type Logger struct {
 	logger  *zap.Logger
 	verbose bool
 }
-
-func (l *Logger) Printf(format string, v ...any) {
-	l.logger.Sugar().Infof("DB Migration: "+format, v...)
-}
-
-func (l *Logger) Verbose() bool {
-	return l.verbose
-}
-
-func NewLogger(logger *zap.Logger, verbose bool) *Logger {
-	return &Logger{
-		logger:  logger,
-		verbose: verbose,
-	}
-}

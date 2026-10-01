@@ -70,10 +70,6 @@ func (s *ItemCategoryService) DeleteCategory(categoryID string) error {
 	return s.repository.DeleteItemCategoryByID(categoryID)
 }
 
-func (s *ItemCategoryService) GetCategoryType(categoryID int) (string, error) {
-	return s.repository.GetCategoryType(categoryID)
-}
-
 func (s *ItemCategoryService) generateUniquePyrID(category *models.ItemCategory) error {
 	if category.PyrID == "" {
 		category.GeneratePyrID()

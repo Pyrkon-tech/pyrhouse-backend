@@ -1,7 +1,6 @@
 package scheduling
 
 import (
-	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -308,15 +307,4 @@ func polishWeekday(w time.Weekday) string {
 		time.Sunday:    "Niedziela",
 	}
 	return days[w]
-}
-
-func formatSlotLabel(start, end time.Time) string {
-	dayAbbr := map[time.Weekday]string{
-		time.Monday: "Pn", time.Tuesday: "Wt", time.Wednesday: "Śr",
-		time.Thursday: "Czw", time.Friday: "Pt", time.Saturday: "Sb", time.Sunday: "Nd",
-	}
-	return fmt.Sprintf("%s %02d:%02d-%02d:%02d",
-		dayAbbr[start.Weekday()],
-		start.Hour(), start.Minute(),
-		end.Hour(), end.Minute())
 }

@@ -175,7 +175,7 @@ func TestSentryDisabledWithoutDSN(t *testing.T) {
 	require.NoError(t, InitSentry(SentryOptions{}))
 	t.Cleanup(func() { sentryEnabled = false })
 
-	assert.False(t, SentryEnabled())
+	assert.False(t, sentryEnabled)
 	assert.Nil(t, SentryHandlers(), "no Sentry middleware should be registered without a DSN")
 
 	// The helpers must stay callable and silent when reporting is off.

@@ -117,10 +117,6 @@ func (d *DiscordOAuth) GetAvatarURL(user *DiscordUser) string {
 	return fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", user.ID, *user.Avatar)
 }
 
-func (d *DiscordOAuth) IsConfigured() bool {
-	return d.config.ClientID != "" && d.config.ClientSecret != "" && d.config.RedirectURI != ""
-}
-
 func (d *DiscordOAuth) GetFrontendURL() string {
 	return d.config.FrontendURL
 }
