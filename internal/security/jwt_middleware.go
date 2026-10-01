@@ -162,8 +162,8 @@ func getTokenFromContext(c *gin.Context) (*jwt.Token, error) {
 		return nil, err
 	}
 
-	// Legacy warehouse tokens predate the aud claim and stay valid until they expire.
-	if err := checkExclusiveAudience(token, AudienceWarehouse, true); err != nil {
+	// Every warehouse token carries aud since 2026-09-29; tokens without it are no longer accepted.
+	if err := checkExclusiveAudience(token, AudienceWarehouse); err != nil {
 		return nil, err
 	}
 
@@ -177,18 +177,14 @@ func parseSignedToken(tokenString string) (*jwt.Token, error) {
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
 }
 
-// checkExclusiveAudience requires every aud entry to equal want. jwt.WithAudience is not enough:
-// it accepts a token as soon as want is one of several audiences. allowMissing accepts tokens
-// with no aud claim at all.
-func checkExclusiveAudience(token *jwt.Token, want string, allowMissing bool) error {
+// checkExclusiveAudience requires an aud claim whose every entry equals want. jwt.WithAudience is
+// not enough: it accepts a token as soon as want is one of several audiences.
+func checkExclusiveAudience(token *jwt.Token, want string) error {
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return fmt.Errorf("unexpected claims type")
 	}
 	if _, present := claims["aud"]; !present {
-		if allowMissing {
-			return nil
-		}
 		return fmt.Errorf("token has no audience")
 	}
 

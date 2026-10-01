@@ -58,7 +58,7 @@ func TestWarehouseAudience(t *testing.T) {
 	}{
 		{"warehouse audience", withAud(AudienceWarehouse), true},
 		{"warehouse audience as list", withAud([]string{AudienceWarehouse}), true},
-		{"legacy token without aud", baseClaims(), true},
+		{"token without aud (pre-2026-09-29)", baseClaims(), false},
 		{"shop audience", withAud(AudienceShop), false},
 		{"shop audience in list with warehouse", withAud([]string{AudienceWarehouse, AudienceShop}), false},
 		{"unknown audience", withAud("something-else"), false},
@@ -187,7 +187,7 @@ func TestParseShopToken_Rejects(t *testing.T) {
 		token string
 	}{
 		{"warehouse token", warehouseToken},
-		{"legacy token without aud", signTestToken(t, baseClaims())},
+		{"warehouse token without aud", signTestToken(t, baseClaims())},
 		{"shop token without aud", mutate(func(c jwt.MapClaims) { delete(c, "aud") })},
 		{"both audiences", mutate(func(c jwt.MapClaims) { c["aud"] = []string{AudienceShop, AudienceWarehouse} })},
 		{"expired", mutate(func(c jwt.MapClaims) { c["exp"] = time.Now().Add(-time.Minute).Unix() })},
