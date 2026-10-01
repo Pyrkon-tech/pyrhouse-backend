@@ -179,6 +179,17 @@ func (m *mockQuestRepository) UpdateQuestLocationResolution(ctx context.Context,
 	return assert.AnError
 }
 
+func (m *mockQuestRepository) CountQuestsByStatus(ctx context.Context) (map[string]int, error) {
+	counts := map[string]int{}
+	for _, s := range QuestStatuses {
+		counts[s] = 0
+	}
+	for _, q := range m.quests {
+		counts[q.Status]++
+	}
+	return counts, nil
+}
+
 func (m *mockQuestRepository) ListUnresolvedLocationQuests(ctx context.Context) ([]Quest, error) {
 	result := []Quest{}
 	for _, q := range m.quests {
@@ -327,6 +338,21 @@ func TestHandler_ListQuests(t *testing.T) {
 			assert.Equal(t, tt.expectedCount, len(quests))
 		})
 	}
+}
+
+func TestHandler_CountQuests(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, mockRepo := setupTestHandler()
+	mockRepo.quests = []Quest{{ID: "a", Status: "pending"}, {ID: "b", Status: "pending"}, {ID: "c", Status: "completed"}}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/equipment-requests/quests/counts", nil)
+	handler.CountQuests(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	// Every status is present, zero included.
+	assert.JSONEq(t, `{"pending":2,"in_progress":0,"completed":1,"cancelled":0}`, w.Body.String())
 }
 
 func TestHandler_UpdateQuestStatus(t *testing.T) {

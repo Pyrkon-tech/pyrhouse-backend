@@ -17,6 +17,7 @@ type QuestRepositoryInterface interface {
 	GetQuestByID(ctx context.Context, questID string) (*Quest, error)
 	GetQuestByKey(ctx context.Context, questKey string) (*Quest, error)
 	ListQuests(ctx context.Context, filter QuestFilter) ([]Quest, error)
+	CountQuestsByStatus(ctx context.Context) (map[string]int, error)
 	UpdateQuestStatus(ctx context.Context, questID string, status string) error
 	AddTransferToQuest(ctx context.Context, questID string, transferID int) error
 	RemoveTransferFromQuest(ctx context.Context, transferID int) error
@@ -327,6 +328,14 @@ func (r *Repository) GetQuestByKey(ctx context.Context, questKey string) (*Quest
 	}
 
 	return r.recordToQuest(&questDB, items), nil
+}
+
+// QuestStatuses are all quest statuses; counts report each of them, zero included.
+var QuestStatuses = []string{"pending", "in_progress", "completed", "cancelled"}
+
+// CountQuestsByStatus returns the number of quests in every status (one grouped query).
+func (r *Repository) CountQuestsByStatus(ctx context.Context) (map[string]int, error) {
+	return repository.CountByStatus(ctx, r.repo, "equipment_request_quests", QuestStatuses)
 }
 
 // ListQuests retrieves quests with filtering and pagination

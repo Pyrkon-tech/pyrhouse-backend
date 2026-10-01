@@ -36,6 +36,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	serviceDesk := router.Group("/service-desk")
 	{
 		serviceDesk.GET("/requests", security.Authorize("user"), h.getRequests)
+		serviceDesk.GET("/requests/counts", security.Authorize("user"), h.countRequests)
 		serviceDesk.GET("/requests/:id", security.Authorize("user"), h.getRequest)
 		serviceDesk.GET("/requests/:id/comments", security.Authorize("user"), h.getComments)
 		serviceDesk.PUT("/requests/:id/status", security.Authorize("user"), h.changeStatus)
@@ -110,6 +111,17 @@ func (h *Handler) getRequests(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, requests)
+}
+
+// countRequests returns how many requests are in each status — the menu and dashboard counters.
+func (h *Handler) countRequests(c *gin.Context) {
+	counts, err := repository.CountByStatus(c.Request.Context(), h.repository.Repository, "service_desk_requests",
+		[]string{StatusNew, StatusInProgress, StatusWaiting, StatusResolved, StatusClosed})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error counting requests", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, counts)
 }
 
 func (h *Handler) getRequest(c *gin.Context) {

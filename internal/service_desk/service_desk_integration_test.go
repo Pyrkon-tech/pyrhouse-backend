@@ -165,3 +165,28 @@ func TestServiceDesk_StatusAndLookup(t *testing.T) {
 		})
 	}
 }
+
+func TestServiceDesk_Counts(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+	db, cleanup := serviceDeskTestDB(t)
+	defer cleanup()
+	router := newServiceDeskRouter(db, 1)
+
+	before := map[string]int{}
+	w := sdRequest(t, router, http.MethodGet, "/service-desk/requests/counts", nil)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &before))
+	for _, s := range []string{StatusNew, StatusInProgress, StatusWaiting, StatusResolved, StatusClosed} {
+		assert.Contains(t, before, s)
+	}
+
+	w = sdRequest(t, router, http.MethodPost, "/service-desk/requests", map[string]any{"title": "__TEST__count", "type": "other"})
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	after := map[string]int{}
+	w = sdRequest(t, router, http.MethodGet, "/service-desk/requests/counts", nil)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &after))
+	assert.Equal(t, before[StatusNew]+1, after[StatusNew])
+}

@@ -27,6 +27,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	// Read-only — all authenticated users
 	eq.GET("/quests", h.ListQuests)
 	eq.GET("/quests/unresolved-locations", h.ListUnresolvedLocationQuests)
+	eq.GET("/quests/counts", h.CountQuests)
 	eq.GET("/quests/:id", h.GetQuest)
 	eq.GET("/quests/:id/transfer-preview", h.PreviewTransferFromQuest)
 	eq.GET("/stream", h.StreamQuests)
@@ -71,6 +72,16 @@ func (h *Handler) ListQuests(c *gin.Context) {
 		"offset": filter.Offset,
 		"quests": nonNilQuests(quests),
 	})
+}
+
+// CountQuests returns how many quests are in each status — the menu and dashboard counters.
+func (h *Handler) CountQuests(c *gin.Context) {
+	counts, err := h.service.questRepo.CountQuestsByStatus(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count quests", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, counts)
 }
 
 // GetQuest returns single quest by ID from database

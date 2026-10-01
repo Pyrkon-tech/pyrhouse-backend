@@ -2844,6 +2844,35 @@ paths:
         "404":
           description: Quest not found
 
+  /equipment-requests/quests/counts:
+    get:
+      tags:
+        - equipment-requests
+      summary: Quest counts per status
+      description: Number of items in every status (all statuses present, zero included). Feeds menu and dashboard counters.
+      operationId: countQuests
+      responses:
+        "200":
+          description: Counts per status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pending, in_progress, completed, cancelled]
+                properties:
+                  pending:
+                    type: integer
+                  in_progress:
+                    type: integer
+                  completed:
+                    type: integer
+                  cancelled:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
   /equipment-requests/quests/unresolved-locations:
     get:
       operationId: getEquipmentRequestsQuestsUnresolvedLocations
@@ -3035,6 +3064,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/DefaultError"
+
+  /service-desk/requests/counts:
+    get:
+      tags:
+        - service-desk
+      summary: Request counts per status
+      description: Number of items in every status (all statuses present, zero included). Feeds menu and dashboard counters.
+      operationId: countServiceDeskRequests
+      responses:
+        "200":
+          description: Counts per status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [new, in_progress, waiting, resolved, closed]
+                properties:
+                  new:
+                    type: integer
+                  in_progress:
+                    type: integer
+                  waiting:
+                    type: integer
+                  resolved:
+                    type: integer
+                  closed:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/DefaultError"
 
