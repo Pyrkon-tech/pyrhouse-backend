@@ -56,7 +56,7 @@ func (r *StockRepository) GetStockItems() (*[]models.StockItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to select stock items from database: %s", err.Error())
 	}
-	var stocks []models.StockItem
+	stocks := make([]models.StockItem, 0, len(flatStocks))
 	for _, flatStock := range flatStocks {
 		stocks = append(stocks, transformToStockItem(flatStock))
 	}
@@ -83,7 +83,7 @@ func (r *StockRepository) GetStockItemsBy(conditions repository.QueryBuilder) (*
 	if err != nil {
 		return nil, fmt.Errorf("unable to select stock items from database: %s", err.Error())
 	}
-	var stocks []models.StockItem
+	stocks := make([]models.StockItem, 0, len(flatStocks))
 	for _, flatStock := range flatStocks {
 		stocks = append(stocks, transformToStockItem(flatStock))
 	}

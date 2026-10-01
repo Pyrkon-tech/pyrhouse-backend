@@ -1,0 +1,22 @@
+# Redocly lint exceptions for docs/openapi.yaml — each one is deliberate. Lint: npx @redocly/cli lint docs/openapi.yaml
+docs/openapi.yaml:
+  # The local development server is meant to be localhost.
+  no-server-example.com:
+    - '#/servers/1/url'
+  # Gin matches a static segment before a parameter, so /transfers/users/{id} vs /transfers/{id}/users,
+  # /assets/pyrcode/{code} vs /assets/{id}/serial and /assets/categories/{id} vs /assets/{id}/… never collide.
+  no-ambiguous-paths:
+    - '#/paths/~1transfers~1users~1{userID}'
+    - '#/paths/~1assets~1{assetID}~1serial'
+    - '#/paths/~1assets~1categories~1{categoryID}'
+  # Health checks, the public location list and OAuth redirects have no client-error responses.
+  operation-4xx-response:
+    - '#/paths/~1health/get/responses'
+    - '#/paths/~1auth~1discord/get/responses'
+    - '#/paths/~1locations/get/responses'
+    - '#/paths/~1health~1ready/get/responses'
+    - '#/paths/~1auth~1google/get/responses'
+  # OAuth login starts with a redirect, not a 2xx.
+  operation-2xx-response:
+    - '#/paths/~1auth~1discord/get/responses'
+    - '#/paths/~1auth~1google/get/responses'

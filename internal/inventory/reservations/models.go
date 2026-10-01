@@ -7,8 +7,8 @@ type PyrCodeReservation struct {
 	PyrCode    string     `json:"pyr_code"             db:"pyr_code"`
 	CategoryID int        `json:"category_id"          db:"category_id"`
 	ReservedAt time.Time  `json:"reserved_at"          db:"reserved_at"`
-	ClaimedAt  *time.Time `json:"claimed_at,omitempty" db:"claimed_at"`
-	ItemID     *int       `json:"item_id,omitempty"    db:"item_id"`
+	ClaimedAt  *time.Time `json:"claimed_at"           db:"claimed_at"`
+	ItemID     *int       `json:"item_id"              db:"item_id"`
 }
 
 // ReserveRequest — only what's needed to generate and lock pyr_codes.
